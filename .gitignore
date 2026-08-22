@@ -1,0 +1,7 @@
+*.json
+assets/
+__pycache__/
+.env
+*.log
+*.pyc
+apiKey.py
