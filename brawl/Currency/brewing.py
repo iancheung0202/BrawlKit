@@ -29,6 +29,8 @@ from brawl.Currency.panel import NEXT
 from brawl.Currency.quests import report, update_quest
 from brawl.Currency.tutorial import BREW_STEP, hint, step_of
 
+NO_ROLE_PINGS = discord.AllowedMentions(roles=False)
+
 
 class Brewing(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -349,6 +351,7 @@ class Brewing(commands.Cog):
             file=await render(
                 draw_brewing, started, name=f"brew_{user_id}_{brew_data['batch_id']}"
             ),
+            allowed_mentions=NO_ROLE_PINGS,
             **sent,
         )
         await report(interaction, order)
@@ -549,7 +552,9 @@ class Brewing(commands.Cog):
             "background": background(user_id),
         }
         await interaction.followup.send(
-            "\n".join(lines), file=await render(draw_sold, sale, name="sold")
+            "\n".join(lines),
+            file=await render(draw_sold, sale, name="sold"),
+            allowed_mentions=NO_ROLE_PINGS,
         )
         await report(interaction, order)
 
