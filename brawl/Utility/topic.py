@@ -13,8 +13,8 @@ from brawl.Currency.panel import notice
 from brawl.Currency.rewardcard import draw_topic
 from brawl.Utility.style import BLUE, GOLD, GREEN, NO, RED, YES
 
-PENDING = "/Topics/Pending"
-APPROVED = "/Topics/Approved"
+PENDING = "/Cafe Topics/Pending"
+APPROVED = "/Cafe Topics/Approved"
 
 ICEBREAKERS = [
     "What's your favorite Brawl Stars brawler and why?",
