@@ -717,8 +717,8 @@ def levels_page():
 def order_page():
     """The daily order, the Stamp it gives, and what Stamps buy."""
     each, bonus = QUEST_BEAN_REWARDS["daily"], QUEST_BONUS_BEANS["daily"]
-    card = page("TODAY'S ORDER", "Clock in to get it. Finish it for a Stamp.", 804)
-    section(card, 124, 312, "THE ORDER")
+    card = page("TODAY'S ORDER", "Clock in to get it. Finish it for a Stamp.", 796)
+    section(card, 124, 304, "THE ORDER")
     flow(
         card,
         146,
@@ -749,18 +749,24 @@ def order_page():
                         "Buy from the shop",
                         f"Lv {levels['shop_purchases']}",
                     ),
+                    (
+                        "kit/icon_megaboss_big",
+                        "Join a boss inspection",
+                        f"Lv {levels['boss_inspections']}",
+                    ),
+                    (
+                        "kit/icon_wasabi_power_hot",
+                        "Get a thermometer drop",
+                        f"Lv {levels['thermometer_bonuses']}",
+                    ),
                 ],
-            ),
-            (
-                "Boss",
-                RED,
-                [("kit/icon_megaboss_big", "Taking part ticks a station task", "")],
             ),
         ],
         left=206,
     )
+    card.text(46, 372, f"{ORDER_STATION_TASKS} picked each day", 15, MUTED, "la", 2)
 
-    top = 468
+    top = 460
     section(card, top, 286, "STAMPS AND PASSES", GREEN)
     passes = (
         ("brawl_pass", "kit/icon_brawl_pass", "Brawl Pass"),
@@ -967,7 +973,6 @@ def stations_page():
                 "a day, any time",
             ),
             ("kit/icon_clock", f"{BOSS_SECONDS // 60} minutes", "to press, once each"),
-            ("kit/icon_quest", "1 task ticked", "in Today's Order", GREEN),
             ("kit/icon_xp", f"Level {LADDER['boss'][0]}", "to take part"),
         ],
         size=0,

@@ -114,6 +114,8 @@ ORDER_TASK_LEVELS = {
     "brew_start": 1,
     "brew_sells": 1,
     "shop_purchases": 2,
+    "boss_inspections": 5,
+    "thermometer_bonuses": 7,
 }
 
 ORDER_FILLER = "daily_checkins"
@@ -124,6 +126,8 @@ ORDER_LABELS = {
     "brew_start": "Start a brew",
     "brew_sells": "Sell a brew",
     "shop_purchases": "Buy from the shop",
+    "boss_inspections": "Join a boss inspection",
+    "thermometer_bonuses": "Get a thermometer drop",
 }
 
 QUEST_BEAN_REWARDS = {"daily": 200}
@@ -162,8 +166,8 @@ LADDER = {
     "boss": (
         5,
         "Boss Inspection",
-        "When the boss walks into chat, press a button. "
-        "Impress the boss to tick off a task of Today's Order.",
+        "When the boss walks into chat, press a button for a reward. "
+        "It can be a task of Today's Order.",
     ),
     "thermometer": (
         7,
@@ -268,8 +272,8 @@ THERMOMETER_MAX = 130
 # Heat lost each minute: (above this heat, points lost).
 THERMOMETER_COOLING = ((100, 20), (75, 10), (50, 5), (0, 2))
 
-BOSS_SECONDS = 120
-BOSS_VISITS = (1, 3)  # a day
+BOSS_SECONDS = 300
+BOSS_VISITS = (3, 5)  # a day
 BOSS_ODDS = (("mega_box", 0.5), ("star_drop", 0.25), ("nothing", 0.25))
 
 TABLE_SEATS = 10

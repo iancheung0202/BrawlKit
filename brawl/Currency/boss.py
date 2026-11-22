@@ -11,7 +11,7 @@ from brawl.Currency.helper import BOSS_INSPECTION_ACTIONS, BOSS_INSPECTION_ROLE_
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import notice
-from brawl.Currency.quests import report, wildcard
+from brawl.Currency.quests import report, update_quest
 from brawl.Currency.stationcard import draw_boss, draw_boss_result, draw_boss_results
 
 # Each outcome: where the reward is kept, the line of the action to show,
@@ -96,7 +96,12 @@ class BossInspectionView(View):
             )
             await report(
                 interaction,
-                await wildcard(user.id, interaction.guild.id, interaction.client),
+                await update_quest(
+                    user.id,
+                    interaction.guild.id,
+                    {"boss_inspections": 1},
+                    interaction.client,
+                ),
             )
 
         return callback

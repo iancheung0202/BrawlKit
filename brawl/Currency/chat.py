@@ -27,7 +27,7 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import unlocked
-from brawl.Currency.quests import get_next_daily_reset, update_quest
+from brawl.Currency.quests import get_next_daily_reset, order_card, update_quest
 from brawl.Currency.rewardcard import draw_chat, draw_paid
 from brawl.Currency.stationcard import draw_token_drop
 
@@ -168,7 +168,7 @@ class ChatRewardSystem:
                     self.thermo_bean_cache.get(user_id, 0) + level[2]
                 )
 
-        drop = None
+        drop = dropped = None
         bonus_tokens, jackpot = heat.roll_tokens(level)
         if bonus_tokens and await unlocked(
             self.bot, user_id, message.guild.id, "thermometer"
@@ -176,6 +176,9 @@ class ChatRewardSystem:
             count = heat.take_drop(user_id)
             if count:
                 await cog.add_tokens(user_id, bonus_tokens)
+                dropped = await update_quest(
+                    user_id, message.guild.id, {"thermometer_bonuses": 1}, self.bot
+                )
                 drop = await render(
                     draw_token_drop,
                     {
@@ -255,6 +258,16 @@ class ChatRewardSystem:
                     await message.channel.send(file=strip)
 
         try:
+            files = [drop] if drop else []
+            if dropped:
+                # The drop was a task of this member's order: show the order too,
+                # with anything the chat reward added to it in this same message.
+                if reward_triggered and order:
+                    dropped.beans += order.beans
+                    dropped.stamp = dropped.stamp or order.stamp
+                    dropped.redeem = dropped.redeem or order.redeem
+                    order = None
+                files.append(await order_card(user_id, dropped))
             if reward_triggered:
                 avatar = await face(message.author)
                 strip = await render(
@@ -271,9 +284,9 @@ class ChatRewardSystem:
                     },
                     name="chat",
                 )
-                await message.channel.send(files=[strip, drop] if drop else [strip])
+                await message.channel.send(files=[strip, *files])
             elif drop:
-                await message.channel.send(message.author.mention, file=drop)
+                await message.channel.send(message.author.mention, files=files)
         except Exception as e:
             print(f"Failed to send bean reward message: {e}")
 

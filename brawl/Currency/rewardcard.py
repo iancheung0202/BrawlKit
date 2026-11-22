@@ -61,7 +61,12 @@ def week(card, x, y, streak):
 def draw_clock_in(shift):
     """The reward for clocking in, the streak, and the order it started."""
     order = shift["tasks"]
-    card = Card(640, 150 + (72 + len(order) * 56) * bool(order), shift["background"])
+    # Work done before clocking in is paid now, so the order shows what it paid.
+    pay = shift.get("order")
+    extra = 42 if pay else 0
+    card = Card(
+        640, 150 + (72 + len(order) * 56 + extra) * bool(order), shift["background"]
+    )
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "CLOCKED IN", GREEN)
     rewards = [("kit/bean", shift["beans"])]
@@ -84,16 +89,14 @@ def draw_clock_in(shift):
         2,
     )
     if order:
-        tasks(card, 162, order, 14)
+        tasks(card, 162, order, 14 + extra)
+        if pay:
+            order_pay(card, 206 + len(order) * 56 - 6, pay)
     return card.jpg()
 
 
-def draw_order(progress):
-    """Today's Order after a task moved: where it stands and what it paid."""
-    order = progress["tasks"]
-    card = Card(640, 126 + len(order) * 56)
-    tasks(card, 24, order, 56)
-    y = 68 + len(order) * 56 - 6
+def order_pay(card, y, progress):
+    """Under the tasks: what the order just paid."""
     rewards = [("kit/bean", progress["beans"])] if progress["beans"] else []
     if progress["stamp"]:
         rewards.append(("kit/icon_ranked_round_token", 1))
@@ -108,6 +111,14 @@ def draw_order(progress):
     )
     width = sum(48 + card.measure(f"+{amount:,}", 20) for _, amount in rewards) - 28
     gains(card, 604 - width, y + 2, rewards, 20)
+
+
+def draw_order(progress):
+    """Today's Order after a task moved: where it stands and what it paid."""
+    order = progress["tasks"]
+    card = Card(640, 126 + len(order) * 56)
+    tasks(card, 24, order, 56)
+    order_pay(card, 68 + len(order) * 56 - 6, progress)
     return card.jpg()
 
 

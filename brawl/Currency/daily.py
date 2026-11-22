@@ -651,7 +651,7 @@ class Daily(commands.Cog):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         await self.economy.add_beans(user_id, beans_earned)
-        await update_quest(
+        order = await update_quest(
             user_id,
             interaction.guild.id,
             {"daily_checkins": 1},
@@ -676,6 +676,8 @@ class Daily(commands.Cog):
             "notes": notes,
             "streak": streak_data["current_streak"],
             "tasks": standing(user_id),
+            "order": order
+            and {"beans": order.beans, "stamp": order.stamp, "redeem": order.redeem},
             "background": background(user_id),
         }
         guide = await self.economy.tutorial_manager.advance(user_id, "clock_in")

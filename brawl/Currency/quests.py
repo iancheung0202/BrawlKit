@@ -18,7 +18,7 @@ from brawl.Currency.config import (
     QUEST_BONUS_BEANS,
     STAMP_GOALS,
 )
-from brawl.Currency.db import u_daily_checkin_streaks, u_quests
+from brawl.Currency.db import u_daily_checkin_streaks, u_quests, u_veteran
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     MAIN_GUILD_ID,
@@ -53,6 +53,13 @@ def midnight(day):
 def get_next_daily_reset():
     now = datetime.datetime.now(datetime.timezone.utc)
     return midnight(now + datetime.timedelta(days=1))
+
+
+async def order_level(bot, user_id, guild_id):
+    """Veterans have every station, so every task can be on their order."""
+    if u_veteran(user_id).get():
+        return max(ORDER_TASK_LEVELS.values())
+    return await level_of(bot, user_id, guild_id)
 
 
 def generate_order(level):
@@ -117,7 +124,9 @@ async def update_quest(
     data = ref.get() or {}
     if time.time() >= data.get("end_time", 0):
         data = {
-            "quests": generate_quests("daily", await level_of(bot, user_id, guild_id)),
+            "quests": generate_quests(
+                "daily", await order_level(bot, user_id, guild_id)
+            ),
             "end_time": get_next_daily_reset(),
             "completed": {},
         }
@@ -192,16 +201,6 @@ async def update_quest(
         await currency.add_beans(user_id, beans, skip_quest_check=True, reason="quest")
     messages.beans = beans
     return messages
-
-
-async def wildcard(user_id, guild_id, bot):
-    await update_quest(user_id, guild_id, {}, bot, refresh_only=True)
-    for task, _, data, done in order_tasks(user_id):
-        if not done and task != "chat_earnings":
-            return await update_quest(
-                user_id, guild_id, {task: data["goal"] - data["current"]}, bot
-            )
-    return []
 
 
 def standing(user_id):

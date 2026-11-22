@@ -6,6 +6,7 @@ import pytest
 from brawl.Currency import quests, rewardcard, stampcard
 from brawl.Currency.config import (
     ORDER_CHAT_BEANS,
+    ORDER_TASK_LEVELS,
     QUEST_BEAN_REWARDS,
     QUEST_BONUS_BEANS,
     STAMP_GOALS,
@@ -57,7 +58,7 @@ def test_higher_levels_get_chat_and_two_station_tasks(order):
     level(order, 40)
     do(order)
     assert len(tasks()) == 3
-    assert tasks() - {"brew_start", "brew_sells", "shop_purchases"} == {"chat_earnings"}
+    assert tasks() - set(ORDER_TASK_LEVELS) == {"chat_earnings"}
 
 
 def test_finishing_the_order_pays_beans_and_one_stamp(order):
@@ -85,13 +86,18 @@ def test_only_one_stamp_per_day(order):
     assert stampcard.stamps(USER) == 1
 
 
-def test_boss_ticks_a_station_task_but_not_chat(order):
+def test_an_inspection_only_finishes_the_boss_task(order, monkeypatch):
+    monkeypatch.setattr(quests.random, "sample", lambda pool, count: pool[-count:])
+    level(order, 7)
+    done = do(order, boss_inspections=1)
+    assert set(u_quests(USER).child("daily/completed").get()) == {"boss_inspections"}
+    assert done.beans == QUEST_BEAN_REWARDS["daily"]
+
+
+def test_an_inspection_does_nothing_for_an_order_without_the_boss_task(order):
     level(order, 1)
-    for _ in range(5):
-        asyncio.run(quests.wildcard(USER, MAIN_GUILD_ID, order.bot))
-    daily = u_quests(USER).child("daily").get()
-    assert set(daily["completed"]) == {"brew_start", "brew_sells"}
-    assert stampcard.stamps(USER) == 0
+    assert do(order, boss_inspections=1) == []
+    assert not u_quests(USER).child("daily/completed").get()
 
 
 def test_old_progress_converts_one_stamp_for_six_old_ones(cafe):
@@ -257,3 +263,78 @@ def test_an_order_short_of_a_pass_does_not_point_to_redeem(order):
     level(order, 1)
     messages = do(order, brew_start=1, brew_sells=1, chat_earnings=ORDER_CHAT_BEANS)
     assert messages.stamp and messages.redeem is None
+
+
+def test_station_task_levels_match_the_stations_they_need():
+    from brawl.Currency.config import LADDER, ORDER_TASK_LEVELS
+
+    assert ORDER_TASK_LEVELS["boss_inspections"] == LADDER["boss"][0]
+    assert ORDER_TASK_LEVELS["thermometer_bonuses"] == LADDER["thermometer"][0]
+
+
+def test_boss_and_thermometer_tasks_need_their_stations(order, monkeypatch):
+    monkeypatch.setattr(quests.random, "sample", lambda pool, count: pool[-count:])
+    level(order, 4)
+    do(order)
+    assert not tasks() & {"boss_inspections", "thermometer_bonuses"}
+    u_quests(USER).delete()
+    level(order, 5)
+    do(order)
+    assert "boss_inspections" in tasks() and "thermometer_bonuses" not in tasks()
+    u_quests(USER).delete()
+    level(order, 7)
+    do(order)
+    assert tasks() == {"chat_earnings", "boss_inspections", "thermometer_bonuses"}
+
+
+def test_a_veteran_can_get_every_station_task(order, monkeypatch):
+    from brawl.Currency.db import u_veteran
+
+    monkeypatch.setattr(quests.random, "sample", lambda pool, count: pool[-count:])
+    u_veteran(USER).set(True)
+    do(order)
+    assert tasks() == {"chat_earnings", "boss_inspections", "thermometer_bonuses"}
+
+
+def test_a_thermometer_drop_finishes_its_task(order, monkeypatch):
+    monkeypatch.setattr(quests.random, "sample", lambda pool, count: pool[-count:])
+    level(order, 7)
+    done = do(order, thermometer_bonuses=1)
+    assert any("thermometer drop" in line for line in done)
+    assert do(order, thermometer_bonuses=1) == []
+
+
+@pytest.mark.before_clock_in
+def test_an_order_finished_before_clock_in_pays_in_full_on_clock_in(order):
+    from brawl.Currency.db import u_daily_checkin_streaks
+
+    level(order, 1)
+    do(order, brew_start=1, brew_sells=1)
+    chat(order, 1000, 1000)
+    assert not u_balance(USER).get()
+    u_daily_checkin_streaks(USER).set({"last_claim": quests.time.time()})
+    done = asyncio.run(
+        quests.update_quest(
+            USER, MAIN_GUILD_ID, {"daily_checkins": 1}, order.bot, chat=(1000, 1000)
+        )
+    )
+    full = 3 * QUEST_BEAN_REWARDS["daily"] + QUEST_BONUS_BEANS["daily"]
+    assert done.stamp and done.beans == full
+    assert u_balance(USER).get()["Beans"] == full
+    assert stampcard.stamps(USER) == 1
+
+
+def test_the_clock_in_card_grows_to_show_what_the_order_paid():
+    from PIL import Image
+
+    shift = {
+        "beans": 500,
+        "tokens": 0,
+        "notes": [],
+        "streak": 3,
+        "background": None,
+        "tasks": [("Start a brew", "Done", True, 1)] * 3,
+    }
+    plain = Image.open(rewardcard.draw_clock_in(shift)).height
+    paid = {"beans": 1000, "stamp": True, "redeem": None}
+    assert Image.open(rewardcard.draw_clock_in({**shift, "order": paid})).height > plain

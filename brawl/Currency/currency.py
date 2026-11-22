@@ -231,7 +231,7 @@ class CurrencySystem(commands.Cog):
                 await asyncio.sleep(60)
 
     async def boss_inspection_loop(self):
-        """Drop Boss Inspection 1-3 times a day in random chat channels (UTC time)"""
+        """Drop Boss Inspection a few times a day in random chat channels (UTC time)"""
         await self.bot.wait_until_ready()
 
         await asyncio.sleep(10)
@@ -268,7 +268,8 @@ class CurrencySystem(commands.Cog):
                     continue
 
                 min_wait = 30 * 60
-                max_wait = 8 * 3600
+                # More visits planned means shorter gaps, so they fit in the day.
+                max_wait = 24 * 3600 / inspection_data["total_drops"]
                 wait_time = random.uniform(min_wait, max_wait)
 
                 now = datetime.now(timezone.utc)
