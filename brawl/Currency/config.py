@@ -119,7 +119,7 @@ ORDER_TASK_LEVELS = {
 ORDER_FILLER = "daily_checkins"
 
 ORDER_LABELS = {
-    "chat_earnings": "Earn {goal:,} Beans from chat",
+    "chat_earnings": "Earn Beans from chat",
     "daily_checkins": "Clock in",
     "brew_start": "Start a brew",
     "brew_sells": "Sell a brew",

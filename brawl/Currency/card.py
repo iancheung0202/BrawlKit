@@ -260,7 +260,16 @@ class Card:
 
     def task(self, x, y, w, name, state, done, part):
         self.check(x, y, done)
-        self.text(x + 42, y - 1, name, 21, MUTED if done else WHITE, "la", 2)
+        room = w - 54 - self.measure(state, 17)
+        self.text(
+            x + 42,
+            y - 1,
+            self.fit(name, 21, room),
+            21,
+            MUTED if done else WHITE,
+            "la",
+            2,
+        )
         self.text(x + w, y + 1, state, 17, GREEN if done else GOLD, "ra", 2)
         self.bar(x + 42, y + 30, w - 42, 14, part, GREEN if done else GOLD)
 

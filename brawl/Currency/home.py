@@ -89,14 +89,21 @@ def draw_stamps(card, stamps, level, streak):
     card.tag(42, 376, "STAMP CARD", RED, WHITE)
     tier, name = goal(stamps)
     need = STAMP_GOALS[tier]
-    label = f"{min(stamps, need)} of {need} Stamps for a {name}"
-    card.text(854, 402, label, 20, GOLD, "ra")
-    card.icon(f"kit/icon_{tier}", 780 - card.measure(label, 20), 398, 34)
-    start = min(stamps, need - 1) // STAMP_ROW * STAMP_ROW
-    shown = min(STAMP_ROW, need - start)
-    card.stamps(64, 464, stamps - start, shown, STAMP_ROW, 49, 18)
-    if need - start - shown:
-        card.text(790, 451, f"+{need - start - shown}", 22, MUTED)
+    have = min(stamps, need)
+    card.icon("kit/icon_ranked_round_token", 46, 416, 46)
+    card.text(104, 408, f"{have} of {need} Stamps", 24, GOLD)
+    card.text(854, 412, name, 20, WHITE, "ra")
+    card.icon(f"kit/icon_{tier}", 786 - card.measure(name, 20), 406, 34)
+    left = need - have
+    card.bar(
+        104,
+        444,
+        750,
+        28,
+        have / need,
+        GOLD if left else GREEN,
+        f"{left} more to redeem" if left else "Ready to redeem",
+    )
     card.text(46, 492, next_unlock(level), 15, MUTED, "la", 2)
     card.text(854, 492, f"{streak}-day streak", 15, MUTED, "ra", 2)
 
