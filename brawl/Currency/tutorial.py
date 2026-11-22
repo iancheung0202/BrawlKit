@@ -1,28 +1,36 @@
 from brawl.Currency.card import render
-from brawl.Currency.config import BREW, HOME, SELL, TUTORIAL_BEANS, TUTORIAL_TOKENS
+from brawl.Currency.config import (
+    BREW,
+    HOME,
+    SELL,
+    STAMP_GOALS,
+    TUTORIAL_BEANS,
+    TUTORIAL_TOKENS,
+)
 from brawl.Currency.db import u_tutorial
-from brawl.Currency.helper import BEAN_EMOTE, SERVER_STORE, STAMP_EMOTE
+from brawl.Currency.helper import BOT_COMMANDS, SERVER_STORE, STAMP_EMOTE
 from brawl.Currency.home import background
+from brawl.Currency.quests import clocked_in
 from brawl.Currency.rewardcard import draw_shift
 
-CLOCK_IN, BREW_STEP, SELL_STEP, FINISHED, DONE = 1, 2, 3, 4, 6
-STEPS = {"clock_in": CLOCK_IN, "brew": BREW_STEP, "sell": SELL_STEP}
+BREW_STEP, SELL_STEP, CLOCK_IN, DONE, FINISHED = 2, 3, 4, 6, 7
+STEPS = {"brew": BREW_STEP, "sell": SELL_STEP, "clock_in": CLOCK_IN}
 
-STORE = f"<#{SERVER_STORE}>"
 HINTS = {
-    CLOCK_IN: f"**First:** press Clock In below, or in {STORE} on any other day.",
-    BREW_STEP: f"**Next:** brew a Light Roast with {BREW}. Your first one is free and ready right away. Brewing opens at Level 1, a few minutes of chat.",
-    SELL_STEP: f"**Next:** sell your brew with {SELL}. It is ready now.",
-    FINISHED: f"Chat for {BEAN_EMOTE} Beans and finish Today's Order for {STAMP_EMOTE} Stamps. "
-    f"New stations unlock as you level up, and {HOME} shows what is next.",
+    BREW_STEP: f"**Step 1 of 3:** go to <#{BOT_COMMANDS}> and type {BREW} to brew your first coffee. It is free and ready right away.",
+    SELL_STEP: f"**Step 2 of 3:** your coffee is ready. Type {SELL} here to sell it for Tokens.",
+    CLOCK_IN: f"**Step 3 of 3:** go to <#{SERVER_STORE}> and press the Clock In button. It gives you Today's Order.",
+    FINISHED: f"**First shift done.** Finish Today's Order to earn a {STAMP_EMOTE} Stamp. "
+    f"{STAMP_GOALS['brawl_pass']} Stamps let you redeem a Brawl Pass. {HOME} shows your progress.",
 }
 
 
 def step_of(user_id):
+    """The first-shift step a member is on. Steps saved by older tutorials still fit."""
     step = u_tutorial(user_id).get()
     if not step or step >= DONE:
         return None
-    return min(step, SELL_STEP)
+    return min(max(step, BREW_STEP), CLOCK_IN)
 
 
 def hint(step):
@@ -30,8 +38,8 @@ def hint(step):
 
 
 async def shift(step, user_id):
-    """The first shift card for a step; FINISHED draws it complete."""
-    state = {"step": step, "background": background(user_id)}
+    """The first shift checklist with this step marked as the one to do now."""
+    state = {"step": step - BREW_STEP + 1, "background": background(user_id)}
     return await render(draw_shift, state, name="shift")
 
 
@@ -40,21 +48,20 @@ class TutorialManager:
         self.bot = bot
 
     async def start(self, member):
-        if economy := self.bot.get_cog("CurrencySystem"):
-            await economy.add_beans(member.id, TUTORIAL_BEANS, skip_quest_check=True)
-        u_tutorial(member.id).set(CLOCK_IN)
-        return CLOCK_IN
+        u_tutorial(member.id).set(BREW_STEP)
+        return BREW_STEP
 
     async def advance(self, user_id, action):
         """The step the member is on after this action, or None if it was not their step."""
         if step_of(user_id) != STEPS[action]:
             return None
-        if action != "sell":
+        if action == "brew" or (action == "sell" and not clocked_in(user_id)):
             u_tutorial(user_id).set(STEPS[action] + 1)
             return STEPS[action] + 1
         u_tutorial(user_id).set(DONE)
         if economy := self.bot.get_cog("CurrencySystem"):
             await economy.add_tokens(user_id, TUTORIAL_TOKENS, reason="tutorial")
+            await economy.add_beans(user_id, TUTORIAL_BEANS, skip_quest_check=True)
         return FINISHED
 
 

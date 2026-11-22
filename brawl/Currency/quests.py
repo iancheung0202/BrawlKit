@@ -190,19 +190,11 @@ async def order_card(user_id, messages):
     return await render(draw_order, progress, name="order")
 
 
-async def report(interaction, messages, guide=None):
-    """After a station reply: the order if it moved, and the first shift if it did."""
-    from brawl.Currency.tutorial import hint, shift
-
-    user_id = interaction.user.id
-    files = []
+async def report(interaction, messages):
+    """After a station reply: Today's Order, if the reply moved it."""
     if messages:
-        files.append(await order_card(user_id, messages))
-    if guide:
-        files.append(await shift(guide, user_id))
-    if files:
         await interaction.followup.send(
-            hint(guide) if guide else "", files=files, ephemeral=True
+            file=await order_card(interaction.user.id, messages), ephemeral=True
         )
 
 

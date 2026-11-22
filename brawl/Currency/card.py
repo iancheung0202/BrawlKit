@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import re
+import time
 from functools import lru_cache
 
 import discord
@@ -12,6 +13,7 @@ SCALE = 2
 WHITE, BLACK = (255, 255, 255), (0, 0, 0)
 GOLD, GREEN, BLUE, RED = (255, 200, 30), (60, 215, 80), (40, 130, 255), (255, 70, 80)
 MUTED = (190, 205, 255)
+GREY = (160, 165, 185)
 GREY = (90, 96, 120)
 PANEL = (8, 18, 70, 185)
 SLOT = (6, 12, 48)
@@ -90,15 +92,24 @@ def box(x, y, w, h):
 
 
 class Card:
-    def __init__(self, width, height, background=BACKGROUND, dim=95):
+    def __init__(self, width, height, background=None, dim=95):
+        """A card on a member's background, or a strip on none (transparent)."""
         self.width, self.height = width, height
-        self.image = backdrop(background, width, height, dim).copy()
+        self.clear = background is None
+        if self.clear:
+            self.image = Image.new(
+                "RGBA", (width * SCALE, height * SCALE), (0, 0, 0, 0)
+            )
+        else:
+            self.image = backdrop(background, width, height, dim).copy()
         self.draw = ImageDraw.Draw(self.image, "RGBA")
 
     def panel(self, x, y, w, h, fill=PANEL):
         layer = Image.new("RGBA", self.image.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(layer)
         draw.rounded_rectangle(box(x, y + 5, w, h), 16 * SCALE, fill=(0, 0, 0, 110))
+        if self.clear:
+            fill = (*shade(fill, 1.25), 255)
         draw.rounded_rectangle(
             box(x, y, w, h), 16 * SCALE, fill=fill, outline=BLACK, width=3 * SCALE
         )
@@ -237,6 +248,15 @@ class Card:
         self.text(x + w, y + 1, state, 17, GREEN if done else GOLD, "ra", 2)
         self.bar(x + 42, y + 30, w - 42, 14, part, GREEN if done else GOLD)
 
+    def next_order(self, x, y, anchor="la"):
+        """A small grey line: how long until the next order comes in."""
+        left = int(86400 - time.time() % 86400) // 60
+        label = f"Next order in {left // 60}h {left % 60}m"
+        width = 22 + self.measure(label, 14)
+        x -= {"la": 0, "ma": width / 2, "ra": width}[anchor]
+        self.icon("kit/icon_clock", x, y + 2, 15)
+        self.text(x + 22, y, label, 14, GREY, "la", 2)
+
     def stamps(self, x, y, have, total, per_row, gap, radius=19):
         stamp = icon("kit/icon_ranked_round_token", int(radius * 2.5))
         for spot in range(total):
@@ -292,8 +312,21 @@ class Card:
         )
 
     def jpg(self):
+        """The finished image: a JPEG, or a trimmed PNG for a transparent strip."""
         data = io.BytesIO()
-        self.image.convert("RGB").save(data, "JPEG", quality=90, subsampling=0)
+        if self.clear:
+            left, top, right, bottom = self.image.getbbox()
+            pad = 4 * SCALE
+            self.image.crop(
+                (
+                    max(left - pad, 0),
+                    max(top - pad, 0),
+                    min(right + pad, self.image.width),
+                    min(bottom + pad, self.image.height),
+                )
+            ).save(data, "PNG", compress_level=6)
+        else:
+            self.image.convert("RGB").save(data, "JPEG", quality=90, subsampling=0)
         data.seek(0)
         return data
 
@@ -334,7 +367,9 @@ async def faces(members):
 
 async def render(draw, *args, name="card"):
     """Draws off the event loop so a slow card never stalls the bot."""
-    return discord.File(await asyncio.to_thread(draw, *args), f"{name}.jpg")
+    data = await asyncio.to_thread(draw, *args)
+    kind = "png" if data.getvalue().startswith(b"\x89PNG") else "jpg"
+    return discord.File(data, f"{name}.{kind}")
 
 
 async def setup(bot):

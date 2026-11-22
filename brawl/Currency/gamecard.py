@@ -145,7 +145,7 @@ def draw_blackjack(game):
 
 def draw_coinflip(game):
     """A strip: the coin, what happened, the bet and the Beans left."""
-    card = Card(640, 150, game["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "COIN FLIP", TONES[game["tone"]], BLACK)
     card.draw.ellipse(

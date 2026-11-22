@@ -18,11 +18,11 @@ from brawl.Currency.db import (
 )
 from brawl.Currency.factions import table_card
 from brawl.Currency.helper import (
-    BEAN_EMOTE,
     EFFECT_EMOTE,
     INVITES_EMOTE,
     MAIN_GUILD_ID,
     NO_EMOTE,
+    OVERVIEW_EMOTE,
     SERVER_STORE,
     STAMP_EMOTE,
     STORE_ITEMS,
@@ -106,7 +106,7 @@ class BalanceInfoView(discord.ui.View):
 
     @discord.ui.button(
         style=discord.ButtonStyle.blurple,
-        emoji=BEAN_EMOTE,
+        emoji=OVERVIEW_EMOTE,
         custom_id="overview",
         label="Overview",
     )
@@ -289,6 +289,41 @@ class BalanceInfoView(discord.ui.View):
         )
 
 
+class ConfirmBackground(discord.ui.View):
+    """The preview's Confirm button: only pressing it saves the background and spends the credit."""
+
+    def __init__(self, cog, background, allowed):
+        super().__init__(timeout=300)
+        self.cog, self.background = cog, background
+        self.confirm.disabled = not allowed
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green)
+    async def confirm(self, interaction: discord.Interaction, button):
+        user_id, name = interaction.user.id, self.background.name
+        self.stop()
+        if self.background.value == BACKGROUND:
+            u_background(user_id).delete()
+            return await interaction.response.edit_message(
+                content=f"{YES_EMOTE} Your home card is back on the default **{name}** background.",
+                view=None,
+            )
+        ref = u_customization(user_id)
+        credits = (ref.get() or {}).get("credits", 0)
+        if credits < 1:
+            return await interaction.response.edit_message(
+                content=f"{NO_EMOTE} You need 1 Customization Credit. "
+                "Get one with </buy:1393376242501157010>.",
+                view=None,
+            )
+        ref.update({"credits": credits - 1})
+        u_background(user_id).set(self.background.value)
+        await interaction.response.edit_message(
+            content=f"{YES_EMOTE} Your home card now uses the **{name}** background. "
+            f"Credits left: `{credits - 1}`.",
+            view=None,
+        )
+
+
 class Balance(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -397,27 +432,24 @@ class Balance(commands.Cog):
         if await locked(interaction, "style"):
             return
         user_id = interaction.user.id
-        if background.value == BACKGROUND:
-            u_background(user_id).delete()
-            return await interaction.response.send_message(
-                f"{YES_EMOTE} Your home card is back on the default **{background.name}** background.",
-                ephemeral=True,
-            )
-        ref = u_customization(user_id)
-        credits = (ref.get() or {}).get("credits", 0)
-        if credits < 1:
-            return await interaction.response.send_message(
-                f"{NO_EMOTE} You need 1 Customization Credit. "
-                "Get one with </buy:1393376242501157010>.",
-                ephemeral=True,
-            )
+        free = background.value == BACKGROUND
+        credits = (u_customization(user_id).get() or {}).get("credits", 0)
         await interaction.response.defer(ephemeral=True, thinking=True)
-        ref.update({"credits": credits - 1})
-        u_background(user_id).set(background.value)
+        if free:
+            note = "This is the default background, so it is free."
+        elif credits < 1:
+            note = (
+                "You need 1 Customization Credit to use it. "
+                "Get one with </buy:1393376242501157010>."
+            )
+        else:
+            note = f"Confirm uses 1 Customization Credit. You have `{credits}`."
         await interaction.followup.send(
-            f"{YES_EMOTE} Your home card now uses the **{background.name}** background. "
-            f"Credits left: `{credits - 1}`.",
-            file=await self.home_card(interaction.user, interaction.guild),
+            f"This is your home card with the **{background.name}** background.\n-# {note}",
+            file=await self.home_card(
+                interaction.user, interaction.guild, background.value
+            ),
+            view=ConfirmBackground(self, background, free or credits >= 1),
             ephemeral=True,
         )
 

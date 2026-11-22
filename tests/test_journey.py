@@ -56,30 +56,27 @@ def test_a_new_member_reaches_a_pass(cafe, monkeypatch):
     level(cafe, 0)
 
     asyncio.run(economy.tutorial_manager.start(MagicMock(id=USER)))
-    assert u_balance(USER).get()["Beans"] == TUTORIAL_BEANS
+    assert u_tutorial(USER).get() == BREW_STEP
+
+    press(cafe, "Brewing", "brew")
+    assert u_tutorial(USER).get() == SELL_STEP
+    press(cafe, "Brewing", "sell")
     assert u_tutorial(USER).get() == CLOCK_IN
+
+    locked = press(cafe, "Brewing", "brew", MagicMock(value="light"))
+    assert "Level 1" in locked.response.send_message.call_args[0][0]
 
     clock_in = cafe.interaction(USER)
     clock_in.guild.premium_subscriber_role = None
     asyncio.run(cafe.cogs["Daily"].process_daily(clock_in))
-    assert u_tutorial(USER).get() == BREW_STEP
+    assert u_tutorial(USER).get() == DONE
+    assert u_balance(USER).get()["Tokens"] >= TUTORIAL_TOKENS
+    assert u_balance(USER).get()["Beans"] >= TUTORIAL_BEANS
     assert set(u_quests(USER).child("daily/quests").get()) == {
         "chat_earnings",
         "daily_checkins",
     }
-
-    locked = press(cafe, "Brewing", "brew", MagicMock(value="light"))
-    assert "Level 1" in locked.response.send_message.call_args[0][0]
-    assert u_tutorial(USER).get() == BREW_STEP
-
     level(cafe, 1)
-    press(cafe, "Brewing", "brew", MagicMock(value="light"))
-    assert u_tutorial(USER).get() == SELL_STEP
-
-    u_brews(USER).child("active_brew/end_time").set(1)
-    press(cafe, "Brewing", "sell")
-    assert u_tutorial(USER).get() == DONE
-    assert u_balance(USER).get()["Tokens"] >= TUTORIAL_TOKENS
 
     assert stampcard.stamps(USER) == 0
     talk(cafe, monkeypatch, 80)

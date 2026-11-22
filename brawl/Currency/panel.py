@@ -17,7 +17,6 @@ NEXT = {
     "chat": "Chat to earn Beans and fill Today's Order.",
     "brew": f"Start a brew with {BREW}.",
     "sell": f"Sell it with {SELL} when it is ready.",
-    "sell_now": f"Sell it with {SELL}.",
     "home": f"Open {HOME} to see Today's Order.",
 }
 

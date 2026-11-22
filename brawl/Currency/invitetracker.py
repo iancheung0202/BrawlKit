@@ -8,7 +8,6 @@ from discord import app_commands
 from discord.ext import commands
 
 from brawl.Currency.card import render
-from brawl.Currency.config import TUTORIAL_BEANS
 from brawl.Currency.db import (
     g_invites_member_data,
     g_invites_monthly,
@@ -17,7 +16,6 @@ from brawl.Currency.db import (
     u_welcome_cooldown,
 )
 from brawl.Currency.helper import (
-    BEAN_EMOTE,
     GENERAL_CHAT,
     INVITE_LOG,
     MAX_BUTTON_WELCOMES,
@@ -36,17 +34,6 @@ class WelcomeView(discord.ui.View):
         self.member = member
         self.bot = bot
         self.welcomed_by = set()
-
-    @discord.ui.button(
-        label="Clock In",
-        style=discord.ButtonStyle.blurple,
-        emoji="🗓️",
-        custom_id="clock_in",
-    )
-    async def clock_in(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        await self.bot.get_cog("Daily").process_daily(interaction)
 
     @discord.ui.button(
         label="Welcome!",
@@ -291,7 +278,6 @@ class InviteTracker(commands.Cog):
             if is_new:
                 await welcome_channel.send(
                     f"### {member.mention} just joined <:pandaHappy:855019705836240916> ~ please give them a warm welcome! <:PumpkinLove:1391457782061990099>\n"
-                    f"Welcome, {member.mention}! Here are {BEAN_EMOTE} **{TUTORIAL_BEANS}** to start.\n"
                     f"-# {hint(guide)}",
                     view=WelcomeView(member, self.bot),
                     file=await shift(guide, member.id),

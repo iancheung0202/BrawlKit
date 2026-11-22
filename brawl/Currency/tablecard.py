@@ -73,7 +73,7 @@ def draw_table(table):
 
 def draw_table_reward(reward):
     """A strip sent to each member when their table is paid."""
-    card = Card(640, 150, reward["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, reward["tag"], rgb(reward["color"]), WHITE)
     card.icon(f"kit/{reward['currency']}", 34, 46, 72)

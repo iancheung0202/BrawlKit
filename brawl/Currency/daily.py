@@ -7,7 +7,16 @@ from discord.ui import Button, View
 
 from brawl.Currency.boss import start_inspection
 from brawl.Currency.card import render
-from brawl.Currency.config import BREW, HOME, LADDER, SELL, STAMP_GOALS
+from brawl.Currency.config import (
+    BREW,
+    DAILY_BEANS,
+    HOME,
+    LADDER,
+    SELL,
+    STAMP_GOALS,
+    TUTORIAL_BEANS,
+    TUTORIAL_TOKENS,
+)
 from brawl.Currency.db import sync_shop_effects, u_daily_checkin_streaks
 from brawl.Currency.helper import (
     AUTORESPONSE_MAP,
@@ -31,7 +40,7 @@ from brawl.Currency.quests import get_next_daily_reset, standing, update_quest
 from brawl.Currency.rewardcard import draw_clock_in
 from brawl.Currency.shop import open_shop
 from brawl.Currency.staff import StaffInfoView
-from brawl.Currency.tutorial import hint, shift
+from brawl.Currency.tutorial import hint
 
 
 def runs_staff_text(message):
@@ -589,7 +598,7 @@ class Daily(commands.Cog):
 
         booster_role = interaction.guild.premium_subscriber_role
         is_booster = booster_role in interaction.user.roles if booster_role else False
-        base_beans = 700 if is_booster else 500
+        base_beans = 700 if is_booster else DAILY_BEANS
 
         active_effects = await self.economy.effect_manager.get_user_active_effects(
             user_id
@@ -644,13 +653,14 @@ class Daily(commands.Cog):
             "tasks": standing(user_id),
             "background": background(user_id),
         }
-        files = [await render(draw_clock_in, clocked, name="clock_in")]
         guide = await self.economy.tutorial_manager.advance(user_id, "clock_in")
         if guide:
-            files.append(await shift(guide, user_id))
+            clocked["beans"] += TUTORIAL_BEANS
+            clocked["tokens"] += TUTORIAL_TOKENS
+            notes.insert(0, "For completing your first shift")
         await interaction.followup.send(
-            f"-# **Next:** {hint(guide).removeprefix('**Next:** ') if guide else NEXT['chat']}",
-            files=files,
+            f"-# {hint(guide)}" if guide else f"-# **Next:** {NEXT['chat']}",
+            file=await render(draw_clock_in, clocked, name="clock_in"),
             ephemeral=True,
         )
 

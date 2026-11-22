@@ -27,7 +27,7 @@ from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import NEXT
 from brawl.Currency.quests import report, update_quest
-from brawl.Currency.tutorial import BREW_STEP, step_of
+from brawl.Currency.tutorial import BREW_STEP, hint, step_of
 
 
 class Brewing(commands.Cog):
@@ -120,7 +120,10 @@ class Brewing(commands.Cog):
             if (
                 not active
                 or active.get("insured")
-                or f"brew_{user_id}_{active['batch_id']}.jpg" not in files
+                or not any(
+                    name.startswith(f"brew_{user_id}_{active['batch_id']}.")
+                    for name in files
+                )
             ):
                 return await interaction.response.send_message(
                     f"{NO_EMOTE} This brew can no longer be insured.", ephemeral=True
@@ -184,9 +187,10 @@ class Brewing(commands.Cog):
                 f"{NO_EMOTE} You do not have permission to use this command.",
                 ephemeral=True,
             )
-        if await locked(interaction, "brewing"):
+        training = step_of(interaction.user.id) == BREW_STEP
+        if not training and await locked(interaction, "brewing"):
             return
-        if roast_type is None:
+        if roast_type is None and not training:
             stats = await self.economy.get_brew_stats(interaction.user.id) or {}
             guide = {
                 "background": background(interaction.user.id),
@@ -199,7 +203,7 @@ class Brewing(commands.Cog):
             )
 
         user_id = interaction.user.id
-        roast = roast_type.value
+        roast = roast_type.value if roast_type else "light"
 
         active_brew = await self.economy.get_active_brew(user_id)
         if active_brew:
@@ -329,7 +333,7 @@ class Brewing(commands.Cog):
         if welcome_bonus_msg:
             lines.append(welcome_bonus_msg)
             new_beans += 150
-        lines.append(f"-# **Next:** {NEXT['sell_now' if first else 'sell']}")
+        lines.append(f"-# {hint(guide)}" if guide else f"-# **Next:** {NEXT['sell']}")
 
         started = {
             "roast": roast,
@@ -347,7 +351,7 @@ class Brewing(commands.Cog):
             ),
             **sent,
         )
-        await report(interaction, order, guide)
+        await report(interaction, order)
 
     @brew.error
     async def brew_error(self, interaction: discord.Interaction, error: Exception):
@@ -534,7 +538,8 @@ class Brewing(commands.Cog):
             if welcome_bonus_msg:
                 lines.append(welcome_bonus_msg)
 
-        lines.append(f"-# **Next:** {NEXT['brew']}")
+        guide = await self.economy.tutorial_manager.advance(user_id, "sell")
+        lines.append(f"-# {hint(guide)}" if guide else f"-# **Next:** {NEXT['brew']}")
         sale = {
             "roast": roast_type,
             "tokens": tokens,
@@ -546,11 +551,7 @@ class Brewing(commands.Cog):
         await interaction.followup.send(
             "\n".join(lines), file=await render(draw_sold, sale, name="sold")
         )
-        await report(
-            interaction,
-            order,
-            await self.economy.tutorial_manager.advance(user_id, "sell"),
-        )
+        await report(interaction, order)
 
     @sell.error
     async def sell_error(self, interaction: discord.Interaction, error: Exception):

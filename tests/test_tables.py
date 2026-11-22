@@ -85,7 +85,7 @@ def test_the_quest_pays_every_member_once_per_step(cafe):
     asyncio.run(cog.check_and_reward_quest(MAIN_GUILD_ID, "roasters", target + 1))
     assert u_balance(3).get()["Beans"] == reward
     dm = cog.bot.fetch_user.return_value.send.call_args
-    assert dm.kwargs["file"].filename == "table.jpg"
+    assert dm.kwargs["file"].filename == "table.png"
 
 
 def test_cards_draw_for_every_size_of_table():

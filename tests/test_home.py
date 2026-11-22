@@ -44,6 +44,16 @@ def customize(cafe, key):
     return interaction
 
 
+def confirm(interaction):
+    view = interaction.followup.send.call_args.kwargs["view"]
+    press = MagicMock()
+    press.user.id = USER
+    press.response.edit_message = AsyncMock()
+    if not view.confirm.disabled:
+        asyncio.run(view.confirm.callback(press))
+    return view, press
+
+
 def test_every_background_draws_a_card(cafe):
     data = member(cafe)
     for key in BACKGROUNDS:
@@ -78,18 +88,21 @@ def test_stamp_goal_moves_to_plus_after_a_full_card():
     assert home.goal(99)[0] == "brawl_pass_plus"
 
 
-def test_customize_needs_a_credit(cafe):
+def test_customize_previews_but_cannot_confirm_without_a_credit(cafe):
     interaction = customize(cafe, "tokyo")
-    assert (
-        "need 1 Customization Credit"
-        in interaction.response.send_message.call_args[0][0]
-    )
+    sent = interaction.followup.send.call_args
+    assert "need 1 Customization Credit" in sent.args[0]
+    assert sent.kwargs["file"].filename == f"balance_{USER}.jpg"
+    assert confirm(interaction)[0].confirm.disabled
     assert u_background(USER).get() is None
 
 
-def test_customize_spends_a_credit_and_saves_the_preset(cafe):
+def test_customize_only_spends_the_credit_on_confirm(cafe):
     u_customization(USER).set({"credits": 2})
-    customize(cafe, "tokyo")
+    interaction = customize(cafe, "tokyo")
+    assert u_background(USER).get() is None
+    assert u_customization(USER).get()["credits"] == 2
+    confirm(interaction)
     assert u_background(USER).get() == "tokyo"
     assert u_customization(USER).get()["credits"] == 1
     assert member(cafe)["background"] == "tokyo"
@@ -98,7 +111,7 @@ def test_customize_spends_a_credit_and_saves_the_preset(cafe):
 def test_default_background_is_free(cafe):
     u_customization(USER).set({"credits": 1})
     u_background(USER).set("tokyo")
-    customize(cafe, BACKGROUND)
+    confirm(customize(cafe, BACKGROUND))
     assert u_background(USER).get() is None
     assert u_customization(USER).get()["credits"] == 1
 

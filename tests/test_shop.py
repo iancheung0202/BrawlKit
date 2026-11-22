@@ -19,7 +19,7 @@ def buy(cafe, item, rows, beans=5000, tokens=10):
 
 def test_buy_takes_beans_and_one_stock(cafe):
     reply = buy(cafe, "nitro", [["Nitro", "A month", 3000, "Beans", True, 2]])
-    assert reply["attachments"][0].filename == "purchase.jpg"
+    assert reply["attachments"][0].filename == "purchase.png"
     assert "ticket" in reply["content"]
     assert u_balance(USER).get() == {"Beans": 2000, "Tokens": 10}
     assert g_shops(MAIN_GUILD_ID).get()[0][5] == 1
@@ -130,6 +130,6 @@ def test_buying_an_effect_item_shows_a_card_with_what_to_do_next(cafe):
         cafe.cogs["Shop"]._process_effect_purchase(interaction, USER, "star_drop")
     )
     reply = interaction.edit_original_response.call_args.kwargs
-    assert reply["attachments"][0].filename == "purchase.jpg"
+    assert reply["attachments"][0].filename == "purchase.png"
     assert after("double_daily") == "Active for 7 days."
     assert after("instant_brew") == "It took effect right away."

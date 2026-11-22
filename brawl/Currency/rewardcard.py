@@ -1,8 +1,13 @@
 from brawl.Currency.card import BLUE, GOLD, GREEN, MUTED, SCALE, WHITE, Card, box
-from brawl.Currency.config import ROAST_TYPES, TUTORIAL_TOKENS
+from brawl.Currency.config import (
+    DAILY_BEANS,
+    ROAST_TYPES,
+    TUTORIAL_BEANS,
+    TUTORIAL_TOKENS,
+)
 
 BLACK = (0, 0, 0)
-SHIFT = ["Clock in", "Brew a Light Roast", "Sell your brew"]
+SHIFT = ["Brew your first coffee", "Sell it", "Clock in"]
 PASSES = {
     "brawl_pass": "kit/icon_brawl_pass",
     "brawl_pass_plus": "kit/icon_brawl_pass_plus",
@@ -22,8 +27,9 @@ def gains(card, x, y, rewards, size=26):
 def tasks(card, y, order, extra=0):
     card.panel(16, y, 608, 30 + len(order) * 56 + extra)
     card.tag(32, y - 12, "TODAY'S ORDER")
+    card.next_order(604, y + 8, "ra")
     for row, (name, state, done, part) in enumerate(order):
-        card.task(36, y + 28 + row * 56, 568, name, state, done, part)
+        card.task(36, y + 42 + row * 56, 568, name, state, done, part)
 
 
 def week(card, x, y, streak):
@@ -42,7 +48,7 @@ def week(card, x, y, streak):
 def draw_clock_in(shift):
     """The reward for clocking in, the streak, and the order it started."""
     order = shift["tasks"]
-    card = Card(640, 150 + (58 + len(order) * 56) * bool(order), shift["background"])
+    card = Card(640, 150 + (72 + len(order) * 56) * bool(order), shift["background"])
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "CLOCKED IN", GREEN)
     rewards = [("kit/bean", shift["beans"])]
@@ -65,16 +71,16 @@ def draw_clock_in(shift):
         2,
     )
     if order:
-        tasks(card, 162, order)
+        tasks(card, 162, order, 14)
     return card.jpg()
 
 
 def draw_order(progress):
     """Today's Order after a task moved: where it stands and what it paid."""
     order = progress["tasks"]
-    card = Card(640, 112 + len(order) * 56, progress["background"])
-    tasks(card, 24, order, 42)
-    y = 54 + len(order) * 56 - 6
+    card = Card(640, 126 + len(order) * 56)
+    tasks(card, 24, order, 56)
+    y = 68 + len(order) * 56 - 6
     rewards = [("kit/bean", progress["beans"])] if progress["beans"] else []
     if progress["stamp"]:
         rewards.append(("kit/icon_ranked_round_token", 1))
@@ -95,7 +101,7 @@ def draw_order(progress):
 def draw_shift(shift):
     """The first shift: three steps, the one to do now, and the Tokens at the end."""
     step, done = shift["step"], shift["step"] > len(SHIFT)
-    card = Card(640, 226, shift["background"])
+    card = Card(640, 226)
     card.panel(16, 24, 608, 186)
     card.tag(
         32,
@@ -119,12 +125,13 @@ def draw_shift(shift):
         )
         if now:
             card.tag(92 + card.measure(name, 22), y + 2, "NOW")
-    card.icon("kit/token", 500, 66, 64)
-    card.text(532, 138, f"+{TUTORIAL_TOKENS} Tokens", 20, GOLD, "ma")
+    card.icon("kit/token", 506, 50, 52)
+    card.text(532, 108, f"+{TUTORIAL_TOKENS} Tokens", 20, GOLD, "ma")
+    card.text(532, 136, f"+{TUTORIAL_BEANS + DAILY_BEANS:,} Beans", 20, GOLD, "ma")
     card.text(
         532,
         168,
-        "Paid" if done else "for all three",
+        "Paid" if done else "for your first shift",
         14,
         GREEN if done else MUTED,
         "ma",
@@ -135,7 +142,7 @@ def draw_shift(shift):
 
 def draw_level_up(member):
     """A strip posted in chat when a member levels up."""
-    card = Card(640, 150, member["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "LEVEL UP", BLUE, WHITE)
     card.avatar(member["avatar"], 34, 44, 76)
@@ -156,7 +163,7 @@ def draw_level_up(member):
 
 def draw_redeemed(sale):
     """A strip for a redeemed pass: what it cost and what is left."""
-    card = Card(640, 150, sale["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "REDEEMED", GREEN)
     card.icon(PASSES[sale["tier"]], 34, 44, 76)
@@ -195,7 +202,7 @@ def draw_redeemed(sale):
 def draw_ready(brew):
     """The Sell Alarm strip sent when a brew finishes."""
     roast = ROAST_TYPES.get(brew["roast"], ROAST_TYPES["light"])
-    card = Card(640, 150, brew["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "BREW READY", GREEN)
     card.icon("ready", 34, 44, 76)

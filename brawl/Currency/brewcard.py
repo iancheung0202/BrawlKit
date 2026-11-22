@@ -78,7 +78,7 @@ def draw_roasts(guide):
 def draw_brewing(brew):
     """A strip for a brew that just started."""
     roast = ROAST_TYPES[brew["roast"]]
-    card = Card(640, 150, brew["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "BREW STARTED", BLUE, WHITE)
     card.icon("brewing", 34, 44, 76)
@@ -106,7 +106,7 @@ def draw_sold(sale):
     """A strip for a sold brew: what it paid and why."""
     roast = ROAST_TYPES[sale["roast"]]
     tokens = sale["tokens"]
-    card = Card(640, 150, sale["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     label, fill, color = (
         ("BURNT", RED, WHITE)

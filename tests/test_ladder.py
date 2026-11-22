@@ -2,14 +2,22 @@ import asyncio
 import importlib
 import inspect
 import pkgutil
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 import brawl.Currency
 from brawl.Currency import ladder, quests, tutorial
-from brawl.Currency.config import LADDER, ROAST_TYPES, TUTORIAL_TOKENS
-from brawl.Currency.db import u_balance, u_brews, u_quests, u_tutorial, u_veteran
+from brawl.Currency.config import LADDER, ROAST_TYPES, TUTORIAL_BEANS, TUTORIAL_TOKENS
+from brawl.Currency.db import (
+    u_balance,
+    u_brews,
+    u_daily_checkin_streaks,
+    u_quests,
+    u_tutorial,
+    u_veteran,
+)
 from brawl.Currency.helper import MAIN_GUILD_ID
 
 USER = 1
@@ -74,30 +82,33 @@ def test_level_up_teaches_only_the_new_stations():
     assert ladder.lessons(5, 6) == []
 
 
-def test_tutorial_is_clock_in_brew_sell(cafe):
+def test_tutorial_is_brew_sell_clock_in(cafe):
     manager = cafe.cogs["CurrencySystem"].tutorial_manager
     member = MagicMock(id=USER)
-    assert asyncio.run(manager.start(member)) == tutorial.CLOCK_IN
-    assert u_balance(USER).get()["Beans"] == 500
-    assert asyncio.run(manager.advance(USER, "brew")) is None
-    assert asyncio.run(manager.advance(USER, "clock_in")) == tutorial.BREW_STEP
-    assert asyncio.run(manager.advance(USER, "brew")) == tutorial.SELL_STEP
-    done = asyncio.run(manager.advance(USER, "sell"))
-    assert done == tutorial.FINISHED
-    assert u_balance(USER).get()["Tokens"] == TUTORIAL_TOKENS
-    assert u_tutorial(USER).get() == tutorial.DONE
+    assert asyncio.run(manager.start(member)) == tutorial.BREW_STEP
+    assert not u_balance(USER).get()
     assert asyncio.run(manager.advance(USER, "sell")) is None
+    assert asyncio.run(manager.advance(USER, "clock_in")) is None
+    assert asyncio.run(manager.advance(USER, "brew")) == tutorial.SELL_STEP
+    assert asyncio.run(manager.advance(USER, "sell")) == tutorial.CLOCK_IN
+    assert asyncio.run(manager.advance(USER, "clock_in")) == tutorial.FINISHED
+    assert u_balance(USER).get() == {"Beans": TUTORIAL_BEANS, "Tokens": TUTORIAL_TOKENS}
+    assert u_tutorial(USER).get() == tutorial.DONE
+    assert asyncio.run(manager.advance(USER, "clock_in")) is None
 
 
-def test_members_midway_through_the_old_tutorial_finish_by_selling(cafe):
+def test_steps_saved_by_older_tutorials_still_fit(cafe):
+    u_tutorial(USER).set(1)
+    assert tutorial.step_of(USER) == tutorial.BREW_STEP
     u_tutorial(USER).set(5)
-    assert tutorial.step_of(USER) == tutorial.SELL_STEP
+    assert tutorial.step_of(USER) == tutorial.CLOCK_IN
     u_tutorial(USER).set(6)
     assert tutorial.step_of(USER) is None
 
 
-def test_selling_a_first_brew_ends_the_tutorial(cafe):
+def test_selling_ends_the_tutorial_for_a_member_who_already_clocked_in(cafe):
     u_tutorial(USER).set(tutorial.SELL_STEP)
+    u_daily_checkin_streaks(USER).set({"last_claim": time.time()})
     u_brews(USER).child("active_brew").set(
         {
             "roast_type": "light",
@@ -108,13 +119,15 @@ def test_selling_a_first_brew_ends_the_tutorial(cafe):
         }
     )
     interaction = run(cafe, "Brewing", "sell")
-    files = [
-        file.filename
-        for call in interaction.followup.send.call_args_list
-        for file in call.kwargs.get("files", [])
-    ]
-    assert "shift.jpg" in files
+    assert "First shift done" in interaction.followup.send.call_args_list[0].args[0]
     assert u_tutorial(USER).get() == tutorial.DONE
+
+
+def test_a_new_member_brews_before_level_one_without_picking_a_roast(cafe):
+    u_tutorial(USER).set(tutorial.BREW_STEP)
+    interaction = run(cafe, "Brewing", "brew")
+    assert "Step 2 of 3" in interaction.followup.send.call_args_list[0].args[0]
+    assert u_brews(USER).child("active_brew").get()["insured"]
 
 
 GATES = [

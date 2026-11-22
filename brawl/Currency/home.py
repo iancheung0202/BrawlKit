@@ -45,6 +45,7 @@ def draw_order(card, tasks, store):
         )
     done = sum(task[2] for task in tasks)
     card.text(420, 132, f"{done} of {len(tasks)} done", 20, GOLD, "ra")
+    card.next_order(420, 156, "ra")
     for row, (name, state, finished, part) in enumerate(tasks):
         card.task(46, 172 + row * 62, 374, name, state, finished, part)
 

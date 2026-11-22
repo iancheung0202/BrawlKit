@@ -27,4 +27,7 @@ if "--apply" in sys.argv:
                 },
             }
         )
-print(f"{len(tables)} tables {'reset' if '--apply' in sys.argv else 'found'}", file=sys.stderr)
+print(
+    f"{len(tables)} tables {'reset' if '--apply' in sys.argv else 'found'}",
+    file=sys.stderr,
+)

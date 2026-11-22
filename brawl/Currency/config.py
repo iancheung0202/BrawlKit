@@ -199,6 +199,7 @@ ITEM_STATIONS = {
     "custom_credit": "style",
 }
 
+DAILY_BEANS = 500
 TUTORIAL_BEANS = 500
 TUTORIAL_TOKENS = 3
 

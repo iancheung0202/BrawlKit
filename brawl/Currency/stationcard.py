@@ -90,7 +90,7 @@ def draw_thermometer(cup):
 
 def draw_token_drop(drop):
     """A strip posted in chat when the thermometer drops Tokens."""
-    card = Card(640, 150, drop["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "JACKPOT" if drop["jackpot"] else "TOKEN DROP", GOLD)
     card.icon("kit/token", 34, 46, 72)
@@ -135,7 +135,7 @@ def draw_boss(background):
 def draw_boss_result(result):
     """A strip only the member sees: how the boss took it and what they got."""
     picture, name, headline, color = BOSS[result["outcome"]]
-    card = Card(640, 150, result["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "BOSS INSPECTION", color)
     card.icon(picture, 34, 48, 64)

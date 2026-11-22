@@ -227,7 +227,7 @@ def after(item):
 
 def draw_purchase(sale):
     """A strip: what was bought, what to do next, what it cost, what is left."""
-    card = Card(640, 150, sale["background"])
+    card = Card(640, 150)
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "PURCHASED", GREEN, BLACK)
     card.icon(sale["icon"], 34, 46, 68)

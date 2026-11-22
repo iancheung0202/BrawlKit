@@ -147,7 +147,7 @@ def test_redeem_stops_at_the_monthly_limit(cafe):
 def test_redeem_spends_stamps_and_tokens_and_counts_the_month(cafe):
     u_stamp_card(USER).set({"count": 33})
     u_balance(USER).set({"Tokens": 450})
-    assert redeem(cafe).kwargs["file"].filename == "redeemed.jpg"
+    assert redeem(cafe).kwargs["file"].filename == "redeemed.png"
     assert u_stamp_card(USER).get()["count"] == 3
     assert u_balance(USER).get()["Tokens"] == 50
     month = g_stamp_redemptions(MAIN_GUILD_ID, get_current_month_key()).get()

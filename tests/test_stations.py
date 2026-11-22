@@ -43,7 +43,7 @@ def test_each_outcome_pays_what_the_card_says(cafe, monkeypatch):
         monkeypatch.setattr(boss, "roll", lambda: outcome)
         view, _ = inspection(cafe)
         sent = act(cafe, view, user).response.send_message.call_args
-        assert sent.kwargs["file"].filename == "boss.jpg" and sent.kwargs["ephemeral"]
+        assert sent.kwargs["file"].filename == "boss.png" and sent.kwargs["ephemeral"]
         assert u_mega_boxes(user).get() == boxes
         assert u_star_drops(user).get() == drops
 
@@ -136,5 +136,5 @@ def test_a_hot_chat_drops_tokens_as_a_card(cafe, monkeypatch):
     message.channel.send = AsyncMock()
     asyncio.run(cog.chat_system.process_message(message, cog))
     assert u_balance(USER).get()["Tokens"] == 5
-    assert message.channel.send.call_args.kwargs["file"].filename == "tokens.jpg"
+    assert message.channel.send.call_args.kwargs["file"].filename == "tokens.png"
     assert chat

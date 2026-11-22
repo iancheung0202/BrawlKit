@@ -137,7 +137,6 @@ def test_the_first_tutorial_brew_is_free_ready_and_insured(cafe):
     assert "view" not in sent.followup.send.call_args_list[0].kwargs
     assert u_tutorial(USER).get() == tutorial.SELL_STEP
 
-    user(cafe, "balance").set({"Beans": 0, "Tokens": 0})
     assert "need" in brew_again(cafe)
 
 

@@ -95,5 +95,5 @@ def test_only_admins_post_the_store_panel(cafe):
 
 def test_clocking_in_answers_with_a_card(cafe, monkeypatch):
     sent = claim(cafe, monkeypatch).followup.send.call_args
-    assert [file.filename for file in sent.kwargs["files"]] == ["clock_in.jpg"]
+    assert sent.kwargs["file"].filename == "clock_in.jpg"
     assert "Next:" in sent.args[0]
