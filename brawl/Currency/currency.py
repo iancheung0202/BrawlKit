@@ -46,7 +46,7 @@ from brawl.Currency.helper import (
     get_current_month_key,
 )
 from brawl.Currency.home import background
-from brawl.Currency.panel import framed, notice
+from brawl.Currency.panel import DRAWN, notice
 from brawl.Currency.rewardcard import draw_ready
 from brawl.Currency.stationcard import draw_thermometer
 from brawl.Currency.tutorial import TutorialManager
@@ -198,6 +198,7 @@ class CurrencySystem(commands.Cog):
                                 ready = {
                                     "roast": alarm_data.get("roast_type", "light"),
                                     "background": background(user_id),
+                                    "next": DRAWN["ready"],
                                 }
 
                                 view = discord.ui.View()
@@ -210,12 +211,7 @@ class CurrencySystem(commands.Cog):
                                     view.add_item(button)
 
                                 await user.send(
-                                    **framed(
-                                        await render(draw_ready, ready, name="ready"),
-                                        "Your coffee is ready",
-                                        f"Sell it with </sell:1396588612790784071> in {bot_channel.mention if bot_channel else 'the bot channel'}.",
-                                        "\nThis reminder is from your Sell Alarm.",
-                                    ),
+                                    file=await render(draw_ready, ready, name="ready"),
                                     **({"view": view} if bot_channel else {}),
                                 )
                                 sync_sell_alarm(

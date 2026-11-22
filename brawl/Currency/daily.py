@@ -36,7 +36,7 @@ from brawl.Currency.helper import (
     YES_EMOTE,
 )
 from brawl.Currency.home import background
-from brawl.Currency.panel import NEXT, framed, notice
+from brawl.Currency.panel import framed, notice
 from brawl.Currency.quests import get_next_daily_reset, standing, update_quest
 from brawl.Currency.rewardcard import draw_clock_in
 from brawl.Currency.shop import open_shop
@@ -669,7 +669,7 @@ class Daily(commands.Cog):
         await interaction.followup.send(
             **framed(
                 await render(draw_clock_in, clocked, name="clock_in"),
-                *(hint(guide) if guide else ("Clocked in", NEXT["chat"])),
+                *(hint(guide) if guide else ()),
                 tone="good",
             ),
             ephemeral=True,

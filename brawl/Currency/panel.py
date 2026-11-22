@@ -30,18 +30,28 @@ def panel(station, headline, body="", next=None, tone="info"):
     return embed
 
 
+# The same steps as they are drawn on a strip, where a command cannot be a link.
+DRAWN = {
+    "brew": "Start another brew with /brew",
+    "sell": "Sell it with /sell when it is ready",
+    "ready": "Sell it with /sell in the bot channel",
+}
+
+
 def notice(text, tone="info"):
     """A one-line answer: a refusal, a confirmation, a short notice."""
     return discord.Embed(description=text, color=COLORS[tone])
 
 
-def framed(file, title, *lines, tone="info"):
+def framed(file, title=None, *lines, tone="info"):
     """A card inside an embed under a short title and a few plain lines. Use as **framed(...)."""
     embed = discord.Embed(
         title=title,
         description="\n".join(line for line in lines if line) or None,
         color=COLORS[tone],
     )
+    if not embed.description:
+        return {"file": file}
     embed.set_image(url=f"attachment://{file.filename}")
     return {"embed": embed, "file": file}
 
@@ -49,7 +59,7 @@ def framed(file, title, *lines, tone="info"):
 def reframed(file, title, *lines, tone="info"):
     """The same, for editing a message that already shows a card."""
     sent = framed(file, title, *lines, tone=tone)
-    return {"embed": sent["embed"], "attachments": [file]}
+    return {"embed": sent.get("embed"), "attachments": [file]}
 
 
 async def setup(bot):

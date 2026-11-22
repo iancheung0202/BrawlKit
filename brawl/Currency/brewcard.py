@@ -24,7 +24,7 @@ def chip(card, x, y, label, odds, fill=WHITE):
 def draw_roasts(guide):
     """The Roast Guide: what each roast costs, how long it takes and what it pays."""
     card = Card(700, 164 + len(ROAST_TYPES) * 122, guide["background"])
-    card.title("ROAST GUIDE", "Brewing turns Beans into Tokens. One brew at a time.")
+    card.title("ROAST GUIDE", "Pick a roast with /brew. It turns Beans into Tokens.")
     for row, (key, roast) in enumerate(ROAST_TYPES.items()):
         y = 126 + row * 122
         locked = key == "golden" and guide["brews"] < UNLOCK_REQ
@@ -78,8 +78,7 @@ def draw_roasts(guide):
 def draw_brewing(brew):
     """A strip for a brew that just started."""
     roast = ROAST_TYPES[brew["roast"]]
-    card = Card(640, 150)
-    card.panel(16, 24, 608, 110)
+    card = Card.strip(brew.get("next"))
     card.tag(32, 12, "BREW STARTED", BLUE, WHITE)
     card.icon("brewing", 34, 44, 76)
     card.text(124, 44, roast["name"], 26)
@@ -106,8 +105,7 @@ def draw_sold(sale):
     """A strip for a sold brew: what it paid and why."""
     roast = ROAST_TYPES[sale["roast"]]
     tokens = sale["tokens"]
-    card = Card(640, 150)
-    card.panel(16, 24, 608, 110)
+    card = Card.strip(sale.get("next"))
     label, fill, color = (
         ("BURNT", RED, WHITE)
         if not tokens

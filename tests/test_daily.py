@@ -97,5 +97,4 @@ def test_only_admins_post_the_store_panel(cafe):
 def test_clocking_in_answers_with_a_card(cafe, monkeypatch):
     sent = claim(cafe, monkeypatch).followup.send.call_args
     assert sent.kwargs["file"].filename == "clock_in.jpg"
-    assert "Order" in sent.kwargs["embed"].description
-    assert sent.kwargs["embed"].image.url == "attachment://clock_in.jpg"
+    assert "embed" not in sent.kwargs

@@ -202,12 +202,11 @@ def draw_redeemed(sale):
 def draw_ready(brew):
     """The Sell Alarm strip sent when a brew finishes."""
     roast = ROAST_TYPES.get(brew["roast"], ROAST_TYPES["light"])
-    card = Card(640, 150)
-    card.panel(16, 24, 608, 110)
+    card = Card.strip(brew.get("next"))
     card.tag(32, 12, "BREW READY", GREEN)
     card.icon("ready", 34, 44, 76)
     card.text(124, 44, roast["name"], 26)
-    card.text(124, 84, "Sell it to collect your Tokens", 17, MUTED, "la", 2)
+    card.text(124, 84, "From your Sell Alarm", 17, MUTED, "la", 2)
     best = max(roast["payout"])
     card.text(604, 46, "Pays up to", 13, MUTED, "ra", 2)
     card.text(604, 62, f"{best}", 26, GOLD, "ra")

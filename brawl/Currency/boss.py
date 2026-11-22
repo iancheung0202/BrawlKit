@@ -10,7 +10,7 @@ from brawl.Currency.db import u_mega_boxes, u_star_drops
 from brawl.Currency.helper import BOSS_INSPECTION_ACTIONS, BOSS_INSPECTION_ROLE_ID
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
-from brawl.Currency.panel import framed, notice
+from brawl.Currency.panel import notice
 from brawl.Currency.quests import report, wildcard
 from brawl.Currency.stationcard import draw_boss, draw_boss_result, draw_boss_results
 
@@ -20,12 +20,12 @@ OUTCOMES = {
     "mega_box": (
         u_mega_boxes,
         "success",
-        "Open it with </megabox:1486191980349358224>.",
+        "Open it with /megabox",
     ),
     "star_drop": (
         u_star_drops,
         "nothing",
-        "Open it with </stardrop:1447676573020065996>.",
+        "Open it with /stardrop",
     ),
     "nothing": (None, "fail", None),
 }
@@ -88,14 +88,10 @@ class BossInspectionView(View):
                 "background": background(user.id),
                 "outcome": outcome,
                 "line": BOSS_INSPECTION_ACTIONS[key][line],
+                "next": how,
             }
             await interaction.response.send_message(
-                **framed(
-                    await render(draw_boss_result, result, name="boss"),
-                    "Boss inspection",
-                    how,
-                    tone="info" if ref else "bad",
-                ),
+                file=await render(draw_boss_result, result, name="boss"),
                 ephemeral=True,
             )
             await report(

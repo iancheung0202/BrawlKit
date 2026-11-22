@@ -24,11 +24,9 @@ def brew(cafe):
 
 def pressing(cafe, sent, who=USER):
     press = cafe.interaction(who)
-    shown = sent["embed"].copy()
-    shown.set_image(
-        url=f"https://cdn.discordapp.com/attachments/1/2/{sent['file'].filename}?ex=1"
-    )
-    press.message.embeds = [shown]
+    press.message.embeds = []
+    press.message.content = ""
+    press.message.attachments = [MagicMock(filename=sent["file"].filename)]
     return press
 
 

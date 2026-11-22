@@ -25,7 +25,7 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
-from brawl.Currency.panel import NEXT, framed, notice, reframed
+from brawl.Currency.panel import DRAWN, framed, notice, reframed
 from brawl.Currency.quests import report, update_quest
 from brawl.Currency.tutorial import BREW_STEP, hint, step_of
 
@@ -156,6 +156,8 @@ class Brewing(commands.Cog):
                 "background": background(user_id),
             }
             old = message.embeds[0] if message.embeds else None
+            guided = bool(old and (old.title or "").startswith("Step"))
+            started["next"] = None if guided else DRAWN["sell"]
             said = (old.description if old else message.content) or ""
             lines = [line for line in said.split("\n") if "nsur" not in line]
             await interaction.response.edit_message(
@@ -209,11 +211,7 @@ class Brewing(commands.Cog):
                 "brews": stats.get("total_brews", 0),
             }
             return await interaction.response.send_message(
-                **framed(
-                    await render(draw_roasts, guide, name="roasts"),
-                    "Roast Guide",
-                    NEXT["roast"],
-                ),
+                file=await render(draw_roasts, guide, name="roasts"),
                 ephemeral=True,
             )
 
@@ -346,14 +344,13 @@ class Brewing(commands.Cog):
         if welcome_bonus_msg:
             lines.append(welcome_bonus_msg)
             new_beans += 150
-        title, step = (
-            hint(guide)
-            if guide
-            else (f"{ROAST_TYPES[roast]['name']} brewing", NEXT["sell"])
-        )
-        lines.append(("\n" if lines else "") + step)
+        title = f"{ROAST_TYPES[roast]['name']} brewing"
+        if guide:
+            title, step = hint(guide)
+            lines.append(("\n" if lines else "") + step)
 
         started = {
+            "next": None if guide else DRAWN["sell"],
             "roast": roast,
             "time": brew_time,
             "insurance": insurance,
@@ -572,16 +569,12 @@ class Brewing(commands.Cog):
                 lines.append(welcome_bonus_msg)
 
         guide = await self.economy.tutorial_manager.advance(user_id, "sell")
-        title, step = (
-            hint(guide)
-            if guide
-            else (
-                f"{ROAST_TYPES[roast_type]['name']} {'sold' if tokens else 'burnt'}",
-                NEXT["brew"],
-            )
-        )
-        lines.append(("\n" if lines else "") + step)
+        title = f"{ROAST_TYPES[roast_type]['name']} {'sold' if tokens else 'burnt'}"
+        if guide:
+            title, step = hint(guide)
+            lines.append(("\n" if lines else "") + step)
         sale = {
+            "next": None if guide else DRAWN["brew"],
             "roast": roast_type,
             "tokens": tokens,
             "perfect": perfect or burnt_to_perfect,
