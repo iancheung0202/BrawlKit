@@ -19,6 +19,7 @@ from brawl.Currency.db import (
     u_veteran,
 )
 from brawl.Currency.helper import MAIN_GUILD_ID
+from tests.conftest import text
 
 USER = 1
 
@@ -35,8 +36,7 @@ def run(cafe, cog, command, *args):
 
 
 def said(interaction):
-    call = interaction.response.send_message.call_args
-    return call[0][0] if call and call[0] else ""
+    return text(interaction.response.send_message.call_args)
 
 
 def test_ladder_has_one_station_per_level():
@@ -48,7 +48,7 @@ def test_a_locked_station_names_its_level(cafe):
     level(cafe, 0)
     u_balance(USER).set({"Beans": 5000})
     interaction = run(cafe, "Brewing", "brew", MagicMock(value="light"))
-    assert "**Brewing** unlocks at **Level 1**" in said(interaction)
+    assert "Brewing unlocks at Level 1" in said(interaction)
     assert u_balance(USER).get()["Beans"] == 5000
 
 
@@ -63,7 +63,7 @@ def test_games_stay_locked_below_their_level(cafe):
     level(cafe, 14)
     u_balance(USER).set({"Beans": 5000})
     interaction = run(cafe, "Gambling", "coinflip", 100)
-    assert "**Games** unlocks at **Level 15**" in said(interaction)
+    assert "Games unlocks at Level 15" in said(interaction)
     assert u_balance(USER).get()["Beans"] == 5000
 
 
@@ -119,14 +119,14 @@ def test_selling_ends_the_tutorial_for_a_member_who_already_clocked_in(cafe):
         }
     )
     interaction = run(cafe, "Brewing", "sell")
-    assert "First shift done" in interaction.followup.send.call_args_list[0].args[0]
+    assert "First shift done" in text(interaction.followup.send.call_args_list[0])
     assert u_tutorial(USER).get() == tutorial.DONE
 
 
 def test_a_new_member_brews_before_level_one_without_picking_a_roast(cafe):
     u_tutorial(USER).set(tutorial.BREW_STEP)
     interaction = run(cafe, "Brewing", "brew")
-    assert "Step 2 of 3" in interaction.followup.send.call_args_list[0].args[0]
+    assert "Step 2 of 3" in text(interaction.followup.send.call_args_list[0])
     assert u_brews(USER).child("active_brew").get()["insured"]
 
 
@@ -150,7 +150,7 @@ def test_every_station_command_is_gated(cafe, cog, command, args, below, name):
     callback = getattr(target, command).callback
     spare = len(inspect.signature(callback).parameters) - 2 - len(args)
     asyncio.run(callback(target, interaction, *args, *[None] * spare))
-    assert f"**{name}** unlocks at **Level {below + 1}**" in said(interaction)
+    assert f"{name} unlocks at Level {below + 1}" in said(interaction)
 
 
 def test_every_currency_module_can_be_loaded():

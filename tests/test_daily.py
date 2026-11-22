@@ -3,6 +3,7 @@ import time
 
 from brawl.Currency import daily
 from brawl.Currency.db import u_balance, u_daily_checkin_streaks
+from tests.conftest import text
 
 USER = 1
 
@@ -26,7 +27,7 @@ def test_first_claim_pays_beans_and_starts_a_streak(cafe, monkeypatch):
 def test_second_claim_the_same_day_is_rejected(cafe, monkeypatch):
     claim(cafe, monkeypatch)
     interaction = claim(cafe, monkeypatch)
-    assert "already clocked in" in interaction.response.send_message.call_args.args[0]
+    assert "already clocked in" in text(interaction.response.send_message.call_args)
     assert u_balance(USER).get()["Beans"] == 500
     assert u_daily_checkin_streaks(USER).get()["total_claims"] == 1
 
@@ -96,4 +97,5 @@ def test_only_admins_post_the_store_panel(cafe):
 def test_clocking_in_answers_with_a_card(cafe, monkeypatch):
     sent = claim(cafe, monkeypatch).followup.send.call_args
     assert sent.kwargs["file"].filename == "clock_in.jpg"
-    assert "Next:" in sent.args[0]
+    assert "Order" in sent.kwargs["embed"].description
+    assert sent.kwargs["embed"].image.url == "attachment://clock_in.jpg"

@@ -38,6 +38,7 @@ from brawl.Currency.helper import (
 from brawl.Currency.home import background
 from brawl.Currency.ladder import level_of, lock_line, locked, unlocked
 from brawl.Currency.pagination import BasePaginationView
+from brawl.Currency.panel import notice, reframed
 from brawl.Currency.quests import report, update_quest
 from brawl.Currency.shopcard import (
     CLAIM,
@@ -113,7 +114,8 @@ class Panel(ShopView):
     async def edit(self, interaction, operation):
         if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Missing Administrator permission.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Missing Administrator permission.", "bad"),
+                ephemeral=True,
             )
         modal = RewardModal(operation, interaction.guild.id)
         await interaction.response.send_modal(modal)
@@ -489,7 +491,9 @@ class Shop(commands.Cog):
     async def pin(self, interaction: discord.Interaction, message_link: str):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You do not have permission to use this command.",
+                embed=notice(
+                    f"{NO_EMOTE} You do not have permission to use this command.", "bad"
+                ),
                 ephemeral=True,
             )
         if await locked(interaction, "style"):
@@ -503,7 +507,10 @@ class Shop(commands.Cog):
 
         if pin_count <= 0:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You don't have any message pin credits! Purchase **1 Message Pin** from the shop to pin messages.",
+                embed=notice(
+                    f"{NO_EMOTE} You don't have any message pin credits! Purchase **1 Message Pin** from the shop to pin messages.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -518,14 +525,19 @@ class Shop(commands.Cog):
 
             if guild_id != interaction.guild.id:
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} You can only pin messages from this server!",
+                    embed=notice(
+                        f"{NO_EMOTE} You can only pin messages from this server!", "bad"
+                    ),
                     ephemeral=True,
                 )
 
         except (ValueError, IndexError):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Invalid message link! Please provide a valid Discord message link.\n"
-                f"-# Example: `https://discord.com/channels/1234567/2345678/78901234`",
+                embed=notice(
+                    f"{NO_EMOTE} Invalid message link! Please provide a valid Discord message link.\n"
+                    f"-# Example: `https://discord.com/channels/1234567/2345678/78901234`",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -535,13 +547,19 @@ class Shop(commands.Cog):
             channel = interaction.guild.get_channel(channel_id)
             if not channel:
                 return await interaction.followup.send(
-                    f"{NO_EMOTE} Channel not found! Make sure the message is from this server.",
+                    embed=notice(
+                        f"{NO_EMOTE} Channel not found! Make sure the message is from this server.",
+                        "bad",
+                    ),
                     ephemeral=True,
                 )
 
             if not channel.permissions_for(interaction.guild.me).manage_messages:
                 return await interaction.followup.send(
-                    f"{NO_EMOTE} I don't have permission to pin messages in {channel.mention}!",
+                    embed=notice(
+                        f"{NO_EMOTE} I don't have permission to pin messages in {channel.mention}!",
+                        "bad",
+                    ),
                     ephemeral=True,
                 )
 
@@ -549,7 +567,8 @@ class Shop(commands.Cog):
 
             if message.pinned:
                 return await interaction.followup.send(
-                    f"{NO_EMOTE} That message is already pinned!", ephemeral=True
+                    embed=notice(f"{NO_EMOTE} That message is already pinned!", "bad"),
+                    ephemeral=True,
                 )
 
             await message.pin(
@@ -575,32 +594,45 @@ class Shop(commands.Cog):
 
         except discord.NotFound:
             await interaction.followup.send(
-                f"{NO_EMOTE} Message not found! Make sure the link is correct and I can access that channel.",
+                embed=notice(
+                    f"{NO_EMOTE} Message not found! Make sure the link is correct and I can access that channel.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
         except discord.Forbidden:
             await interaction.followup.send(
-                f"{NO_EMOTE} I don't have permission to pin messages in that channel!",
+                embed=notice(
+                    f"{NO_EMOTE} I don't have permission to pin messages in that channel!",
+                    "bad",
+                ),
                 ephemeral=True,
             )
         except discord.HTTPException as e:
             if "Maximum number of pins reached" in str(e):
                 await interaction.followup.send(
-                    f"{NO_EMOTE} That channel has reached the maximum number of pinned messages (50)! Please unpin some messages first.",
+                    embed=notice(
+                        f"{NO_EMOTE} That channel has reached the maximum number of pinned messages (50)! Please unpin some messages first.",
+                        "bad",
+                    ),
                     ephemeral=True,
                 )
             else:
                 await interaction.followup.send(
-                    f"{NO_EMOTE} Failed to pin message: {str(e)}", ephemeral=True
+                    embed=notice(f"{NO_EMOTE} Failed to pin message: {str(e)}", "bad"),
+                    ephemeral=True,
                 )
         except Exception as e:
             await interaction.followup.send(
-                f"{NO_EMOTE} An error occurred: {str(e)}", ephemeral=True
+                embed=notice(f"{NO_EMOTE} An error occurred: {str(e)}", "bad"),
+                ephemeral=True,
             )
 
     @pin.error
     async def pin_error(self, interaction: discord.Interaction, error: Exception):
-        await interaction.response.send_message(f"```{str(error)}```", ephemeral=True)
+        await interaction.response.send_message(
+            embed=notice(f"```{str(error)}```"), ephemeral=True
+        )
 
     @app_commands.command(
         name="shop", description="View the guild shop (Admins can edit)"
@@ -609,7 +641,9 @@ class Shop(commands.Cog):
     async def shop(self, interaction: discord.Interaction):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You do not have permission to use this command.",
+                embed=notice(
+                    f"{NO_EMOTE} You do not have permission to use this command.", "bad"
+                ),
                 ephemeral=True,
             )
         if await locked(interaction, "shop"):
@@ -620,7 +654,9 @@ class Shop(commands.Cog):
 
     @shop.error
     async def shop_error(self, interaction: discord.Interaction, error: Exception):
-        await interaction.response.send_message(f"```{str(error)}```", ephemeral=True)
+        await interaction.response.send_message(
+            embed=notice(f"```{str(error)}```"), ephemeral=True
+        )
 
     async def get_shop_items(self, guild_id):
         ref = g_shops(guild_id)
@@ -645,7 +681,9 @@ class Shop(commands.Cog):
     async def buy(self, interaction: discord.Interaction, item: str):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You do not have permission to use this command.",
+                embed=notice(
+                    f"{NO_EMOTE} You do not have permission to use this command.", "bad"
+                ),
                 ephemeral=True,
             )
         if await locked(interaction, "shop"):
@@ -656,11 +694,15 @@ class Shop(commands.Cog):
         queue_size = global_purchase_queue.qsize()
         if queue_size > 1:
             await interaction.response.send_message(
-                f"<a:loading_circle:1393439258886537352> Your purchase is in queue. Position: {queue_size}. Please wait...",
+                embed=notice(
+                    f"<a:loading_circle:1393439258886537352> Your purchase is in queue. Position: {queue_size}. Please wait..."
+                ),
             )
         else:
             await interaction.response.send_message(
-                "<a:loading_circle:1393439258886537352> Processing your purchase...",
+                embed=notice(
+                    "<a:loading_circle:1393439258886537352> Processing your purchase..."
+                ),
             )
 
         if not processing_global_queue:
@@ -668,7 +710,9 @@ class Shop(commands.Cog):
 
     @buy.error
     async def buy_error(self, interaction: discord.Interaction, error: Exception):
-        await interaction.response.send_message(f"```{str(error)}```", ephemeral=True)
+        await interaction.response.send_message(
+            embed=notice(f"```{str(error)}```"), ephemeral=True
+        )
 
     async def _process_purchase(self, request):
         interaction = request.interaction
@@ -676,7 +720,8 @@ class Shop(commands.Cog):
 
         if time.time() - request.timestamp > 900:
             return await interaction.edit_original_response(
-                content="⌛ Your purchase request has expired. Please try again.",
+                content=None,
+                embed=notice("⌛ Your purchase request has expired. Please try again."),
             )
 
         guild_id = interaction.guild.id
@@ -697,7 +742,8 @@ class Shop(commands.Cog):
         shop_items = await self.get_shop_items(guild_id)
         if not shop_items:
             return await interaction.edit_original_response(
-                content=f"{NO_EMOTE} The shop is currently empty."
+                content=None,
+                embed=notice(f"{NO_EMOTE} The shop is currently empty.", "bad"),
             )
 
         reward = None
@@ -707,7 +753,8 @@ class Shop(commands.Cog):
                 break
         if reward is None:
             return await interaction.edit_original_response(
-                content=f"{NO_EMOTE} Item `{item}` not found in the shop."
+                content=None,
+                embed=notice(f"{NO_EMOTE} Item `{item}` not found in the shop.", "bad"),
             )
 
         name, desc, cost, currency_type, multiple, stock = reward
@@ -716,7 +763,10 @@ class Shop(commands.Cog):
 
         if stock == 0:
             return await interaction.edit_original_response(
-                content=f"<a:out_of_stock:1384990609584033812> Sorry, **{name}** is currently out of stock.",
+                content=None,
+                embed=notice(
+                    f"<a:out_of_stock:1384990609584033812> Sorry, **{name}** is currently out of stock."
+                ),
             )
 
         user_currency = beans if currency_type.lower() == "beans" else tokens
@@ -724,14 +774,22 @@ class Shop(commands.Cog):
 
         if user_currency < cost:
             return await interaction.edit_original_response(
-                content=f"{NO_EMOTE} You do not have enough {currency_type}. You have {currency_emote} `{user_currency}`, but this costs {currency_emote} `{cost}`."
+                content=None,
+                embed=notice(
+                    f"{NO_EMOTE} You do not have enough {currency_type}. You have {currency_emote} `{user_currency}`, but this costs {currency_emote} `{cost}`.",
+                    "bad",
+                ),
             )
 
         if multiple is False:
             role = interaction.guild.get_role(int(name)) if name.isdigit() else None
             if role and role in member.roles:
                 return await interaction.edit_original_response(
-                    content=f"{NO_EMOTE} You already own the role **{role.name}** and cannot purchase it again.",
+                    content=None,
+                    embed=notice(
+                        f"{NO_EMOTE} You already own the role **{role.name}** and cannot purchase it again.",
+                        "bad",
+                    ),
                 )
 
         if currency_type.lower() == "beans":
@@ -757,11 +815,15 @@ class Shop(commands.Cog):
                     await member.add_roles(role, reason="Purchased from shop")
                 except discord.Forbidden:
                     return await interaction.edit_original_response(
-                        content=f"Purchased **{role.name}**, but I do not have permission to assign the role."
+                        content=None,
+                        embed=notice(
+                            f"Purchased **{role.name}**, but I do not have permission to assign the role."
+                        ),
                     )
                 except Exception as e:
                     return await interaction.edit_original_response(
-                        content=f"{NO_EMOTE} Error assigning role: {e}",
+                        content=None,
+                        embed=notice(f"{NO_EMOTE} Error assigning role: {e}", "bad"),
                     )
 
         sale = {
@@ -775,12 +837,17 @@ class Shop(commands.Cog):
             "tokens": new_tokens,
         }
         await interaction.edit_original_response(
-            content=(
-                None
-                if name.isdigit()
-                else "Open a ticket in <#1390908939767648328> to claim your reward."
+            content=None,
+            **reframed(
+                await render(draw_purchase, sale, name="purchase"),
+                "Purchase complete",
+                (
+                    None
+                    if name.isdigit()
+                    else "Open a ticket in <#1390908939767648328> to claim your reward."
+                ),
+                tone="good",
             ),
-            attachments=[await render(draw_purchase, sale, name="purchase")],
         )
         await report(interaction, order)
 
@@ -792,7 +859,7 @@ class Shop(commands.Cog):
         if not await unlocked(self.bot, user_id, guild_id, station):
             level = await level_of(self.bot, user_id, guild_id)
             return await interaction.edit_original_response(
-                content=lock_line(station, level)
+                content=None, embed=notice(lock_line(station, level), "bad")
             )
 
         if item_id == "star_drop" or item_id == "star_drop_10":
@@ -1046,7 +1113,11 @@ class Shop(commands.Cog):
         }
         await interaction.edit_original_response(
             content=None,
-            attachments=[await render(draw_purchase, sale, name="purchase")],
+            **reframed(
+                await render(draw_purchase, sale, name="purchase"),
+                "Purchase complete",
+                tone="good",
+            ),
         )
         await report(interaction, order)
 

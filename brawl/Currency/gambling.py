@@ -20,6 +20,7 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
+from brawl.Currency.panel import notice
 
 MIN_BET, MAX_BET, ULTRA_MAX_BET = 100, 1000, 2000
 TURN_SECONDS = 30
@@ -38,13 +39,13 @@ RULES = (
     "### Payouts\n"
     "- A win pays your bet. A tie returns it.\n"
     "- 21 on your first two cards pays one and a half times your bet.\n"
-    f"-# You have {TURN_SECONDS} seconds for each choice."
+    f"You have {TURN_SECONDS} seconds for each choice."
 )
 WARNING = (
     "Games are for fun, not a way to earn. The odds favor the house, "
     "so over time you lose more than you win.\n\n"
     "You can play {limit} games of {game} a day.\n"
-    "-# If gambling is a problem for you or someone you know, please seek help."
+    "If gambling is a problem for you or someone you know, please seek help."
 )
 
 
@@ -66,7 +67,7 @@ class Game(View):
         if interaction.user.id == self.user_id:
             return True
         await interaction.response.send_message(
-            f"{NO_EMOTE} This is not your game.", ephemeral=True
+            embed=notice(f"{NO_EMOTE} This is not your game.", "bad"), ephemeral=True
         )
         return False
 
@@ -129,7 +130,8 @@ class PlayAgain(View):
     async def again(self, interaction: discord.Interaction, button):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This is not your game.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} This is not your game.", "bad"),
+                ephemeral=True,
             )
         self.stop()
         await getattr(self.cog, self.name).callback(self.cog, interaction, self.bet)
@@ -221,8 +223,11 @@ class Blackjack(Game):
     async def double_down(self, interaction: discord.Interaction, button):
         if not await wallet.pay(self.user_id, beans=self.bet, reason="games"):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Doubling down costs {BEAN_EMOTE} `{self.bet:,}` more, "
-                "and you do not have that.",
+                embed=notice(
+                    f"{NO_EMOTE} Doubling down costs {BEAN_EMOTE} `{self.bet:,}` more, "
+                    "and you do not have that.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
         self.bet *= 2
@@ -297,7 +302,7 @@ class Gambling(commands.Cog):
         """Runs every check a bet has to pass, then takes it. True when the game can start."""
         if interaction.guild.id != MAIN_GUILD_ID:
             line = f"{NO_EMOTE} You do not have permission to use this command."
-            await interaction.followup.send(line, ephemeral=True)
+            await interaction.followup.send(embed=notice(line, "bad"), ephemeral=True)
             return False
         if await locked(interaction, "games"):
             return False
@@ -310,8 +315,8 @@ class Gambling(commands.Cog):
         if played >= limit:
             resets = int(time.time() // 86400 * 86400 + 86400)
             line = (
-                f"You have played all `{limit}` games of {NAMES[game]} for today.\n"
-                f"-# You can play again <t:{resets}:R>."
+                f"You have played all `{limit}` games of {NAMES[game]} for today. "
+                f"You can play again <t:{resets}:R>."
             )
         elif bet < MIN_BET:
             line = f"The lowest bet is {BEAN_EMOTE} `{MIN_BET:,}`."
@@ -326,7 +331,9 @@ class Gambling(commands.Cog):
             await wallet.pay(user_id, beans=bet, reason="games")
             plays.update({game: played + 1})
             return True
-        await interaction.followup.send(f"{NO_EMOTE} {line}", ephemeral=True)
+        await interaction.followup.send(
+            embed=notice(f"{NO_EMOTE} {line}", "bad"), ephemeral=True
+        )
         return False
 
     @app_commands.command(
@@ -375,7 +382,10 @@ class Gambling(commands.Cog):
     async def on_error(self, interaction: discord.Interaction, error):
         if isinstance(error, app_commands.CommandOnCooldown):
             await interaction.response.send_message(
-                f"{NO_EMOTE} Wait `{error.retry_after:.0f}` seconds before the next game.",
+                embed=notice(
+                    f"{NO_EMOTE} Wait `{error.retry_after:.0f}` seconds before the next game.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 

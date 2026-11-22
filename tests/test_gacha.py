@@ -9,6 +9,7 @@ from brawl.Currency.db import (
     u_star_drops,
     u_star_drops_pending,
 )
+from tests.conftest import text
 
 USER = 1
 
@@ -32,7 +33,7 @@ def test_rarity_rates_add_up():
 
 def test_star_drop_needs_one_in_the_inventory(cafe):
     interaction = open_with(cafe, "stardrop")
-    assert "no Star Drops" in sent(interaction)[0][0]
+    assert "no Star Drops" in text(sent(interaction))
 
 
 def test_star_drop_takes_one_and_pays_after_four_upgrades(cafe, monkeypatch):
@@ -48,7 +49,7 @@ def test_star_drop_takes_one_and_pays_after_four_upgrades(cafe, monkeypatch):
     press = cafe.interaction(USER)
     press.user.id = USER
     asyncio.run(view.children[1].callback(press))
-    assert "4 upgrades" in press.followup.send.call_args[0][0]
+    assert "4 upgrades" in text(press.followup.send.call_args)
     for _ in range(4):
         asyncio.run(view.children[0].callback(press))
     asyncio.run(view.children[1].callback(press))
@@ -85,7 +86,7 @@ def test_drops_and_boxes_are_sent_as_cards(cafe, monkeypatch):
     u_mega_boxes(USER).set(1)
     for command, name in (("stardrop", "stardrop.jpg"), ("megabox", "megabox.jpg")):
         message = sent(open_with(cafe, command)).kwargs
-        assert message["file"].filename == name and "embed" not in message
+        assert message["file"].filename == name
     gacha.StarDropView.active_sessions.clear()
     gacha.MegaBoxView.active_sessions.clear()
 

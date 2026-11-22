@@ -18,8 +18,30 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import unlocked
+from brawl.Currency.panel import notice
 from brawl.Currency.quests import get_next_daily_reset, update_quest
 from brawl.Currency.stationcard import draw_token_drop
+
+
+def chat_limit(member, effects):
+    """How many Beans this member can earn from chat today."""
+    limit = 1000
+    if member.guild.premium_subscriber_role in member.roles:
+        limit = 1500
+    ultra = member.guild.get_role(ULTRA_TIER_ROLE_ID)
+    if ultra and ultra in member.roles:
+        limit = 5000
+    if datetime.now(timezone.utc).weekday() >= 5:
+        limit *= 2
+    if "chat_boost" in effects:
+        limit *= 3
+    return limit
+
+
+def chat_today(user_id):
+    """The Beans this member has earned from chat since the daily reset."""
+    data = u_daily_chat_earnings(user_id).get() or {}
+    return data.get("earnings", 0) if time.time() <= data.get("reset_time", 0) else 0
 
 
 class ChatRewardSystem:
@@ -117,22 +139,9 @@ class ChatRewardSystem:
         self.message_counts[user_id] += 1
         self.last_messages[user_id] = message.content.strip()
 
-        MAX_DAILY_CHAT_BEAN_LIMIT = 1000
-        booster_role = message.guild.premium_subscriber_role
-        if booster_role in message.author.roles:
-            MAX_DAILY_CHAT_BEAN_LIMIT = 1500
-
-        ultra_role = message.guild.get_role(ULTRA_TIER_ROLE_ID)
-        if ultra_role and ultra_role in message.author.roles:
-            MAX_DAILY_CHAT_BEAN_LIMIT = 5000
-
-        if datetime.now(timezone.utc).weekday() >= 5:
-            MAX_DAILY_CHAT_BEAN_LIMIT *= 2
-
         active_effects = await cog.effect_manager.get_user_active_effects(user_id)
         chat_boost_active = "chat_boost" in active_effects
-        if chat_boost_active:
-            MAX_DAILY_CHAT_BEAN_LIMIT *= 3
+        MAX_DAILY_CHAT_BEAN_LIMIT = chat_limit(message.author, active_effects)
 
         if message.channel.id in MAIN_CHAT_CHANNELS and not heat.freeze(
             message.guild.id
@@ -203,10 +212,25 @@ class ChatRewardSystem:
 
                 await cog.add_beans(user_id, beans_earned)
                 order = await update_quest(
-                    user_id, message.guild.id, {"chat_earnings": beans_earned}, self.bot
+                    user_id,
+                    message.guild.id,
+                    {},
+                    self.bot,
+                    chat=(new_earnings, MAX_DAILY_CHAT_BEAN_LIMIT),
                 )
                 reward_triggered = True
                 reset_time = earnings_data["reset_time"]
+            else:
+                # Already at the limit: the order may still be waiting on it.
+                done = await update_quest(
+                    user_id,
+                    message.guild.id,
+                    {},
+                    self.bot,
+                    chat=(today_earnings, MAX_DAILY_CHAT_BEAN_LIMIT),
+                )
+                if done:
+                    await message.channel.send(embed=notice("\n".join(done)))
 
         try:
             if reward_triggered:
@@ -218,14 +242,15 @@ class ChatRewardSystem:
                     )
                     if table_data and table_data.get("formalized", False):
                         emoji = table_data["emoji"]
-                await message.channel.send(
-                    f"{emoji} {message.author.mention} earned {BEAN_EMOTE} **{beans_earned} Beans** "
-                    f"for chatting actively! *(Daily Cap: `{new_earnings}/{MAX_DAILY_CHAT_BEAN_LIMIT}`)* {EFFECT_EMOTE if chat_boost_active else ''} \n"
-                    f"> -# <a:clock:1382887924273774754> Resets <t:{int(reset_time)}:R>. "
-                    "Use </balance:1393376242501157005> to check your progress!"
-                    + "".join(f"\n> {line}" for line in order),
-                    file=drop,
+                earned = notice(
+                    f"{emoji} {message.author.mention} earned {BEAN_EMOTE} `{beans_earned}` Beans "
+                    f"for chatting {EFFECT_EMOTE if chat_boost_active else ''}\n"
+                    f"Today: `{new_earnings}/{MAX_DAILY_CHAT_BEAN_LIMIT}`, resets <t:{int(reset_time)}:R>"
+                    + "".join(f"\n{line}" for line in order)
                 )
+                if drop:
+                    earned.set_image(url=f"attachment://{drop.filename}")
+                await message.channel.send(embed=earned, file=drop)
             elif drop:
                 await message.channel.send(message.author.mention, file=drop)
         except Exception as e:

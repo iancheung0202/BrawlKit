@@ -25,6 +25,7 @@ from brawl.Currency.helper import (
     get_current_month_key,
 )
 from brawl.Currency.invitecard import draw_invitees, invited_by, invitees, month_name
+from brawl.Currency.panel import framed, notice
 from brawl.Currency.tutorial import TutorialManager, hint, shift
 
 
@@ -66,7 +67,9 @@ class WelcomeView(discord.ui.View):
         if current_time - last_welcome < 300:
             expire_time = int(current_time + (300 - (current_time - last_welcome)))
             return await interaction.response.send_message(
-                f"⏰ You have already welcomed another new member not long ago. Try again <t:{expire_time}:R>",
+                embed=notice(
+                    f"⏰ You have already welcomed another new member not long ago. Try again <t:{expire_time}:R>"
+                ),
                 ephemeral=True,
             )
         self.welcomed_by.add(interaction.user.id)
@@ -277,10 +280,9 @@ class InviteTracker(commands.Cog):
         if welcome_channel:
             if is_new:
                 await welcome_channel.send(
-                    f"### {member.mention} just joined <:pandaHappy:855019705836240916> ~ please give them a warm welcome! <:PumpkinLove:1391457782061990099>\n"
-                    f"-# {hint(guide)}",
+                    f"### {member.mention} just joined <:pandaHappy:855019705836240916> ~ please give them a warm welcome! <:PumpkinLove:1391457782061990099>",
                     view=WelcomeView(member, self.bot),
-                    file=await shift(guide, member.id),
+                    **framed(await shift(guide, member.id), *hint(guide)),
                 )
             else:
                 await welcome_channel.send(
@@ -325,11 +327,12 @@ class InviteTracker(commands.Cog):
     ):
         if interaction.guild.id != self.tracked_guild_id:
             return await interaction.response.send_message(
-                "🚫 You can't use this here.", ephemeral=True
+                embed=notice("🚫 You can't use this here."), ephemeral=True
             )
         if amount <= 0:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Amount must be positive.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Amount must be positive.", "bad"),
+                ephemeral=True,
             )
         current_month = get_current_month_key()
         ref = g_invites_monthly(interaction.guild.id, current_month, user.id)
@@ -338,7 +341,10 @@ class InviteTracker(commands.Cog):
         data["valid"] += amount
         ref.set(data)
         await interaction.response.send_message(
-            f"{YES_EMOTE} Added **{amount}** invites to {user.mention} for {current_month}",
+            embed=notice(
+                f"{YES_EMOTE} Added **{amount}** invites to {user.mention} for {current_month}",
+                "good",
+            ),
             ephemeral=True,
         )
 
@@ -364,19 +370,21 @@ class MonthSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.inviter:
             return await interaction.response.send_message(
-                "This is not your command.", ephemeral=True
+                embed=notice("This is not your command."), ephemeral=True
             )
         economy = interaction.client.get_cog("CurrencySystem")
         if not economy:
             return await interaction.response.send_message(
-                "The Cafe is closed right now. Try again in a minute.", ephemeral=True
+                embed=notice("The Cafe is closed right now. Try again in a minute."),
+                ephemeral=True,
             )
         await interaction.response.defer(ephemeral=True)
         month = self.values[0]
         people = invited_by(interaction.guild.id, self.inviter.id).get(month)
         if not people:
             return await interaction.followup.send(
-                f"You invited no one in {month_name(month)}.", ephemeral=True
+                embed=notice(f"You invited no one in {month_name(month)}."),
+                ephemeral=True,
             )
         card = await invitees(
             economy, interaction.guild, self.inviter.id, month, people

@@ -13,6 +13,7 @@ from brawl.Currency.db import (
 )
 from brawl.Currency.helper import MAIN_GUILD_ID, get_current_month_key
 from brawl.Currency.tutorial import BREW_STEP, CLOCK_IN, DONE, SELL_STEP
+from tests.conftest import text
 
 USER = 1
 WORDS = "coffee beans brawl stars showdown trophies ranked gems skins maps".split()
@@ -64,7 +65,7 @@ def test_a_new_member_reaches_a_pass(cafe, monkeypatch):
     assert u_tutorial(USER).get() == CLOCK_IN
 
     locked = press(cafe, "Brewing", "brew", MagicMock(value="light"))
-    assert "Level 1" in locked.response.send_message.call_args[0][0]
+    assert "Level 1" in text(locked.response.send_message.call_args)
 
     clock_in = cafe.interaction(USER)
     clock_in.guild.premium_subscriber_role = None
@@ -79,7 +80,7 @@ def test_a_new_member_reaches_a_pass(cafe, monkeypatch):
     level(cafe, 1)
 
     assert stampcard.stamps(USER) == 0
-    talk(cafe, monkeypatch, 80)
+    talk(cafe, monkeypatch, 300)
     assert stampcard.stamps(USER) == 1
 
     u_stamp_card(USER).update({"count": STAMP_GOALS["brawl_pass"]})

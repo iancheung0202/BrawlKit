@@ -25,11 +25,9 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
-from brawl.Currency.panel import NEXT
+from brawl.Currency.panel import NEXT, framed, notice, reframed
 from brawl.Currency.quests import report, update_quest
 from brawl.Currency.tutorial import BREW_STEP, hint, step_of
-
-NO_ROLE_PINGS = discord.AllowedMentions(roles=False)
 
 
 class Brewing(commands.Cog):
@@ -113,28 +111,36 @@ class Brewing(commands.Cog):
             self, interaction: discord.Interaction, button: discord.ui.Button
         ):
             user_id = interaction.user.id
-            files = [file.filename for file in interaction.message.attachments]
-            if not any(name.startswith(f"brew_{user_id}_") for name in files):
+            message = interaction.message
+            shown = " ".join(
+                [embed.image.url or "" for embed in message.embeds]
+                + [file.filename for file in message.attachments]
+            )
+            if f"brew_{user_id}_" not in shown:
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} This is not your brew!", ephemeral=True
+                    embed=notice(f"{NO_EMOTE} This is not your brew!", "bad"),
+                    ephemeral=True,
                 )
             active = await self.cog.economy.get_active_brew(user_id)
             if (
                 not active
                 or active.get("insured")
-                or not any(
-                    name.startswith(f"brew_{user_id}_{active['batch_id']}.")
-                    for name in files
-                )
+                or f"brew_{user_id}_{active['batch_id']}." not in shown
             ):
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} This brew can no longer be insured.", ephemeral=True
+                    embed=notice(
+                        f"{NO_EMOTE} This brew can no longer be insured.", "bad"
+                    ),
+                    ephemeral=True,
                 )
             free = await self.free_for(user_id)
             roast = active["roast_type"]
             if not await self.cog.insure_brew(user_id, roast):
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} You don't have enough Beans to insure this brew!",
+                    embed=notice(
+                        f"{NO_EMOTE} You don't have enough Beans to insure this brew!",
+                        "bad",
+                    ),
                     ephemeral=True,
                 )
             beans, _ = await self.cog.economy.get_balance(user_id)
@@ -147,20 +153,20 @@ class Brewing(commands.Cog):
                 "beans": beans,
                 "background": background(user_id),
             }
-            lines = [
-                line
-                for line in interaction.message.content.split("\n")
-                if "insur" not in line
-            ]
+            old = message.embeds[0] if message.embeds else None
+            said = (old.description if old else message.content) or ""
+            lines = [line for line in said.split("\n") if "nsur" not in line]
             await interaction.response.edit_message(
-                content="\n".join(lines),
-                attachments=[
+                **reframed(
                     await render(
                         draw_brewing,
                         started,
                         name=f"brew_{user_id}_{active['batch_id']}",
-                    )
-                ],
+                    ),
+                    (old and old.title) or f"{ROAST_TYPES[roast]['name']} brewing",
+                    "\n".join(lines),
+                ),
+                content=None,
                 view=None,
             )
 
@@ -186,7 +192,9 @@ class Brewing(commands.Cog):
     ):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You do not have permission to use this command.",
+                embed=notice(
+                    f"{NO_EMOTE} You do not have permission to use this command.", "bad"
+                ),
                 ephemeral=True,
             )
         training = step_of(interaction.user.id) == BREW_STEP
@@ -199,8 +207,11 @@ class Brewing(commands.Cog):
                 "brews": stats.get("total_brews", 0),
             }
             return await interaction.response.send_message(
-                f"-# **Next:** {NEXT['brew']}",
-                file=await render(draw_roasts, guide, name="roasts"),
+                **framed(
+                    await render(draw_roasts, guide, name="roasts"),
+                    "Roast Guide",
+                    NEXT["roast"],
+                ),
                 ephemeral=True,
             )
 
@@ -212,12 +223,18 @@ class Brewing(commands.Cog):
             current_time = time.time()
             if current_time < active_brew["end_time"]:
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} You already have an active brew! You can </sell:1396588612790784071> it <t:{int(active_brew['end_time'])}:R>.",
+                    embed=notice(
+                        f"{NO_EMOTE} You already have an active brew! You can </sell:1396588612790784071> it <t:{int(active_brew['end_time'])}:R>.",
+                        "bad",
+                    ),
                     ephemeral=True,
                 )
             else:
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} You have a brew ready to sell! Use </sell:1396588612790784071> first.",
+                    embed=notice(
+                        f"{NO_EMOTE} You have a brew ready to sell! Use </sell:1396588612790784071> first.",
+                        "bad",
+                    ),
                     ephemeral=True,
                 )
 
@@ -226,7 +243,10 @@ class Brewing(commands.Cog):
             total_brews = stats.get("total_brews", 0) if stats else 0
             if total_brews < UNLOCK_REQ:
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} You need `{UNLOCK_REQ}` brews to unlock **Golden Roast**. You only have `{total_brews}`.",
+                    embed=notice(
+                        f"{NO_EMOTE} You need `{UNLOCK_REQ}` brews to unlock **Golden Roast**. You only have `{total_brews}`.",
+                        "bad",
+                    ),
                     ephemeral=True,
                 )
 
@@ -235,7 +255,10 @@ class Brewing(commands.Cog):
         beans, tokens = await self.economy.get_balance(user_id)
         if beans < cost:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You need {BEAN_EMOTE} `{cost:,}` Beans for a **{ROAST_TYPES[roast]['name']}**. You only have `{beans:,}`.",
+                embed=notice(
+                    f"{NO_EMOTE} You need {BEAN_EMOTE} `{cost:,}` Beans for a **{ROAST_TYPES[roast]['name']}**. You only have `{beans:,}`.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -286,9 +309,9 @@ class Brewing(commands.Cog):
 
         lines = [
             (
-                f"{interaction.user.mention}, your first brew is on the house and ready now."
+                "Your first brew is on the house and ready now."
                 if first
-                else f"{interaction.user.mention}, your coffee is ready <t:{int(brew_data['end_time'])}:R>."
+                else f"Your coffee will be ready <t:{int(brew_data['end_time'])}:R>."
             )
         ]
         insurance = "safe"
@@ -301,15 +324,15 @@ class Brewing(commands.Cog):
             await view.update_button_for_user(user_id)
             if view.free:
                 lines.append(
-                    f"-# {EFFECT_EMOTE} Your insurance is free for this brew. Press the button to use it."
+                    f"{EFFECT_EMOTE} Insurance is free for this brew. Press the button to use it."
                 )
             else:
                 lines.append(
-                    f"-# You can insure it for {BEAN_EMOTE} `{ROAST_TYPES[roast]['insurance_cost']:,}` so it can't burn."
+                    f"Insure it for {BEAN_EMOTE} `{ROAST_TYPES[roast]['insurance_cost']:,}` so it can't burn."
                 )
         if "half_brew_time" in active_effects and not first:
             lines.append(
-                f"-# {EFFECT_EMOTE} Turbo Brewing Kit made this brew twice as fast."
+                f"{EFFECT_EMOTE} Turbo Brewing Kit made this brew twice as fast."
             )
 
         ref_mapping = g_invites_member_data(interaction.guild.id, interaction.user.id)
@@ -335,7 +358,12 @@ class Brewing(commands.Cog):
         if welcome_bonus_msg:
             lines.append(welcome_bonus_msg)
             new_beans += 150
-        lines.append(f"-# {hint(guide)}" if guide else f"-# **Next:** {NEXT['sell']}")
+        title, step = (
+            hint(guide)
+            if guide
+            else (f"{ROAST_TYPES[roast]['name']} brewing", NEXT["sell"])
+        )
+        lines.append("\n" + step)
 
         started = {
             "roast": roast,
@@ -347,11 +375,15 @@ class Brewing(commands.Cog):
         }
         sent = {"view": view} if view else {}
         await interaction.followup.send(
-            "\n".join(lines),
-            file=await render(
-                draw_brewing, started, name=f"brew_{user_id}_{brew_data['batch_id']}"
+            **framed(
+                await render(
+                    draw_brewing,
+                    started,
+                    name=f"brew_{user_id}_{brew_data['batch_id']}",
+                ),
+                title,
+                *lines,
             ),
-            allowed_mentions=NO_ROLE_PINGS,
             **sent,
         )
         await report(interaction, order)
@@ -360,17 +392,21 @@ class Brewing(commands.Cog):
     async def brew_error(self, interaction: discord.Interaction, error: Exception):
         try:
             await interaction.response.send_message(
-                f"```{str(error)}```", ephemeral=True
+                embed=notice(f"```{str(error)}```"), ephemeral=True
             )
         except Exception:
-            await interaction.followup.send(f"```{str(error)}```", ephemeral=True)
+            await interaction.followup.send(
+                embed=notice(f"```{str(error)}```"), ephemeral=True
+            )
 
     @app_commands.command(name="sell", description="Sell your brewed coffee for Tokens")
     @app_commands.checks.cooldown(rate=1, per=10.0)
     async def sell(self, interaction: discord.Interaction):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You do not have permission to use this command.",
+                embed=notice(
+                    f"{NO_EMOTE} You do not have permission to use this command.", "bad"
+                ),
                 ephemeral=True,
             )
         user_id = interaction.user.id
@@ -378,13 +414,19 @@ class Brewing(commands.Cog):
         active_brew = await self.economy.get_active_brew(user_id)
         if not active_brew:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You don't have an active brew to sell.", ephemeral=True
+                embed=notice(
+                    f"{NO_EMOTE} You don't have an active brew to sell.", "bad"
+                ),
+                ephemeral=True,
             )
 
         current_time = time.time()
         if current_time < active_brew["end_time"]:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Your brew isn't ready yet! You can sell it <t:{int(active_brew['end_time'])}:R>.",
+                embed=notice(
+                    f"{NO_EMOTE} Your brew isn't ready yet! You can sell it <t:{int(active_brew['end_time'])}:R>.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -456,7 +498,7 @@ class Brewing(commands.Cog):
         if sync_sell_alarm(user_id, "get"):
             sync_sell_alarm(user_id, "delete", guild_id=interaction.guild.id)
 
-        lines = [f"{interaction.user.mention}"]
+        lines = []
         notes = []
         if tokens == 0:
             notes.append(("It burnt, so it paid nothing.", RED))
@@ -542,7 +584,15 @@ class Brewing(commands.Cog):
                 lines.append(welcome_bonus_msg)
 
         guide = await self.economy.tutorial_manager.advance(user_id, "sell")
-        lines.append(f"-# {hint(guide)}" if guide else f"-# **Next:** {NEXT['brew']}")
+        title, step = (
+            hint(guide)
+            if guide
+            else (
+                f"{ROAST_TYPES[roast_type]['name']} {'sold' if tokens else 'burnt'}",
+                NEXT["brew"],
+            )
+        )
+        lines.append("\n" + step)
         sale = {
             "roast": roast_type,
             "tokens": tokens,
@@ -552,9 +602,12 @@ class Brewing(commands.Cog):
             "background": background(user_id),
         }
         await interaction.followup.send(
-            "\n".join(lines),
-            file=await render(draw_sold, sale, name="sold"),
-            allowed_mentions=NO_ROLE_PINGS,
+            **framed(
+                await render(draw_sold, sale, name="sold"),
+                title,
+                *lines,
+                tone="good" if tokens else "bad",
+            )
         )
         await report(interaction, order)
 
@@ -562,10 +615,12 @@ class Brewing(commands.Cog):
     async def sell_error(self, interaction: discord.Interaction, error: Exception):
         try:
             await interaction.response.send_message(
-                f"```{str(error)}```", ephemeral=True
+                embed=notice(f"```{str(error)}```"), ephemeral=True
             )
         except Exception:
-            await interaction.followup.send(f"```{str(error)}```", ephemeral=True)
+            await interaction.followup.send(
+                embed=notice(f"```{str(error)}```"), ephemeral=True
+            )
 
 
 async def setup(bot):

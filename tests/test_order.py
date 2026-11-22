@@ -13,6 +13,7 @@ from brawl.Currency.config import (
 )
 from brawl.Currency.db import g_stamp_redemptions, u_balance, u_quests, u_stamp_card
 from brawl.Currency.helper import MAIN_GUILD_ID, get_current_month_key
+from tests.conftest import text
 
 USER = 1
 
@@ -122,14 +123,14 @@ def redeem(cafe, tier="brawl_pass"):
 def test_redeem_needs_a_full_card(cafe):
     u_stamp_card(USER).set({"count": 29})
     u_balance(USER).set({"Tokens": 999})
-    assert "`30` Stamps" in redeem(cafe).args[0]
+    assert "`30` Stamps" in text(redeem(cafe))
     assert u_balance(USER).get()["Tokens"] == 999
 
 
 def test_redeem_needs_tokens(cafe):
     u_stamp_card(USER).set({"count": 30})
     u_balance(USER).set({"Tokens": 399})
-    assert "costs" in redeem(cafe).args[0]
+    assert "costs" in text(redeem(cafe))
     assert u_stamp_card(USER).get()["count"] == 30
 
 
@@ -139,7 +140,7 @@ def test_redeem_stops_at_the_monthly_limit(cafe):
     g_stamp_redemptions(MAIN_GUILD_ID, get_current_month_key()).set(
         {"count": STAMP_MONTHLY_LIMIT}
     )
-    assert "next month" in redeem(cafe).args[0]
+    assert "next month" in text(redeem(cafe))
     assert u_balance(USER).get()["Tokens"] == 999
     assert u_stamp_card(USER).get()["count"] == 30
 
@@ -179,3 +180,45 @@ def test_the_order_waits_for_clock_in(cafe, monkeypatch):
     asyncio.run(quests.update_quest(77, 1, {"chat_earnings": 200}, cafe.bot))
     tasks = {task: data["current"] for task, _, data, _ in quests.order_tasks(77)}
     assert tasks["chat_earnings"] == 200
+
+
+def chat(cafe, earned, limit):
+    asyncio.run(
+        quests.update_quest(USER, MAIN_GUILD_ID, {}, cafe.bot, chat=(earned, limit))
+    )
+    return u_quests(USER).child("daily").get()
+
+
+def test_the_chat_task_is_the_members_own_daily_limit(order):
+    daily = chat(order, 600, 1500)
+    assert daily["quests"]["chat_earnings"] == {"current": 600, "goal": 1500}
+    assert "chat_earnings" not in daily.get("completed", {})
+    assert "chat_earnings" in chat(order, 1500, 1500)["completed"]
+
+
+def test_the_chat_task_follows_a_limit_that_changes_during_the_day(order):
+    chat(order, 1200, 3000)
+    daily = chat(order, 1200, 1000)
+    assert daily["quests"]["chat_earnings"] == {"current": 1000, "goal": 1000}
+    assert "chat_earnings" in daily["completed"]
+
+
+def test_chat_limits_stack_roles_weekends_and_boosts(monkeypatch):
+    from datetime import datetime, timezone
+
+    from brawl.Currency import chat as rewards
+
+    booster, ultra = MagicMock(), MagicMock()
+    member = MagicMock(roles=[])
+    member.guild.premium_subscriber_role = booster
+    member.guild.get_role.return_value = ultra
+    clock = MagicMock()
+    monkeypatch.setattr(rewards, "datetime", clock)
+    clock.now.return_value = datetime(2026, 11, 18, tzinfo=timezone.utc)
+    assert rewards.chat_limit(member, {}) == 1000
+    member.roles = [booster]
+    assert rewards.chat_limit(member, {}) == 1500
+    member.roles = [booster, ultra]
+    assert rewards.chat_limit(member, {"chat_boost": 1}) == 15000
+    clock.now.return_value = datetime(2026, 11, 21, tzinfo=timezone.utc)
+    assert rewards.chat_limit(member, {}) == 10000

@@ -18,6 +18,7 @@ from brawl.Currency.card import plain, render
 from brawl.Currency.config import LADDER
 from brawl.Currency.home import background
 from brawl.Currency.ladder import lessons
+from brawl.Currency.panel import framed, notice
 from brawl.Currency.rewardcard import draw_level_up
 
 
@@ -216,7 +217,9 @@ class Leveling(commands.Cog):
                     else:
                         emoji = "<a:SpikeWin:1391625613273727137>"
 
-                    final_msg = f"{emoji} {message.author.mention} reached level **{new_level}**!"
+                    final_msg = (
+                        f"{emoji} {message.author.mention} reached Level {new_level}."
+                    )
                     for lesson in lessons(current_level, new_level):
                         final_msg += f"\n\n{lesson}"
 
@@ -242,9 +245,12 @@ class Leveling(commands.Cog):
                     }
                     try:
                         await message.channel.send(
-                            final_msg,
-                            file=await render(draw_level_up, leveled, name="level_up"),
-                            allowed_mentions=discord.AllowedMentions.none(),
+                            **framed(
+                                await render(draw_level_up, leveled, name="level_up"),
+                                "Level up",
+                                final_msg,
+                                tone="gold",
+                            ),
                             **(
                                 {"view": LevelRewardInfoView()}
                                 if new_level <= 20
@@ -603,11 +609,11 @@ class LevelingAdmin(commands.GroupCog, name="xp"):
         if cog:
             await cog.add_xp(user.id, interaction.guild.id, amount)
             await interaction.response.send_message(
-                f"Added {amount} XP to {user.mention}."
+                embed=notice(f"Added {amount} XP to {user.mention}.")
             )
         else:
             await interaction.response.send_message(
-                "Leveling system not available.", ephemeral=True
+                embed=notice("Leveling system not available."), ephemeral=True
             )
 
     @app_commands.command(name="remove", description="Remove XP from a user")
@@ -623,11 +629,11 @@ class LevelingAdmin(commands.GroupCog, name="xp"):
         if cog:
             await cog.add_xp(user.id, interaction.guild.id, -amount)
             await interaction.response.send_message(
-                f"Removed {amount} XP from {user.mention}."
+                embed=notice(f"Removed {amount} XP from {user.mention}.")
             )
         else:
             await interaction.response.send_message(
-                "Leveling system not available.", ephemeral=True
+                embed=notice("Leveling system not available."), ephemeral=True
             )
 
     @app_commands.command(name="reset", description="Reset a user's XP")
@@ -643,10 +649,12 @@ class LevelingAdmin(commands.GroupCog, name="xp"):
                     str(user.id),
                     str(interaction.guild.id),
                 )
-            await interaction.response.send_message(f"Reset XP for {user.mention}.")
+            await interaction.response.send_message(
+                embed=notice(f"Reset XP for {user.mention}.")
+            )
         else:
             await interaction.response.send_message(
-                "Leveling system not available.", ephemeral=True
+                embed=notice("Leveling system not available."), ephemeral=True
             )
 
 

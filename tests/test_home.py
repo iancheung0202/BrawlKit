@@ -18,6 +18,7 @@ from brawl.Currency.db import (
     u_stamp_card,
 )
 from brawl.Currency.helper import SERVER_STORE
+from tests.conftest import text
 
 USER = 1
 
@@ -91,7 +92,7 @@ def test_stamp_goal_moves_to_plus_after_a_full_card():
 def test_customize_previews_but_cannot_confirm_without_a_credit(cafe):
     interaction = customize(cafe, "tokyo")
     sent = interaction.followup.send.call_args
-    assert "need 1 Customization Credit" in sent.args[0]
+    assert "need 1 Customization Credit" in text(sent)
     assert sent.kwargs["file"].filename == f"balance_{USER}.jpg"
     assert confirm(interaction)[0].confirm.disabled
     assert u_background(USER).get() is None

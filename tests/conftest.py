@@ -129,3 +129,15 @@ def clocked_in(request, monkeypatch):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "before_clock_in: the member has not clocked in")
+
+
+def text(call):
+    """What a reply says, whether it was sent as plain text or as an embed."""
+    if call is None:
+        return ""
+    args, kwargs = (call.args, call.kwargs) if hasattr(call, "kwargs") else ((), call)
+    embed = kwargs.get("embed")
+    parts = [*args[:1], kwargs.get("content")]
+    if embed is not None:
+        parts += [embed.title, embed.description]
+    return "\n".join(str(part) for part in parts if part)

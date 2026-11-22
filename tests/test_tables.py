@@ -5,6 +5,7 @@ from brawl.Currency import tablecard
 from brawl.Currency.config import TABLE_QUEST_TYPES, TABLE_SEATS, TABLE_WINNER_TOKENS
 from brawl.Currency.db import g_tables, g_user_tables, u_balance, u_veteran
 from brawl.Currency.helper import MAIN_GUILD_ID
+from tests.conftest import text
 
 HOST = 1
 
@@ -43,7 +44,7 @@ def test_a_table_is_recognized_at_five_and_full_at_ten(cafe):
         recognized = g_tables(MAIN_GUILD_ID, "roasters").get().get("formalized", False)
         assert recognized == (user >= 5)
     late = sent(run(cafe, 99, "table_seat", "Roasters"))
-    assert "full" in late[0][0]
+    assert "full" in text(late)
     assert g_user_tables(MAIN_GUILD_ID, 99).get() is None
 
 
@@ -59,7 +60,7 @@ def test_a_kicked_member_cannot_come_straight_back(cafe):
     kicked = AsyncMock(id=2)
     run(cafe, HOST, "table_kick", kicked)
     assert g_user_tables(MAIN_GUILD_ID, 2).get() is None
-    assert "kicked" in sent(run(cafe, 2, "table_seat", "Roasters"))[0][0]
+    assert "kicked" in text(sent(run(cafe, 2, "table_seat", "Roasters")))
 
 
 def test_the_host_leaving_hands_over_or_closes(cafe):

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 from brawl.Currency.db import g_shops, u_balance
 from brawl.Currency.helper import MAIN_GUILD_ID
 from brawl.Currency.shop import PurchaseRequest
+from tests.conftest import text
 
 USER = 1
 
@@ -20,7 +21,7 @@ def buy(cafe, item, rows, beans=5000, tokens=10):
 def test_buy_takes_beans_and_one_stock(cafe):
     reply = buy(cafe, "nitro", [["Nitro", "A month", 3000, "Beans", True, 2]])
     assert reply["attachments"][0].filename == "purchase.png"
-    assert "ticket" in reply["content"]
+    assert "ticket" in text(reply)
     assert u_balance(USER).get() == {"Beans": 2000, "Tokens": 10}
     assert g_shops(MAIN_GUILD_ID).get()[0][5] == 1
 
@@ -33,20 +34,20 @@ def test_buy_takes_tokens_and_leaves_unlimited_stock(cafe):
 
 def test_buy_rejects_a_price_above_the_balance(cafe):
     reply = buy(cafe, "Nitro", [["Nitro", "A month", 9000, "Beans", True, 2]])
-    assert "do not have enough" in reply["content"]
+    assert "do not have enough" in text(reply)
     assert u_balance(USER).get() == {"Beans": 5000, "Tokens": 10}
     assert g_shops(MAIN_GUILD_ID).get()[0][5] == 2
 
 
 def test_buy_rejects_an_item_out_of_stock(cafe):
     reply = buy(cafe, "Nitro", [["Nitro", "A month", 3000, "Beans", True, 0]])
-    assert "out of stock" in reply["content"]
+    assert "out of stock" in text(reply)
     assert u_balance(USER).get() == {"Beans": 5000, "Tokens": 10}
 
 
 def test_buy_rejects_an_unknown_item(cafe):
     reply = buy(cafe, "Boat", [["Nitro", "A month", 3000, "Beans", True, 2]])
-    assert "not found" in reply["content"]
+    assert "not found" in text(reply)
     assert u_balance(USER).get() == {"Beans": 5000, "Tokens": 10}
 
 
@@ -58,7 +59,7 @@ def test_effect_item_stays_locked_below_its_level(cafe):
         cafe.cogs["Shop"]._process_effect_purchase(interaction, USER, "double_daily")
     )
     reply = interaction.edit_original_response.call_args.kwargs
-    assert "Level 20" in reply["content"]
+    assert "Level 20" in text(reply)
     assert u_balance(USER).get() == {"Beans": 5000, "Tokens": 10}
 
 

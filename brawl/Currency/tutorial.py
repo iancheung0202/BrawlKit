@@ -17,11 +17,23 @@ BREW_STEP, SELL_STEP, CLOCK_IN, DONE, FINISHED = 2, 3, 4, 6, 7
 STEPS = {"brew": BREW_STEP, "sell": SELL_STEP, "clock_in": CLOCK_IN}
 
 HINTS = {
-    BREW_STEP: f"**Step 1 of 3:** go to <#{BOT_COMMANDS}> and type {BREW} to brew your first coffee. It is free and ready right away.",
-    SELL_STEP: f"**Step 2 of 3:** your coffee is ready. Type {SELL} here to sell it for Tokens.",
-    CLOCK_IN: f"**Step 3 of 3:** go to <#{SERVER_STORE}> and press the Clock In button. It gives you Today's Order.",
-    FINISHED: f"**First shift done.** Finish Today's Order to earn a {STAMP_EMOTE} Stamp. "
-    f"{STAMP_GOALS['brawl_pass']} Stamps let you redeem a Brawl Pass. {HOME} shows your progress.",
+    BREW_STEP: (
+        "Step 1 of 3: brew your first coffee",
+        f"Go to <#{BOT_COMMANDS}> and type {BREW}. It is free and ready right away.",
+    ),
+    SELL_STEP: (
+        "Step 2 of 3: sell your coffee",
+        f"Type {SELL} here to sell it for Tokens.",
+    ),
+    CLOCK_IN: (
+        "Step 3 of 3: clock in",
+        f"Go to <#{SERVER_STORE}> and press the Clock In button. It gives you Today's Order.",
+    ),
+    FINISHED: (
+        "First shift done",
+        f"Finish Today's Order to earn a {STAMP_EMOTE} Stamp. "
+        f"{STAMP_GOALS['brawl_pass']} Stamps let you redeem a Brawl Pass. {HOME} shows your progress.",
+    ),
 }
 
 
@@ -34,6 +46,7 @@ def step_of(user_id):
 
 
 def hint(step):
+    """The title and the instruction for this step of the first shift."""
     return HINTS[step]
 
 

@@ -106,7 +106,7 @@ LEGACY_STAMP_GOALS = {
     "thermometer_bonuses": 10,
 }
 
-ORDER_CHAT_BEANS = 500
+ORDER_CHAT_BEANS = 1000
 
 ORDER_STATION_TASKS = 2
 

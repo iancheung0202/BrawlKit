@@ -10,6 +10,7 @@ from brawl.Currency.config import TABLE_SEATS
 from brawl.Currency.db import U_ROOT, g_invites_monthly, g_tables, g_user_tables
 from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE, get_current_month_key
 from brawl.Currency.home import background
+from brawl.Currency.panel import notice
 
 # Leaderboard: (title, icon, what one row is)
 # title, icon, what is counted, icon before the value, icon before the note
@@ -51,7 +52,10 @@ class BasePaginationView(View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.initial_author != interaction.user:
             await interaction.response.send_message(
-                f"{NO_EMOTE} You are not the author of this command.", ephemeral=True
+                embed=notice(
+                    f"{NO_EMOTE} You are not the author of this command.", "bad"
+                ),
+                ephemeral=True,
             )
             return False
         return True
@@ -179,12 +183,14 @@ class JumpToPageModal(discord.ui.Modal, title="Jump to Page"):
                 await self.view_ref.show_page(interaction, page_num - 1)
             else:
                 await interaction.response.send_message(
-                    f"Please enter a valid page number between 1 and {self.max_page}.",
+                    embed=notice(
+                        f"Please enter a valid page number between 1 and {self.max_page}."
+                    ),
                     ephemeral=True,
                 )
         except ValueError:
             await interaction.response.send_message(
-                "Please enter a valid number.", ephemeral=True
+                embed=notice("Please enter a valid number."), ephemeral=True
             )
 
 
@@ -313,7 +319,9 @@ class Leaderboard(commands.Cog):
         await interaction.response.defer(thinking=True)
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.followup.send(
-                f"{NO_EMOTE} You do not have permission to use this command.",
+                embed=notice(
+                    f"{NO_EMOTE} You do not have permission to use this command.", "bad"
+                ),
                 ephemeral=True,
             )
 
@@ -379,7 +387,10 @@ class Leaderboard(commands.Cog):
             leveling_cog = self.bot.get_cog("Leveling")
             if not leveling_cog or not leveling_cog.pool:
                 return await interaction.followup.send(
-                    f"{NO_EMOTE} Levels are unavailable right now.", ephemeral=True
+                    embed=notice(
+                        f"{NO_EMOTE} Levels are unavailable right now.", "bad"
+                    ),
+                    ephemeral=True,
                 )
             async with leveling_cog.pool.acquire() as conn:
                 rows = await conn.fetch(
@@ -427,7 +438,8 @@ class Leaderboard(commands.Cog):
         ]
         if not entries:
             return await interaction.followup.send(
-                f"{NO_EMOTE} Nobody is on this leaderboard yet.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Nobody is on this leaderboard yet.", "bad"),
+                ephemeral=True,
             )
         if currency != "Tables":
             yours = next(
@@ -462,7 +474,9 @@ class Leaderboard(commands.Cog):
     async def leaderboard_error(
         self, interaction: discord.Interaction, error: Exception
     ):
-        await interaction.response.send_message(f"```{str(error)}```", ephemeral=True)
+        await interaction.response.send_message(
+            embed=notice(f"```{str(error)}```"), ephemeral=True
+        )
 
 
 async def setup(bot):

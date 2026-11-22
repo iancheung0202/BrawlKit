@@ -7,6 +7,7 @@ from discord.ui import Button, View
 
 from brawl.Currency.boss import start_inspection
 from brawl.Currency.card import render
+from brawl.Currency.chat import chat_limit, chat_today
 from brawl.Currency.config import (
     BREW,
     DAILY_BEANS,
@@ -35,7 +36,7 @@ from brawl.Currency.helper import (
     YES_EMOTE,
 )
 from brawl.Currency.home import background
-from brawl.Currency.panel import NEXT, panel
+from brawl.Currency.panel import NEXT, framed, notice
 from brawl.Currency.quests import get_next_daily_reset, standing, update_quest
 from brawl.Currency.rewardcard import draw_clock_in
 from brawl.Currency.shop import open_shop
@@ -552,7 +553,10 @@ class Daily(commands.Cog):
 
         if days_missed < 1:
             await interaction.response.send_message(
-                f"{NO_EMOTE} You've already clocked in today! Next check-in <a:clock:1382887924273774754> <t:{next_claim}:R>",
+                embed=notice(
+                    f"{NO_EMOTE} You've already clocked in today! Next check-in <a:clock:1382887924273774754> <t:{next_claim}:R>",
+                    "bad",
+                ),
                 ephemeral=True,
             )
             return
@@ -631,7 +635,11 @@ class Daily(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
         await self.economy.add_beans(user_id, beans_earned)
         await update_quest(
-            user_id, interaction.guild.id, {"daily_checkins": 1}, self.bot
+            user_id,
+            interaction.guild.id,
+            {"daily_checkins": 1},
+            self.bot,
+            chat=(chat_today(user_id), chat_limit(interaction.user, active_effects)),
         )
         if tokens_earned:
             await self.economy.add_tokens(user_id, tokens_earned)
@@ -659,8 +667,11 @@ class Daily(commands.Cog):
             clocked["tokens"] += TUTORIAL_TOKENS
             notes.insert(0, "For completing your first shift")
         await interaction.followup.send(
-            f"-# {hint(guide)}" if guide else f"-# **Next:** {NEXT['chat']}",
-            file=await render(draw_clock_in, clocked, name="clock_in"),
+            **framed(
+                await render(draw_clock_in, clocked, name="clock_in"),
+                *(hint(guide) if guide else ("Clocked in", NEXT["chat"])),
+                tone="good",
+            ),
             ephemeral=True,
         )
 

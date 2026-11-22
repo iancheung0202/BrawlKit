@@ -4,10 +4,7 @@ from discord.ext import commands
 
 from brawl.Currency import quests as daily_order
 from brawl.Currency.card import BACKGROUND, render
-from brawl.Currency.config import (
-    BACKGROUNDS,
-    LADDER,
-)
+from brawl.Currency.config import BACKGROUNDS, LADDER
 from brawl.Currency.db import (
     u_background,
     u_customization,
@@ -34,10 +31,8 @@ from brawl.Currency.invitecard import INVITE_HELP, draw_invites, invited_by, sum
 from brawl.Currency.itemcard import draw_inventory
 from brawl.Currency.ladder import locked, unlocked
 from brawl.Currency.levels import get_level
-from brawl.Currency.quests import (
-    order_tasks,
-    update_quest,
-)
+from brawl.Currency.panel import notice
+from brawl.Currency.quests import order_tasks, update_quest
 from brawl.Currency.shopcard import clean
 from brawl.Currency.stampcard import stamps
 
@@ -118,7 +113,7 @@ class BalanceInfoView(discord.ui.View):
         )
         if interaction.user.id != user_id:
             return await interaction.response.send_message(
-                "This is not your command.", ephemeral=True
+                embed=notice("This is not your command."), ephemeral=True
             )
         self._remove_selects()
         self.mark(button)
@@ -143,12 +138,12 @@ class BalanceInfoView(discord.ui.View):
         )
         if interaction.user.id != user_id:
             return await interaction.response.send_message(
-                "This is not your command.", ephemeral=True
+                embed=notice("This is not your command."), ephemeral=True
             )
         stamp_cog = interaction.client.get_cog("StampCard")
         if not stamp_cog:
             return await interaction.response.send_message(
-                "Stamp Card system unavailable.", ephemeral=True
+                embed=notice("Stamp Card system unavailable."), ephemeral=True
             )
         self._remove_selects()
         self.mark(button)
@@ -172,7 +167,8 @@ class BalanceInfoView(discord.ui.View):
         )
         if interaction.user.id != user_id:
             return await interaction.response.send_message(
-                "This is not your command. You cannot use this button.", ephemeral=True
+                embed=notice("This is not your command. You cannot use this button."),
+                ephemeral=True,
             )
 
         economy = interaction.client.get_cog("CurrencySystem")
@@ -222,7 +218,8 @@ class BalanceInfoView(discord.ui.View):
         )
         if interaction.user.id != user_id:
             return await interaction.response.send_message(
-                "This is not your command. You cannot use this button.", ephemeral=True
+                embed=notice("This is not your command. You cannot use this button."),
+                ephemeral=True,
             )
 
         months = sorted(invited_by(interaction.guild.id, user_id), reverse=True)[:25]
@@ -267,7 +264,7 @@ class BalanceInfoView(discord.ui.View):
             user_id = interaction.user.id
         if interaction.user.id != user_id:
             return await interaction.response.send_message(
-                "This is not your command.", ephemeral=True
+                embed=notice("This is not your command."), ephemeral=True
             )
         table_cog = interaction.client.get_cog("table")
         table = table_cog and await table_cog.get_user_table(
@@ -275,7 +272,10 @@ class BalanceInfoView(discord.ui.View):
         )
         if not table:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You're not seated at a table. Join one with `/table seat` or start one with `/table reserve`.",
+                embed=notice(
+                    f"{NO_EMOTE} You're not seated at a table. Join one with `/table seat` or start one with `/table reserve`.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
         self._remove_selects()
@@ -304,22 +304,34 @@ class ConfirmBackground(discord.ui.View):
         if self.background.value == BACKGROUND:
             u_background(user_id).delete()
             return await interaction.response.edit_message(
-                content=f"{YES_EMOTE} Your home card is back on the default **{name}** background.",
+                content=None,
+                embed=notice(
+                    f"{YES_EMOTE} Your home card is back on the default **{name}** background.",
+                    "good",
+                ),
                 view=None,
             )
         ref = u_customization(user_id)
         credits = (ref.get() or {}).get("credits", 0)
         if credits < 1:
             return await interaction.response.edit_message(
-                content=f"{NO_EMOTE} You need 1 Customization Credit. "
-                "Get one with </buy:1393376242501157010>.",
+                content=None,
+                embed=notice(
+                    f"{NO_EMOTE} You need 1 Customization Credit. "
+                    "Get one with </buy:1393376242501157010>.",
+                    "bad",
+                ),
                 view=None,
             )
         ref.update({"credits": credits - 1})
         u_background(user_id).set(self.background.value)
         await interaction.response.edit_message(
-            content=f"{YES_EMOTE} Your home card now uses the **{name}** background. "
-            f"Credits left: `{credits - 1}`.",
+            content=None,
+            embed=notice(
+                f"{YES_EMOTE} Your home card now uses the **{name}** background. "
+                f"Credits left: `{credits - 1}`.",
+                "good",
+            ),
             view=None,
         )
 
@@ -382,7 +394,7 @@ class Balance(commands.Cog):
     async def balance(self, interaction: discord.Interaction):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Not available here.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Not available here.", "bad"), ephemeral=True
             )
         await interaction.response.defer(thinking=True)
         view = BalanceInfoView()
@@ -427,7 +439,7 @@ class Balance(commands.Cog):
     ):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Not available here.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Not available here.", "bad"), ephemeral=True
             )
         if await locked(interaction, "style"):
             return
@@ -445,7 +457,9 @@ class Balance(commands.Cog):
         else:
             note = f"Confirm uses 1 Customization Credit. You have `{credits}`."
         await interaction.followup.send(
-            f"This is your home card with the **{background.name}** background.\n-# {note}",
+            embed=notice(
+                f"This is your home card with the {background.name} background. {note}"
+            ),
             file=await self.home_card(
                 interaction.user, interaction.guild, background.value
             ),
@@ -456,7 +470,8 @@ class Balance(commands.Cog):
     @customize.error
     async def customize_error(self, interaction: discord.Interaction, error: Exception):
         await interaction.response.send_message(
-            f"{NO_EMOTE} Something went wrong: {error}", ephemeral=True
+            embed=notice(f"{NO_EMOTE} Something went wrong: {error}", "bad"),
+            ephemeral=True,
         )
 
 

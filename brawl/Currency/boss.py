@@ -10,12 +10,9 @@ from brawl.Currency.db import u_mega_boxes, u_star_drops
 from brawl.Currency.helper import BOSS_INSPECTION_ACTIONS, BOSS_INSPECTION_ROLE_ID
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
+from brawl.Currency.panel import framed, notice
 from brawl.Currency.quests import report, wildcard
-from brawl.Currency.stationcard import (
-    draw_boss,
-    draw_boss_result,
-    draw_boss_results,
-)
+from brawl.Currency.stationcard import draw_boss, draw_boss_result, draw_boss_results
 
 # Each outcome: where the reward is kept, the line of the action to show,
 # and how to use the reward.
@@ -71,7 +68,7 @@ class BossInspectionView(View):
         async def callback(interaction: discord.Interaction):
             if self.ended or time.time() - self.start_time >= BOSS_SECONDS:
                 await interaction.response.send_message(
-                    "The boss has already left.", ephemeral=True
+                    embed=notice("The boss has already left."), ephemeral=True
                 )
                 return await self.end_inspection()
             if await locked(interaction, "boss"):
@@ -79,7 +76,8 @@ class BossInspectionView(View):
             user = interaction.user
             if user.id in self.participants:
                 return await interaction.response.send_message(
-                    "You already made your move this inspection.", ephemeral=True
+                    embed=notice("You already made your move this inspection."),
+                    ephemeral=True,
                 )
             outcome = roll()
             self.participants[user.id] = (user.display_name, outcome)
@@ -92,8 +90,12 @@ class BossInspectionView(View):
                 "line": BOSS_INSPECTION_ACTIONS[key][line],
             }
             await interaction.response.send_message(
-                how,
-                file=await render(draw_boss_result, result, name="boss"),
+                **framed(
+                    await render(draw_boss_result, result, name="boss"),
+                    "Boss inspection",
+                    how,
+                    tone="info" if ref else "bad",
+                ),
                 ephemeral=True,
             )
             await report(

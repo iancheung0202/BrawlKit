@@ -46,6 +46,7 @@ from brawl.Currency.helper import (
     get_current_month_key,
 )
 from brawl.Currency.home import background
+from brawl.Currency.panel import framed, notice
 from brawl.Currency.rewardcard import draw_ready
 from brawl.Currency.stationcard import draw_thermometer
 from brawl.Currency.tutorial import TutorialManager
@@ -209,8 +210,12 @@ class CurrencySystem(commands.Cog):
                                     view.add_item(button)
 
                                 await user.send(
-                                    f"-# **Next:** use </sell:1396588612790784071> in {bot_channel.mention if bot_channel else 'the bot channel'}. This reminder is from your Sell Alarm.",
-                                    file=await render(draw_ready, ready, name="ready"),
+                                    **framed(
+                                        await render(draw_ready, ready, name="ready"),
+                                        "Your coffee is ready",
+                                        f"Sell it with </sell:1396588612790784071> in {bot_channel.mention if bot_channel else 'the bot channel'}.",
+                                        "\nThis reminder is from your Sell Alarm.",
+                                    ),
                                     **({"view": view} if bot_channel else {}),
                                 )
                                 sync_sell_alarm(
@@ -674,7 +679,9 @@ class CurrencySystem(commands.Cog):
     async def thermometer_error(
         self, interaction: discord.Interaction, error: Exception
     ):
-        await interaction.response.send_message(f"```{str(error)}```", ephemeral=True)
+        await interaction.response.send_message(
+            embed=notice(f"```{str(error)}```"), ephemeral=True
+        )
 
     @app_commands.command(
         name="add",
@@ -705,13 +712,16 @@ class CurrencySystem(commands.Cog):
             or interaction.guild.id != MAIN_GUILD_ID
         ):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You do not have permission to use this command.",
+                embed=notice(
+                    f"{NO_EMOTE} You do not have permission to use this command.", "bad"
+                ),
                 ephemeral=True,
             )
 
         if amount <= 0:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Amount must be positive.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Amount must be positive.", "bad"),
+                ephemeral=True,
             )
 
         if currency == "Tokens":
@@ -740,7 +750,9 @@ class CurrencySystem(commands.Cog):
 
     @add.error
     async def add_error(self, interaction: discord.Interaction, error: Exception):
-        await interaction.response.send_message(f"```{str(error)}```", ephemeral=True)
+        await interaction.response.send_message(
+            embed=notice(f"```{str(error)}```"), ephemeral=True
+        )
 
 
 async def setup(bot):

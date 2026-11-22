@@ -27,6 +27,7 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
+from brawl.Currency.panel import framed, notice
 from brawl.Currency.tablecard import draw_table, draw_table_reward
 
 
@@ -114,7 +115,10 @@ class TableCloseModal(Modal, title="Confirm Table Closure"):
     async def on_submit(self, interaction: discord.Interaction):
         if self.confirmation.value != self.table_name:
             await interaction.response.send_message(
-                f"{NO_EMOTE} Confirmation failed. Names don't match.", ephemeral=True
+                embed=notice(
+                    f"{NO_EMOTE} Confirmation failed. Names don't match.", "bad"
+                ),
+                ephemeral=True,
             )
             return
         await interaction.response.defer()
@@ -193,18 +197,22 @@ class TableSystem(commands.GroupCog, name="table"):
                             user = await self.bot.fetch_user(member_id)
                             if user:
                                 await user.send(
-                                    f"{table_data['emoji']} **{table_data['name']}** reached a step of the weekly table quest.",
-                                    file=await render(
-                                        draw_table_reward,
-                                        {
-                                            "background": background(member_id),
-                                            "tag": "TABLE QUEST",
-                                            "color": table_data["color"],
-                                            "currency": "bean",
-                                            "headline": f"+{reward_per_member:,} Beans",
-                                            "line": f"{plain(table_data['name'])} collected {target:,} Beans this week. Step {current_tier + 1} of {len(quest_config['targets'])}.",
-                                        },
-                                        name="table",
+                                    **framed(
+                                        await render(
+                                            draw_table_reward,
+                                            {
+                                                "background": background(member_id),
+                                                "tag": "TABLE QUEST",
+                                                "color": table_data["color"],
+                                                "currency": "bean",
+                                                "headline": f"+{reward_per_member:,} Beans",
+                                                "line": f"{plain(table_data['name'])} collected {target:,} Beans this week. Step {current_tier + 1} of {len(quest_config['targets'])}.",
+                                            },
+                                            name="table",
+                                        ),
+                                        "Table quest step reached",
+                                        f"{table_data['emoji']} {table_data['name']} reached a step of the weekly table quest.",
+                                        tone="gold",
                                     ),
                                 )
                         except Exception as e:
@@ -292,18 +300,26 @@ class TableSystem(commands.GroupCog, name="table"):
                                 if user:
                                     try:
                                         await user.send(
-                                            f"{top_table_data['emoji']} **{top_table_data['name']}** was the top table this week.",
-                                            file=await render(
-                                                draw_table_reward,
-                                                {
-                                                    "background": background(member_id),
-                                                    "tag": "TOP TABLE",
-                                                    "color": top_table_data["color"],
-                                                    "currency": "token",
-                                                    "headline": f"+{TABLE_WINNER_TOKENS} Tokens",
-                                                    "line": f"{plain(top_table_data['name'])} was the top table this week with {top_table_beans:,} Beans.",
-                                                },
-                                                name="table",
+                                            **framed(
+                                                await render(
+                                                    draw_table_reward,
+                                                    {
+                                                        "background": background(
+                                                            member_id
+                                                        ),
+                                                        "tag": "TOP TABLE",
+                                                        "color": top_table_data[
+                                                            "color"
+                                                        ],
+                                                        "currency": "token",
+                                                        "headline": f"+{TABLE_WINNER_TOKENS} Tokens",
+                                                        "line": f"{plain(top_table_data['name'])} was the top table this week with {top_table_beans:,} Beans.",
+                                                    },
+                                                    name="table",
+                                                ),
+                                                "Top table this week",
+                                                f"{top_table_data['emoji']} {top_table_data['name']} was the top table this week.",
+                                                tone="gold",
                                             ),
                                         )
                                     except discord.Forbidden:
@@ -357,7 +373,10 @@ class TableSystem(commands.GroupCog, name="table"):
                     if host:
                         try:
                             await host.send(
-                                f"🎉 Your table **{table_data['name']}** has been officially recognized with 5+ people seated! You now have access to table perks."
+                                embed=notice(
+                                    f"🎉 Your table {table_data['name']} now has 5 people seated, so it is officially recognized. You now have access to table perks.",
+                                    "good",
+                                )
                             )
                         except:
                             pass
@@ -388,7 +407,10 @@ class TableSystem(commands.GroupCog, name="table"):
     async def table_seat(self, interaction: discord.Interaction, table: str):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This command is only available in the main server.",
+                embed=notice(
+                    f"{NO_EMOTE} This command is only available in the main server.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
         if await locked(interaction, "tables"):
@@ -398,7 +420,10 @@ class TableSystem(commands.GroupCog, name="table"):
             interaction.user.id, interaction.guild.id
         ):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You're already seated at **{current_table['name']}**. Stand up first with `/table leave`.",
+                embed=notice(
+                    f"{NO_EMOTE} You're already seated at **{current_table['name']}**. Stand up first with `/table leave`.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -407,7 +432,7 @@ class TableSystem(commands.GroupCog, name="table"):
 
         if not table_data:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Table not found.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Table not found.", "bad"), ephemeral=True
             )
 
         kick_ref = self._kick_ref(
@@ -421,7 +446,10 @@ class TableSystem(commands.GroupCog, name="table"):
                 remaining = 1209600 - elapsed
                 future_time = int(time.time() + remaining)
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} You were kicked from this table and cannot rejoin until <t:{future_time}:R>.",
+                    embed=notice(
+                        f"{NO_EMOTE} You were kicked from this table and cannot rejoin until <t:{future_time}:R>.",
+                        "bad",
+                    ),
                     ephemeral=True,
                 )
             else:
@@ -429,7 +457,7 @@ class TableSystem(commands.GroupCog, name="table"):
 
         if len(table_data.get("members", [])) >= TABLE_SEATS:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This table is full.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} This table is full.", "bad"), ephemeral=True
             )
 
         members = table_data.get("members", [])
@@ -448,14 +476,19 @@ class TableSystem(commands.GroupCog, name="table"):
         ):
             try:
                 await host.send(
-                    f"👤 **{interaction.user.display_name}** has taken a seat at your table **{table_data['name']}**!"
+                    embed=notice(
+                        f"👤 {interaction.user.display_name} took a seat at your table {table_data['name']}."
+                    )
                 )
             except:
                 pass
 
         table_data["members"] = members
         await interaction.response.send_message(
-            f"{YES_EMOTE} You took a seat at {table_data['emoji']} **{table_data['name']}**.",
+            embed=notice(
+                f"{YES_EMOTE} You took a seat at {table_data['emoji']} {table_data['name']}.",
+                "good",
+            ),
             file=await table_card(table_data, interaction, "JOINED"),
         )
 
@@ -463,7 +496,10 @@ class TableSystem(commands.GroupCog, name="table"):
     async def table_leave(self, interaction: discord.Interaction):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This command is only available in the main server.",
+                embed=notice(
+                    f"{NO_EMOTE} This command is only available in the main server.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -473,7 +509,8 @@ class TableSystem(commands.GroupCog, name="table"):
             )
         ):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You're not seated at any table.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} You're not seated at any table.", "bad"),
+                ephemeral=True,
             )
 
         table_name = table_data["name"].lower()
@@ -493,21 +530,29 @@ class TableSystem(commands.GroupCog, name="table"):
                     if new_host_user:
                         try:
                             await new_host_user.send(
-                                f"🍽️ You're now the host of table **{table_data['name']}**!"
+                                embed=notice(
+                                    f"🍽️ You're now the host of {table_data['name']}."
+                                )
                             )
                         except:
                             pass
             else:
                 table_ref.delete()
                 await interaction.response.send_message(
-                    f"{YES_EMOTE} You've left table **{table_data['name']}**. The table has been closed as it has no one seated."
+                    embed=notice(
+                        f"{YES_EMOTE} You've left table **{table_data['name']}**. The table has been closed as it has no one seated.",
+                        "good",
+                    )
                 )
                 return
 
         await self.update_table_formalization(interaction.guild.id, table_name)
 
         await interaction.response.send_message(
-            f"{YES_EMOTE} You've left table **{table_data['name']}**. Feel free to take a seat at another table!"
+            embed=notice(
+                f"{YES_EMOTE} You've left table **{table_data['name']}**. Feel free to take a seat at another table!",
+                "good",
+            )
         )
 
     @app_commands.command(name="reserve", description="Reserve (create) a new table")
@@ -527,7 +572,10 @@ class TableSystem(commands.GroupCog, name="table"):
     ):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This command is only available in the main server.",
+                embed=notice(
+                    f"{NO_EMOTE} This command is only available in the main server.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
         if await locked(interaction, "tables"):
@@ -537,13 +585,19 @@ class TableSystem(commands.GroupCog, name="table"):
             interaction.user.id, interaction.guild.id
         ):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You're already seated at **{current_table['name']}**. Stand up first with `/table leave`.",
+                embed=notice(
+                    f"{NO_EMOTE} You're already seated at **{current_table['name']}**. Stand up first with `/table leave`.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
         if not re.match(r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$", color):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Invalid color format. Use hex format like #FFFFFF.",
+                embed=notice(
+                    f"{NO_EMOTE} Invalid color format. Use hex format like #FFFFFF.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -551,11 +605,16 @@ class TableSystem(commands.GroupCog, name="table"):
         for existing_table in all_tables.values():
             if existing_table["name"].lower() == name.lower():
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} A table with that name already exists.", ephemeral=True
+                    embed=notice(
+                        f"{NO_EMOTE} A table with that name already exists.", "bad"
+                    ),
+                    ephemeral=True,
                 )
             if existing_table["emoji"] == emoji:
                 return await interaction.response.send_message(
-                    f"{NO_EMOTE} A table with that emoji already exists.",
+                    embed=notice(
+                        f"{NO_EMOTE} A table with that emoji already exists.", "bad"
+                    ),
                     ephemeral=True,
                 )
 
@@ -584,7 +643,7 @@ class TableSystem(commands.GroupCog, name="table"):
             name.lower()
         )
         await interaction.response.send_message(
-            f"{YES_EMOTE} You reserved {emoji} **{name}**.",
+            embed=notice(f"{YES_EMOTE} You reserved {emoji} {name}.", "good"),
             file=await table_card(table_data, interaction, "RESERVED"),
         )
 
@@ -594,7 +653,10 @@ class TableSystem(commands.GroupCog, name="table"):
     async def table_config(self, interaction: discord.Interaction):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This command is only available in the main server.",
+                embed=notice(
+                    f"{NO_EMOTE} This command is only available in the main server.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -604,12 +666,15 @@ class TableSystem(commands.GroupCog, name="table"):
             )
         ):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You're not seated at any table.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} You're not seated at any table.", "bad"),
+                ephemeral=True,
             )
 
         if table_data["host"] != interaction.user.id:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Only the table host can configure the table.",
+                embed=notice(
+                    f"{NO_EMOTE} Only the table host can configure the table.", "bad"
+                ),
                 ephemeral=True,
             )
 
@@ -623,7 +688,10 @@ class TableSystem(commands.GroupCog, name="table"):
 
         if not re.match(r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$", new_color):
             return await interaction.followup.send(
-                f"{NO_EMOTE} Invalid color format. Use hex format like #FFFFFF.",
+                embed=notice(
+                    f"{NO_EMOTE} Invalid color format. Use hex format like #FFFFFF.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -635,11 +703,16 @@ class TableSystem(commands.GroupCog, name="table"):
                 continue
             if existing_table["name"].lower() == new_name.lower():
                 return await interaction.followup.send(
-                    f"{NO_EMOTE} A table with that name already exists.", ephemeral=True
+                    embed=notice(
+                        f"{NO_EMOTE} A table with that name already exists.", "bad"
+                    ),
+                    ephemeral=True,
                 )
             if existing_table["emoji"] == new_emoji:
                 return await interaction.followup.send(
-                    f"{NO_EMOTE} A table with that emoji already exists.",
+                    embed=notice(
+                        f"{NO_EMOTE} A table with that emoji already exists.", "bad"
+                    ),
                     ephemeral=True,
                 )
 
@@ -665,7 +738,7 @@ class TableSystem(commands.GroupCog, name="table"):
             table_ref.update(updates)
 
         await interaction.followup.send(
-            f"{YES_EMOTE} {new_emoji} **{new_name}** is updated.",
+            embed=notice(f"{YES_EMOTE} {new_emoji} {new_name} is updated.", "good"),
             file=await table_card({**table_data, **updates}, interaction, "UPDATED"),
         )
 
@@ -673,7 +746,10 @@ class TableSystem(commands.GroupCog, name="table"):
     async def table_close(self, interaction: discord.Interaction):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This command is only available in the main server.",
+                embed=notice(
+                    f"{NO_EMOTE} This command is only available in the main server.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -683,12 +759,16 @@ class TableSystem(commands.GroupCog, name="table"):
             )
         ):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You're not seated at any table.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} You're not seated at any table.", "bad"),
+                ephemeral=True,
             )
 
         if table_data["host"] != interaction.user.id:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Only the table host can close the table.", ephemeral=True
+                embed=notice(
+                    f"{NO_EMOTE} Only the table host can close the table.", "bad"
+                ),
+                ephemeral=True,
             )
 
         modal = TableCloseModal(table_data["name"])
@@ -701,14 +781,19 @@ class TableSystem(commands.GroupCog, name="table"):
 
         self._get_table_ref(interaction.guild.id, table_name).delete()
 
-        await interaction.followup.send(f"{YES_EMOTE} Table closed successfully!")
+        await interaction.followup.send(
+            embed=notice(f"{YES_EMOTE} Table closed successfully!", "good")
+        )
 
     @app_commands.command(name="mine", description="View your current table")
     async def table_mine(self, interaction: discord.Interaction):
         await interaction.response.defer()
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.followup.send(
-                f"{NO_EMOTE} This command is only available in the main server.",
+                embed=notice(
+                    f"{NO_EMOTE} This command is only available in the main server.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
         if not (
@@ -717,10 +802,10 @@ class TableSystem(commands.GroupCog, name="table"):
             )
         ):
             return await interaction.followup.send(
-                f"{NO_EMOTE} You're not seated at any table.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} You're not seated at any table.", "bad"),
+                ephemeral=True,
             )
         await interaction.followup.send(
-            f"{table_data['emoji']} **{table_data['name']}**",
             file=await table_card(table_data, interaction),
         )
 
@@ -730,7 +815,10 @@ class TableSystem(commands.GroupCog, name="table"):
     async def table_dm_toggle(self, interaction: discord.Interaction):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This command is only available in the main server.",
+                embed=notice(
+                    f"{NO_EMOTE} This command is only available in the main server.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -738,10 +826,13 @@ class TableSystem(commands.GroupCog, name="table"):
         new_state = not (ref.get() or {}).get("enabled", True)
         ref.set({"enabled": new_state, "updated_at": time.time()})
         await interaction.response.send_message(
-            (
-                f"{YES_EMOTE} Table DMs are on. You'll hear about table rewards, new members and host changes."
-                if new_state
-                else f"{YES_EMOTE} Table DMs are off. You can still check your table with `/table mine`."
+            embed=notice(
+                (
+                    f"{YES_EMOTE} Table DMs are on. You'll hear about table rewards, new members and host changes."
+                    if new_state
+                    else f"{YES_EMOTE} Table DMs are off. You can still check your table with `/table mine`."
+                ),
+                "good",
             ),
             ephemeral=True,
         )
@@ -753,7 +844,10 @@ class TableSystem(commands.GroupCog, name="table"):
     async def table_kick(self, interaction: discord.Interaction, user: discord.User):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This command is only available in the main server.",
+                embed=notice(
+                    f"{NO_EMOTE} This command is only available in the main server.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -763,21 +857,27 @@ class TableSystem(commands.GroupCog, name="table"):
             )
         ):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You're not seated at any table.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} You're not seated at any table.", "bad"),
+                ephemeral=True,
             )
 
         if table_data["host"] != interaction.user.id:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Only the table host can kick members.", ephemeral=True
+                embed=notice(
+                    f"{NO_EMOTE} Only the table host can kick members.", "bad"
+                ),
+                ephemeral=True,
             )
         if user.id == interaction.user.id:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You cannot kick yourself.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} You cannot kick yourself.", "bad"),
+                ephemeral=True,
             )
 
         if user.id not in table_data.get("members", []):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} That user is not at your table.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} That user is not at your table.", "bad"),
+                ephemeral=True,
             )
 
         table_name = table_data["name"].lower()
@@ -792,13 +892,19 @@ class TableSystem(commands.GroupCog, name="table"):
         if await self.should_send_dm(user.id):
             try:
                 await user.send(
-                    f"You've been kicked from **{table_data['name']}** and cannot rejoin for 14 days."
+                    embed=notice(
+                        f"You were removed from {table_data['name']} and cannot rejoin for 14 days.",
+                        "bad",
+                    )
                 )
             except:
                 pass
 
         await interaction.response.send_message(
-            f"{YES_EMOTE} Kicked <@{user.id}> from the table. They cannot rejoin for 14 days."
+            embed=notice(
+                f"{YES_EMOTE} Kicked <@{user.id}> from the table. They cannot rejoin for 14 days.",
+                "good",
+            )
         )
 
 

@@ -5,6 +5,7 @@ from discord import app_commands
 
 from brawl.Currency import quests
 from brawl.Currency.helper import ROAST_TYPES
+from tests.conftest import text
 
 USER = 1
 LIGHT = app_commands.Choice(name="Light Roast", value="light")
@@ -23,8 +24,11 @@ def brew(cafe):
 
 def pressing(cafe, sent, who=USER):
     press = cafe.interaction(who)
-    press.message.content = "you\n-# You can insure it"
-    press.message.attachments = [MagicMock(filename=sent["file"].filename)]
+    shown = sent["embed"].copy()
+    shown.set_image(
+        url=f"https://cdn.discordapp.com/attachments/1/2/{sent['file'].filename}?ex=1"
+    )
+    press.message.embeds = [shown]
     return press
 
 
@@ -33,7 +37,7 @@ def test_only_the_brewer_can_insure(cafe):
     sent = brew(cafe).followup.send.call_args.kwargs
     press = pressing(cafe, sent, who=USER + 1)
     asyncio.run(sent["view"].children[0].callback(press))
-    assert "not your brew" in press.response.send_message.call_args.args[0]
+    assert "not your brew" in text(press.response.send_message.call_args)
     assert user(cafe, "inventory/brews/active_brew/insured").get() is False
 
 
@@ -142,4 +146,4 @@ def test_the_first_tutorial_brew_is_free_ready_and_insured(cafe):
 
 def brew_again(cafe):
     user(cafe, "inventory/brews/active_brew").delete()
-    return brew(cafe).response.send_message.call_args.args[0]
+    return text(brew(cafe).response.send_message.call_args)

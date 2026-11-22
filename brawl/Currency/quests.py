@@ -27,6 +27,7 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import level_of
+from brawl.Currency.panel import notice
 from brawl.Currency.rewardcard import draw_order
 
 QUEST_TYPES = list(ORDER_LABELS)
@@ -101,8 +102,14 @@ def order_lines(user_id):
     ]
 
 
-async def update_quest(user_id, guild_id, quest_dict, bot, refresh_only=False):
-    """Moves Today's Order forward and pays for what got finished."""
+async def update_quest(
+    user_id, guild_id, quest_dict, bot, refresh_only=False, chat=None
+):
+    """Moves Today's Order forward and pays for what got finished.
+
+    chat is (Beans earned from chat today, the member's daily chat limit): the chat
+    task follows both, so its goal is always the limit this member has right now.
+    """
     ref = u_quests(user_id).child("daily")
     data = ref.get() or {}
     if time.time() >= data.get("end_time", 0):
@@ -121,7 +128,12 @@ async def update_quest(user_id, guild_id, quest_dict, bot, refresh_only=False):
     beans = 0
     messages = Progress()
     updated = False
-    for quest, amount in quest_dict.items():
+    moves = dict(quest_dict)
+    if chat and "chat_earnings" in quests and "chat_earnings" not in completed:
+        earned, limit = chat
+        quests["chat_earnings"] = {"current": min(earned, limit), "goal": limit}
+        moves["chat_earnings"] = 0
+    for quest, amount in moves.items():
         if quest not in quests or quest in completed:
             continue
         quests[quest]["current"] += amount
@@ -228,18 +240,24 @@ class QuestAdmin(commands.Cog):
             or interaction.guild.id != MAIN_GUILD_ID
         ):
             return await interaction.response.send_message(
-                f"{NO_EMOTE} You do not have permission to use this command.",
+                embed=notice(
+                    f"{NO_EMOTE} You do not have permission to use this command.", "bad"
+                ),
                 ephemeral=True,
             )
 
         if amount <= 0:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Amount must be positive.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Amount must be positive.", "bad"),
+                ephemeral=True,
             )
 
         if quest not in QUEST_TYPES:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Invalid quest type. Valid types are: {', '.join(QUEST_TYPES)}",
+                embed=notice(
+                    f"{NO_EMOTE} Invalid quest type. Valid types are: {', '.join(QUEST_TYPES)}",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -293,7 +311,9 @@ class QuestAdmin(commands.Cog):
     async def update_quest_error(
         self, interaction: discord.Interaction, error: Exception
     ):
-        await interaction.response.send_message(f"```{str(error)}```", ephemeral=True)
+        await interaction.response.send_message(
+            embed=notice(f"```{str(error)}```"), ephemeral=True
+        )
 
 
 async def setup(bot):

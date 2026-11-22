@@ -2,6 +2,7 @@ import asyncio
 from unittest.mock import patch
 
 from brawl.Currency import gambling
+from tests.conftest import text
 
 USER = 1
 
@@ -36,7 +37,7 @@ def test_coinflip_refuses_a_bet_above_the_balance(cafe):
     cafe.ref(f"Cafe Economy/{USER}/balance").set({"Beans": 150})
     sent = cafe.interaction(USER)
     asyncio.run(cog.coinflip.callback(cog, sent, 200))
-    assert "don't have enough" in sent.followup.send.call_args[0][0]
+    assert "don't have enough" in text(sent.followup.send.call_args)
     assert beans(cafe) == 150
 
 
@@ -125,5 +126,5 @@ def test_games_stop_at_the_daily_limit(cafe):
     )
     sent = cafe.interaction(USER)
     asyncio.run(cog.coinflip.callback(cog, sent, 200))
-    assert f"all `{limit}` games" in sent.followup.send.call_args[0][0]
+    assert f"all `{limit}` games" in text(sent.followup.send.call_args)
     assert beans(cafe) == 1000

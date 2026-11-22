@@ -9,6 +9,7 @@ from brawl.Currency.config import (
 )
 from brawl.Currency.db import g_shop_effects, u_mega_boxes, u_star_drops
 from brawl.Currency.helper import MAIN_GUILD_ID
+from tests.conftest import text
 
 USER = 1
 
@@ -53,7 +54,7 @@ def test_one_move_per_member(cafe, monkeypatch):
     view, _ = inspection(cafe)
     act(cafe, view)
     again = act(cafe, view)
-    assert "already" in again.response.send_message.call_args[0][0]
+    assert "already" in text(again.response.send_message.call_args)
     assert u_mega_boxes(USER).get() == 1
 
 
@@ -67,7 +68,7 @@ def test_results_replace_the_card_once_and_close_it(cafe, monkeypatch):
     view.message.edit.assert_awaited_once()
     assert view.message.edit.call_args.kwargs["view"] is None
     late = act(cafe, view, 2)
-    assert "left" in late.response.send_message.call_args[0][0]
+    assert "left" in text(late.response.send_message.call_args)
     assert u_star_drops(2).get() is None
 
 

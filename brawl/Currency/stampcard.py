@@ -21,6 +21,7 @@ from brawl.Currency.helper import (
     get_current_month_key,
 )
 from brawl.Currency.home import background, draw_stamp_card
+from brawl.Currency.panel import framed, notice
 from brawl.Currency.quests import order_tasks, update_quest
 from brawl.Currency.rewardcard import draw_redeemed
 
@@ -93,7 +94,7 @@ class StampCard(commands.Cog):
     async def redeem(self, interaction, tier: app_commands.Choice[str]):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} Not available here.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} Not available here.", "bad"), ephemeral=True
             )
 
         user_id = interaction.user.id
@@ -101,15 +102,21 @@ class StampCard(commands.Cog):
         count = stamps(user_id)
         if count < goal:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} **{tier.name}** needs {STAMP_EMOTE} `{goal}` Stamps. You have `{count}`.\n"
-                f"-# Finish Today's Order to earn {STAMP_EMOTE} 1 Stamp.",
+                embed=notice(
+                    f"{NO_EMOTE} **{tier.name}** needs {STAMP_EMOTE} `{goal}` Stamps. You have `{count}`.\n"
+                    f"Finish Today's Order to earn {STAMP_EMOTE} 1 Stamp.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
         if redeemed(interaction.guild.id) >= STAMP_MONTHLY_LIMIT:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} All {STAMP_MONTHLY_LIMIT} passes for this month are redeemed. "
-                "Your Stamps are kept, so try again next month.",
+                embed=notice(
+                    f"{NO_EMOTE} All {STAMP_MONTHLY_LIMIT} passes for this month are redeemed. "
+                    "Your Stamps are kept, so try again next month.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -117,8 +124,11 @@ class StampCard(commands.Cog):
         if not await wallet.pay(user_id, tokens=cost, reason="redeem"):
             _, tokens = wallet.balance(user_id)
             return await interaction.response.send_message(
-                f"{NO_EMOTE} **{tier.name}** costs {TOKEN_EMOTE} `{cost}`. "
-                f"You have {TOKEN_EMOTE} `{tokens}`.",
+                embed=notice(
+                    f"{NO_EMOTE} **{tier.name}** costs {TOKEN_EMOTE} `{cost}`. "
+                    f"You have {TOKEN_EMOTE} `{tokens}`.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
 
@@ -154,15 +164,20 @@ class StampCard(commands.Cog):
             "background": background(user_id),
         }
         await interaction.response.send_message(
-            "-# **Next:** open a ticket in <#1390908939767648328> with a screenshot of this "
-            "message and the server owner will deliver your pass.",
-            file=await render(draw_redeemed, sale, name="redeemed"),
+            **framed(
+                await render(draw_redeemed, sale, name="redeemed"),
+                "Pass redeemed",
+                "Open a ticket in <#1390908939767648328> with a screenshot of this "
+                "message and the server owner will deliver your pass.",
+                tone="good",
+            ),
         )
 
     @redeem.error
     async def redeem_error(self, interaction, error):
         await interaction.response.send_message(
-            f"{NO_EMOTE} Something went wrong: {error}", ephemeral=True
+            embed=notice(f"{NO_EMOTE} Something went wrong: {error}", "bad"),
+            ephemeral=True,
         )
 
 

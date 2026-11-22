@@ -7,6 +7,7 @@ from brawl.Currency import boardcard
 from brawl.Currency.db import g_tables, g_user_tables, u_balance
 from brawl.Currency.helper import MAIN_GUILD_ID
 from brawl.Currency.pagination import BOARDS
+from tests.conftest import text
 
 ME = 7
 
@@ -51,7 +52,7 @@ def test_turning_the_page_redraws_the_card(cafe):
 
 
 def test_an_empty_board_says_so(cafe):
-    assert "Nobody" in board(cafe, "Tokens")[0][0]
+    assert "Nobody" in text(board(cafe, "Tokens"))
 
 
 def test_tables_board_ranks_recognized_tables_and_finds_yours(cafe):

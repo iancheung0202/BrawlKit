@@ -38,6 +38,7 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
+from brawl.Currency.panel import notice
 
 OWNER = 692254240290242601
 RARITIES = list(STAR_DROP_RATES["rarity_rates"])
@@ -158,7 +159,8 @@ class OpenView(discord.ui.View):
         if interaction.user.id == self.user.id:
             return True
         await interaction.response.send_message(
-            f"{NO_EMOTE} This is not your {self.name}.", ephemeral=True
+            embed=notice(f"{NO_EMOTE} This is not your {self.name}.", "bad"),
+            ephemeral=True,
         )
         return False
 
@@ -228,7 +230,8 @@ class StarDropView(OpenView):
         await interaction.response.defer()
         if self.is_unlocked or self.current_upgrades >= DROP_UPGRADES:
             return await interaction.followup.send(
-                f"{NO_EMOTE} This Star Drop has no upgrades left.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} This Star Drop has no upgrades left.", "bad"),
+                ephemeral=True,
             )
         now, final = RARITIES.index(self.current_rarity), RARITIES.index(
             self.final_rarity
@@ -256,11 +259,15 @@ class StarDropView(OpenView):
         await interaction.response.defer()
         if self.current_upgrades < DROP_UPGRADES:
             return await interaction.followup.send(
-                f"{NO_EMOTE} Use all {DROP_UPGRADES} upgrades first.", ephemeral=True
+                embed=notice(
+                    f"{NO_EMOTE} Use all {DROP_UPGRADES} upgrades first.", "bad"
+                ),
+                ephemeral=True,
             )
         if self.is_unlocked:
             return await interaction.followup.send(
-                f"{NO_EMOTE} This Star Drop is already open.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} This Star Drop is already open.", "bad"),
+                ephemeral=True,
             )
         self.is_unlocked = True
         u_star_drops_pending(self.user.id).delete()
@@ -368,7 +375,8 @@ class MegaBoxView(OpenView):
         await interaction.response.defer()
         if self.show_summary:
             return await interaction.followup.send(
-                f"{NO_EMOTE} This Mega Box is empty.", ephemeral=True
+                embed=notice(f"{NO_EMOTE} This Mega Box is empty.", "bad"),
+                ephemeral=True,
             )
         await self.reveal(interaction.guild.id)
         await self.show(interaction)
@@ -403,24 +411,31 @@ class Gacha(commands.Cog):
     async def blocked(self, interaction, station, view, held, pending):
         if interaction.guild.id != MAIN_GUILD_ID:
             await interaction.response.send_message(
-                "This command can only be used in Brawl Cafe.", ephemeral=True
+                embed=notice("This command can only be used in Brawl Cafe."),
+                ephemeral=True,
             )
             return True
         if await locked(interaction, station):
             return True
         if interaction.user.id in view.sessions:
             await interaction.response.send_message(
-                f"{NO_EMOTE} You already have a {view.name} open. Finish it first.",
+                embed=notice(
+                    f"{NO_EMOTE} You already have a {view.name} open. Finish it first.",
+                    "bad",
+                ),
                 ephemeral=True,
             )
             return True
         if held <= 0 and not pending:
             await interaction.response.send_message(
-                (
-                    f"{NO_EMOTE} You have no {view.name}es.\n-# **Next:** Buy one with {BUY}."
-                    if view is MegaBoxView
-                    else f"{NO_EMOTE} You have no {view.name}s.\n"
-                    f"-# **Next:** Buy one with {BUY}."
+                embed=notice(
+                    (
+                        f"{NO_EMOTE} You have no {view.name}es. Buy one with {BUY}."
+                        if view is MegaBoxView
+                        else f"{NO_EMOTE} You have no {view.name}s. "
+                        f"Buy one with {BUY}."
+                    ),
+                    "bad",
                 ),
                 ephemeral=True,
             )

@@ -15,8 +15,9 @@ STATIONS = {
 COLORS = {"info": BLUE, "good": GREEN, "bad": RED, "gold": GOLD}
 NEXT = {
     "chat": "Chat to earn Beans and fill Today's Order.",
-    "brew": f"Start a brew with {BREW}.",
+    "brew": f"Start your next brew with {BREW}.",
     "sell": f"Sell it with {SELL} when it is ready.",
+    "roast": f"Pick a roast with {BREW} to start a brew.",
     "home": f"Open {HOME} to see Today's Order.",
 }
 
@@ -25,8 +26,30 @@ def panel(station, headline, body="", next=None, tone="info"):
     embed = discord.Embed(title=headline, description=body, color=COLORS[tone])
     embed.set_author(name=STATIONS[station])
     if next:
-        embed.description += f"\n-# **Next:** {NEXT.get(next, next)}"
+        embed.description += f"\n\n{NEXT.get(next, next)}"
     return embed
+
+
+def notice(text, tone="info"):
+    """A one-line answer: a refusal, a confirmation, a short notice."""
+    return discord.Embed(description=text, color=COLORS[tone])
+
+
+def framed(file, title, *lines, tone="info"):
+    """A card inside an embed under a short title and a few plain lines. Use as **framed(...)."""
+    embed = discord.Embed(
+        title=title,
+        description="\n".join(line for line in lines if line) or None,
+        color=COLORS[tone],
+    )
+    embed.set_image(url=f"attachment://{file.filename}")
+    return {"embed": embed, "file": file}
+
+
+def reframed(file, title, *lines, tone="info"):
+    """The same, for editing a message that already shows a card."""
+    sent = framed(file, title, *lines, tone=tone)
+    return {"embed": sent["embed"], "attachments": [file]}
 
 
 async def setup(bot):

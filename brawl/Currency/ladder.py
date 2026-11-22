@@ -1,6 +1,7 @@
 from brawl.Currency.config import HOME, LADDER
 from brawl.Currency.db import u_veteran
 from brawl.Currency.helper import NO_EMOTE
+from brawl.Currency.panel import notice
 
 
 async def level_of(bot, user_id, guild_id):
@@ -17,8 +18,8 @@ async def unlocked(bot, user_id, guild_id, station):
 def lock_line(station, level):
     need, name, _ = LADDER[station]
     return (
-        f"{NO_EMOTE} **{name}** unlocks at **Level {need}**. You are Level {level}.\n"
-        f"-# Chat to level up. {HOME} shows your next unlock."
+        f"{NO_EMOTE} {name} unlocks at Level {need}. You are Level {level}.\n"
+        f"Chat to level up. {HOME} shows your next unlock."
     )
 
 
@@ -32,7 +33,7 @@ async def locked(interaction, station):
         if interaction.response.is_done()
         else interaction.response.send_message
     )
-    await send(lock_line(station, level), ephemeral=True)
+    await send(embed=notice(lock_line(station, level), "bad"), ephemeral=True)
     return True
 
 
