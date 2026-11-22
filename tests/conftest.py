@@ -65,6 +65,7 @@ COGS = {
     "quests": "QuestAdmin",
     "stampcard": "StampCard",
     "gacha": "Gacha",
+    "bag": "Bag",
     "factions": "TableSystem",
 }
 

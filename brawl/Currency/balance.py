@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from brawl.Currency import quests as daily_order
+from brawl.Currency.bag import held
 from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import BACKGROUNDS, LADDER
 from brawl.Currency.db import (
@@ -181,6 +182,7 @@ class BalanceInfoView(discord.ui.View):
                 "pins": (u_pin_message(user_id).get() or {}).get("count"),
                 "credits": (u_customization(user_id).get() or {}).get("credits"),
             },
+            "bag": held(user_id),
             "effects": [
                 {
                     "item": item,

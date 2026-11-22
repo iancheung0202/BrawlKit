@@ -10,6 +10,7 @@ from discord.ext import commands
 from firebase_admin import db
 
 from brawl.Currency import wallet
+from brawl.Currency.bag import TIMED, held, keep, running
 from brawl.Currency.card import render
 from brawl.Currency.config import (
     BUY,
@@ -23,10 +24,8 @@ from brawl.Currency.config import (
     STAR_DROP_RATES,
 )
 from brawl.Currency.db import (
-    sync_shop_effects,
     u_mega_boxes,
     u_mega_boxes_pending,
-    u_shop_effects,
     u_star_drops,
     u_star_drops_pending,
 )
@@ -108,32 +107,19 @@ async def pay_drop(user_id, rarity):
 
 
 async def give_effect(user_id, guild_id, skip=()):
-    held = sync_shop_effects(user_id, operation="get") or {}
-    free = [
-        item
-        for item, data in STORE_ITEMS.items()
-        if item not in GACHA_ITEMS
-        and item not in skip
-        and data.get("duration", 0) > 0
-        and not (
-            held.get(item, {}).get("active")
-            and held[item].get("expires_at", 0) >= time.time()
-        )
-    ]
+    """Puts a timed item in the bag; one the member holds or has running pays Tokens."""
+    taken = {*skip, *held(user_id), *running(user_id)}
+    free = [item for item in TIMED if item not in taken]
     if not free:
         reward = await pay(user_id, "tokens", EFFECT_FALLBACK_TOKENS)
         return {**reward, "note": "in place of an effect item"}
     item = random.choice(free)
-    await STORE_ITEMS[item]["effect"](user_id)
-    if item == "freeze_thermometer":
-        frozen = u_shop_effects(user_id, item).get()
-        if frozen:
-            sync_shop_effects(user_id, item, "set", frozen, guild_id)
+    keep(user_id, item)
     return {
         "kind": "effect",
         "item": item,
         "name": STORE_ITEMS[item]["name"],
-        "note": "bonus effect item",
+        "note": "Start it with /use",
     }
 
 

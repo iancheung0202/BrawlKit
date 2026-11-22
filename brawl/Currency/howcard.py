@@ -795,7 +795,7 @@ def effects_page():
     height = 240 + count * 40 + len(EFFECTS) * 34
     card = page(
         "EFFECT ITEMS",
-        f"Boosts you buy in the shop. Most open at Level {level}.",
+        f"Boosts from the shop and drops. Most open at Level {level}.",
         height,
     )
     section(card, 124, height - 172, "ITEMS")
@@ -808,7 +808,7 @@ def effects_page():
         for key, does in items:
             item_row(card, y, key, does)
             y += 40
-    card.hint("Buy again: how long before you can buy the same item again.")
+    card.hint("Timed items wait in your bag, one of each. Start one with /use.")
     return card.jpg().getvalue()
 
 

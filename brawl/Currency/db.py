@@ -22,6 +22,13 @@ def u_shop_effects(user_id: int, effect_name: str = None):
     return db.reference(f"{U_ROOT}/{user_id}/inventory/effects")
 
 
+def u_bag(user_id: int, item_id: str = None):
+    """Timed effect items the member holds and has not started."""
+    if item_id:
+        return db.reference(f"{U_ROOT}/{user_id}/inventory/bag/{item_id}")
+    return db.reference(f"{U_ROOT}/{user_id}/inventory/bag")
+
+
 def u_shop_cooldowns(user_id: int, item_id: str = None):
     if item_id:
         return db.reference(f"{U_ROOT}/{user_id}/inventory/cooldowns/{item_id}")

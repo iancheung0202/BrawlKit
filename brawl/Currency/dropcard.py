@@ -138,6 +138,8 @@ def draw_mega_box(box):
             )
     if left:
         hint = f"Press Tap to reveal {plural(left, 'more item')}."
+    elif any(reward["kind"] == "effect" for reward in rewards):
+        hint = "Start effect items with /use."
     elif box["unopened"]:
         hint = "Press Open Next to open another."
     else:

@@ -6,13 +6,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from brawl.Currency.bag import UseNow, held, keep, note
 from brawl.Currency.card import item_icon, plain, render
 from brawl.Currency.config import ITEM_STATIONS
 from brawl.Currency.db import (
     g_shops,
     g_thermometer,
     sync_sell_alarm,
-    sync_shop_effects,
     u_balance,
     u_customization,
     u_daily_chat_earnings,
@@ -924,6 +924,16 @@ class Shop(commands.Cog):
                 ),
             )
 
+        if item_id in held(user_id):
+            return await interaction.edit_original_response(
+                content=None,
+                embed=notice(
+                    f"{NO_EMOTE} You already hold a {item_data['name']}. "
+                    "Start it with /use before buying another.",
+                    "bad",
+                ),
+            )
+
         price_parts = item_data["price"].split()
         cost = int(price_parts[0])
         currency = "tokens" if "token" in price_parts[1].lower() else "beans"
@@ -953,6 +963,7 @@ class Shop(commands.Cog):
         order = await update_quest(
             user_id, interaction.guild.id, {"shop_purchases": 1}, self.bot
         )
+        use_now = None
 
         if item_id == "reset_chat_cap":
             earnings_data = self.economy.chat_system.earnings_cache.get(
@@ -1067,37 +1078,13 @@ class Shop(commands.Cog):
             effect_msg = f"You have {credits} to use with /customize."
 
         else:
-            await item_data["effect"](user_id)
-
-            if item_id == "sell_alarm":
-                active_brew = await self.economy.get_active_brew(user_id)
-                if active_brew:
-                    sync_sell_alarm(
-                        user_id,
-                        "set",
-                        {
-                            "roast_type": active_brew.get("roast_type"),
-                            "end_time": active_brew.get("end_time"),
-                            "batch_id": active_brew.get("batch_id"),
-                            "notified": False,
-                        },
-                        interaction.guild.id,
-                    )
-
-            elif item_id == "freeze_thermometer":
-                freeze_data = await self.economy.effect_manager.get_user_active_effects(
-                    user_id
-                )
-                if "freeze_thermometer" in freeze_data:
-                    sync_shop_effects(
-                        user_id,
-                        "freeze_thermometer",
-                        "set",
-                        freeze_data["freeze_thermometer"],
-                        interaction.guild.id,
-                    )
-
-            effect_msg = after(item_id)
+            keep(user_id, item_id)
+            use_now = UseNow(user_id, item_id)
+            effect_msg = (
+                f"{note(self.bot, item_id)}. Start it with /use."
+                if item_id == "freeze_thermometer"
+                else "Start it now or later with /use."
+            )
 
         await self.economy.effect_manager.set_user_cooldown(user_id, item_id)
 
@@ -1118,6 +1105,7 @@ class Shop(commands.Cog):
                 "Purchase complete",
                 tone="good",
             ),
+            view=use_now,
         )
         await report(interaction, order)
 
