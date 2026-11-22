@@ -215,13 +215,15 @@ class EditModal(Modal, title="Edit the topic"):
 
 async def tell(interaction: discord.Interaction, topic: dict, approved: bool):
     """DM the member how their suggestion went. Closed DMs are skipped."""
-    member = interaction.guild.get_member(topic["user"])
-    if not member:
-        return
     card = draw_topic(
         {"approved": approved, "text": topic["text"], "beans": TOPIC_BEANS}
     )
+    guild = interaction.guild
     try:
+        # Members are not cached at startup, so one the bot has not seen is fetched.
+        member = guild.get_member(topic["user"]) or await guild.fetch_member(
+            topic["user"]
+        )
         await member.send(file=discord.File(card, "topic.jpg"))
     except discord.HTTPException:
         pass

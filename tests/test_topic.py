@@ -107,3 +107,17 @@ def test_member_is_sent_a_card_either_way_and_closed_dms_are_skipped(cafe, monke
 
     asyncio.run(run())
     assert wallet.balance(MEMBER)[0] == 2 * TOPIC_BEANS
+
+
+def test_member_the_bot_has_not_seen_is_fetched_for_the_card(cafe):
+    send_in(cafe)
+    interaction = staff(cafe)
+    interaction.guild.get_member.return_value = None
+    interaction.guild.fetch_member = AsyncMock()
+
+    async def run():
+        await topic.ReviewView().settle(interaction, True)
+
+    asyncio.run(run())
+    interaction.guild.fetch_member.assert_awaited_once_with(MEMBER)
+    assert interaction.guild.fetch_member.return_value.send.call_count == 1
