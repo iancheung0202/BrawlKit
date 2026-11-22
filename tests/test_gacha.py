@@ -110,3 +110,39 @@ def test_a_box_saved_before_the_cards_still_opens():
     }
     old = gacha.reward_of("Effect: `Espresso Shot`")
     assert old["item"] == "chat_boost"
+
+
+def test_fast_taps_run_one_at_a_time(cafe, monkeypatch):
+    monkeypatch.setattr(gacha, "roll_items", lambda: 5)
+    u_mega_boxes(USER).set(1)
+    u_balance(USER).set({"Beans": 0, "Tokens": 0})
+    view = sent(open_with(cafe, "megabox")).kwargs["view"]
+    press = cafe.interaction(USER)
+    press.user.id = USER
+    drawn = []
+
+    async def slow_file():
+        shown = len(view.rewards)
+        await asyncio.sleep(0.01 / shown)
+        drawn.append((shown, len(view.rewards)))
+
+    monkeypatch.setattr(view, "file", slow_file)
+
+    async def spam():
+        await asyncio.gather(*(view.children[0].callback(press) for _ in range(8)))
+
+    asyncio.run(spam())
+    assert drawn == [(n, n) for n in range(2, 6)]
+    assert view.children[0].disabled
+    gacha.MegaBoxView.active_sessions.clear()
+
+
+def test_opening_again_ends_the_old_message(cafe, monkeypatch):
+    monkeypatch.setattr(gacha, "roll_items", lambda: 5)
+    u_mega_boxes(USER).set(1)
+    first = sent(open_with(cafe, "megabox")).kwargs["view"]
+    second = sent(open_with(cafe, "megabox")).kwargs["view"]
+    assert first.is_finished() and first.children[0].label == "Session ended"
+    assert second is not first and len(second.rewards) == 1
+    assert u_mega_boxes(USER).get() == 0
+    gacha.MegaBoxView.active_sessions.clear()

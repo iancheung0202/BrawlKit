@@ -1,3 +1,5 @@
+import asyncio
+import functools
 import random
 import re
 import time
@@ -135,6 +137,18 @@ async def give_effect(user_id, guild_id, skip=()):
     }
 
 
+def in_turn(handler):
+    """Runs one press at a time, so fast taps cannot pay twice or redraw out of order."""
+
+    @functools.wraps(handler)
+    async def pressed(self, interaction, button):
+        await interaction.response.defer()
+        async with self.turn:
+            await handler(self, interaction, button)
+
+    return pressed
+
+
 class OpenView(discord.ui.View):
     name = ""
     sessions = None
@@ -142,6 +156,10 @@ class OpenView(discord.ui.View):
     def __init__(self, user, unopened):
         super().__init__(timeout=60)
         self.user, self.unopened, self.message = user, unopened, None
+        self.turn = asyncio.Lock()
+        old = self.sessions.get(user.id)
+        if old:
+            old.stop()
         self.sessions[user.id] = self
         self.refresh()
 
@@ -226,8 +244,8 @@ class StarDropView(OpenView):
         style=discord.ButtonStyle.primary,
         emoji="<:Upgrade:1447684501735211239>",
     )
+    @in_turn
     async def upgrade_button(self, interaction, button):
-        await interaction.response.defer()
         if self.is_unlocked or self.current_upgrades >= DROP_UPGRADES:
             return await interaction.followup.send(
                 embed=notice(f"{NO_EMOTE} This Star Drop has no upgrades left.", "bad"),
@@ -255,8 +273,8 @@ class StarDropView(OpenView):
         style=discord.ButtonStyle.success,
         emoji="<a:unlocked:1390755948926079037>",
     )
+    @in_turn
     async def unlock_button(self, interaction, button):
-        await interaction.response.defer()
         if self.current_upgrades < DROP_UPGRADES:
             return await interaction.followup.send(
                 embed=notice(
@@ -285,8 +303,8 @@ class StarDropView(OpenView):
         emoji=STAR_DROP_EMOTE,
         disabled=True,
     )
+    @in_turn
     async def next_button(self, interaction, button):
-        await interaction.response.defer()
         held = u_star_drops(self.user.id).get() or 0
         if not self.is_unlocked or held <= 0:
             self.unopened = max(held, 0)
@@ -371,8 +389,8 @@ class MegaBoxView(OpenView):
         style=discord.ButtonStyle.primary,
         emoji="<:v_hand:1486225684928921763>",
     )
+    @in_turn
     async def tap_button(self, interaction, button):
-        await interaction.response.defer()
         if self.show_summary:
             return await interaction.followup.send(
                 embed=notice(f"{NO_EMOTE} This Mega Box is empty.", "bad"),
@@ -387,8 +405,8 @@ class MegaBoxView(OpenView):
         emoji=MEGA_BOX_EMOTE,
         disabled=True,
     )
+    @in_turn
     async def next_button(self, interaction, button):
-        await interaction.response.defer()
         held = u_mega_boxes(self.user.id).get() or 0
         if not self.show_summary or held <= 0:
             self.unopened = max(held, 0)
@@ -417,15 +435,12 @@ class Gacha(commands.Cog):
             return True
         if await locked(interaction, station):
             return True
-        if interaction.user.id in view.sessions:
-            await interaction.response.send_message(
-                embed=notice(
-                    f"{NO_EMOTE} You already have a {view.name} open. Finish it first.",
-                    "bad",
-                ),
-                ephemeral=True,
-            )
-            return True
+        # A session left open is ended here, so a stuck message never blocks a new one.
+        old = view.sessions.get(interaction.user.id)
+        if old:
+            async with old.turn:
+                old.stop()
+                await old.on_timeout()
         if held <= 0 and not pending:
             await interaction.response.send_message(
                 embed=notice(
