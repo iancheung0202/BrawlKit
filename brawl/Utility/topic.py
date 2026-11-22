@@ -10,6 +10,7 @@ from brawl.Currency import wallet
 from brawl.Currency.config import TOPIC_BEANS
 from brawl.Currency.helper import BEAN_EMOTE, MAIN_GUILD_ID, TOPIC_REVIEW
 from brawl.Currency.panel import notice
+from brawl.Currency.rewardcard import draw_topic
 from brawl.Utility.style import BLUE, GOLD, GREEN, NO, RED, YES
 
 PENDING = "/Topics/Pending"
@@ -190,6 +191,42 @@ class AddModal(Modal, title="Suggest a topic"):
         )
 
 
+class EditModal(Modal, title="Edit the topic"):
+    """Staff fix the wording of a suggestion before they approve it."""
+
+    def __init__(self, text: str):
+        super().__init__()
+        self.text = TextInput(
+            label="Question", default=text, min_length=10, max_length=150
+        )
+        self.add_item(self.text)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        ref = db.reference(PENDING).child(str(interaction.message.id))
+        if not ref.get():
+            await interaction.response.edit_message(view=None)
+            return
+        text = self.text.value.strip()
+        ref.update({"text": text})
+        embed = interaction.message.embeds[0]
+        embed.title = text
+        await interaction.response.edit_message(embed=embed)
+
+
+async def tell(interaction: discord.Interaction, topic: dict, approved: bool):
+    """DM the member how their suggestion went. Closed DMs are skipped."""
+    member = interaction.guild.get_member(topic["user"])
+    if not member:
+        return
+    card = draw_topic(
+        {"approved": approved, "text": topic["text"], "beans": TOPIC_BEANS}
+    )
+    try:
+        await member.send(file=discord.File(card, "topic.jpg"))
+    except discord.HTTPException:
+        pass
+
+
 class ReviewView(View):
     """Staff approve a member's topic, which pays the member, or turn it down."""
 
@@ -215,12 +252,23 @@ class ReviewView(View):
         else:
             embed.description += f"\n{NO} Turned down by {interaction.user.mention}"
         await interaction.response.edit_message(embed=embed, view=None)
+        await tell(interaction, topic, approved)
 
     @discord.ui.button(
         label="Approve", style=discord.ButtonStyle.green, custom_id="topic_approve"
     )
     async def approve(self, interaction: discord.Interaction, button: Button):
         await self.settle(interaction, True)
+
+    @discord.ui.button(
+        label="Edit", style=discord.ButtonStyle.grey, custom_id="topic_edit"
+    )
+    async def edit(self, interaction: discord.Interaction, button: Button):
+        topic = db.reference(PENDING).child(str(interaction.message.id)).get()
+        if not topic:
+            await interaction.response.edit_message(view=None)
+            return
+        await interaction.response.send_modal(EditModal(topic["text"]))
 
     @discord.ui.button(
         label="Turn down", style=discord.ButtonStyle.red, custom_id="topic_reject"

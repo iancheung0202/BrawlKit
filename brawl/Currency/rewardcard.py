@@ -1,6 +1,17 @@
 import time
 
-from brawl.Currency.card import BLUE, GOLD, GREEN, GREY, MUTED, SCALE, WHITE, Card, box
+from brawl.Currency.card import (
+    BLUE,
+    GOLD,
+    GREEN,
+    GREY,
+    MUTED,
+    RED,
+    SCALE,
+    WHITE,
+    Card,
+    box,
+)
 from brawl.Currency.config import (
     DAILY_BEANS,
     ROAST_TYPES,
@@ -277,6 +288,32 @@ def draw_ready(brew):
     card.text(604, 42, "Pays up to", 13, MUTED, "ra", 2)
     card.text(604, 62, f"{best}", 22, GOLD, "ra")
     card.icon("kit/token", 572 - card.measure(f"{best}", 22), 62, 26)
+    return card.jpg()
+
+
+def draw_topic(topic):
+    """The strip a member is sent when staff approve or turn down their topic."""
+    approved = topic["approved"]
+    card = Card.strip(
+        "It now shows up in /topic with your name."
+        if approved
+        else "Suggest another one from /topic."
+    )
+    card.tag(
+        32,
+        12,
+        "TOPIC APPROVED" if approved else "TOPIC TURNED DOWN",
+        GREEN if approved else RED,
+        BLACK if approved else WHITE,
+    )
+    card.icon("kit/icon_chat", 34, 52, 52)
+    width = 380 if approved else 500
+    card.text(100, 44, "Your topic", 14, MUTED, "la", 2)
+    for row, line in enumerate(card.wrap(topic["text"], 19, width)):
+        card.text(100, 64 + row * 26, line, 19)
+    if approved:
+        card.text(604, 52, "You earned", 13, MUTED, "ra", 2)
+        right(card, 72, [("kit/bean", topic["beans"])], 24)
     return card.jpg()
 
 
