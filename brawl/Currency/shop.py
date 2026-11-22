@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from brawl.Currency.bag import UseNow, held, keep, note
 from brawl.Currency.card import item_icon, plain, render
-from brawl.Currency.config import ITEM_STATIONS
+from brawl.Currency.config import ITEM_STATIONS, SHOP
 from brawl.Currency.db import (
     g_shops,
     g_thermometer,
@@ -508,7 +508,8 @@ class RewardModal(discord.ui.Modal):
 
 
 global_purchase_queue = asyncio.Queue()
-processing_global_queue = False
+purchase_worker = None
+PURCHASE_SECONDS = 60
 
 
 class PurchaseRequest:
@@ -523,6 +524,7 @@ class PurchaseRequest:
 
 async def order(interaction, item):
     """Queues a purchase and answers with a waiting note. /buy and the shop menu both use it."""
+    global purchase_worker
     request = PurchaseRequest(interaction, item)
     await global_purchase_queue.put(request)
     place = global_purchase_queue.qsize()
@@ -533,28 +535,38 @@ async def order(interaction, item):
             else f"{LOADING} Processing your purchase..."
         ),
     )
-    if not processing_global_queue:
-        asyncio.create_task(process_global_queue())
+    if purchase_worker is None or purchase_worker.done():
+        purchase_worker = asyncio.create_task(process_global_queue())
     return request
 
 
-async def process_global_queue():
-    global processing_global_queue
-    processing_global_queue = True
+async def fail(request, reason):
+    """Ends a purchase that could not finish, so its waiting note never stays up."""
+    print(f"Purchase of {request.item!r} failed: {reason!r}")
     try:
-        while not global_purchase_queue.empty():
-            request = await global_purchase_queue.get()
-            try:
-                cog = request.interaction.client.get_cog("Shop")
-                if cog:
-                    await cog._process_purchase(request)
-            except Exception as e:
-                print(f"Error processing purchase: {e}")
-            finally:
-                request.done.set()
-                global_purchase_queue.task_done()
-    finally:
-        processing_global_queue = False
+        await request.interaction.edit_original_response(
+            content=None,
+            embed=notice(
+                f"{NO_EMOTE} That purchase did not go through. Please try again.",
+                "bad",
+            ),
+        )
+    except discord.HTTPException:
+        pass
+
+
+async def process_global_queue():
+    """Works through the queue one purchase at a time; a stuck one is dropped after a minute."""
+    while not global_purchase_queue.empty():
+        request = await global_purchase_queue.get()
+        try:
+            cog = request.interaction.client.get_cog("Shop")
+            await asyncio.wait_for(cog._process_purchase(request), PURCHASE_SECONDS)
+        except Exception as error:
+            await fail(request, error)
+        finally:
+            request.done.set()
+            global_purchase_queue.task_done()
 
 
 class Shop(commands.Cog):
@@ -818,7 +830,11 @@ class Shop(commands.Cog):
         if reward is None:
             return await interaction.edit_original_response(
                 content=None,
-                embed=notice(f"{NO_EMOTE} Item `{item}` not found in the shop.", "bad"),
+                embed=notice(
+                    f"{NO_EMOTE} There is no item called `{item}`. "
+                    f"Open {SHOP} and pick it from the menu under the shop.",
+                    "bad",
+                ),
             )
 
         name, desc, cost, currency_type, multiple, stock = reward

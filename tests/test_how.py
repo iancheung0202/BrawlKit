@@ -103,17 +103,3 @@ def test_the_chat_strip_draws_plain_boosted_and_full():
             "reset": 0,
         }
         assert draw_chat(reward).getvalue().startswith(b"\x89PNG")
-
-
-def test_the_daily_panel_button_opens_how_privately():
-    from brawl.Currency.daily import Daily
-
-    async def press():
-        interaction = MagicMock()
-        interaction.response.send_message = AsyncMock()
-        view = Daily.DailyPanelView(MagicMock())
-        await view.how.callback(interaction)
-        return interaction.response.send_message.call_args.kwargs
-
-    sent = asyncio.run(press())
-    assert sent["file"].filename == "start.jpg" and sent["ephemeral"]

@@ -213,11 +213,9 @@ def split(card, x, y, width, parts):
 
 
 @lru_cache
-def start_page():
+def start_page(title="HOW THE CAFE WORKS"):
     """The whole cafe on one card: the loop, what each currency buys, a day."""
-    card = page(
-        "HOW THE CAFE WORKS", "Chat, brew, spend. A new day starts at 00:00 UTC.", 782
-    )
+    card = page(title, "Chat for Beans, brew them into Tokens, spend both.", 782)
     roasts = list(ROAST_TYPES.values())
     tokens = [pay for roast in roasts for pay in roast["payout"] if pay]
     section(card, 124, 162, "THE LOOP")
@@ -225,15 +223,19 @@ def start_page():
         card,
         146,
         [
-            ("items/message_pin", "Chat", f"{span(*CHAT_MESSAGES)} messages"),
-            ("kit/bean", "Beans", f"+{span(*CHAT_REWARD)}", GOLD),
+            (
+                "kit/icon_chat",
+                "Chat",
+                f"every {CHAT_MESSAGES[0]} to {CHAT_MESSAGES[1]} messages",
+            ),
+            ("kit/bean", "Beans", f"+{CHAT_REWARD[0]} to +{CHAT_REWARD[1]}", GOLD),
             (
                 "brewing",
                 "Brew",
                 f"{hours(roasts[0]['time'])} to {hours(roasts[-1]['time'])}",
             ),
             ("kit/token", "Tokens", f"+{min(tokens)} to +{max(tokens)}", GOLD),
-            ("kit/icon_shop", "Shop", "rewards and passes"),
+            ("kit/icon_shop", "Shop", "perks and rewards"),
         ],
     )
 
@@ -244,7 +246,10 @@ def start_page():
             "kit/icon_xp",
             "XP",
             WHITE,
-            [("brewing", "New stations", ""), ("kit/icon_role", "Level roles", "")],
+            [
+                ("kit/icon_key", "New stations", ""),
+                ("kit/icon_role", "Level roles", ""),
+            ],
         ),
         (
             "kit/bean",
@@ -264,7 +269,6 @@ def start_page():
                 ("kit/icon_shop", "Shop rewards", ""),
                 ("items/effect", "Effect items", ""),
                 ("items/mega_box", "Mega Boxes", ""),
-                ("kit/icon_brawl_pass", "Passes", ""),
             ],
         ),
         (
@@ -291,12 +295,12 @@ def start_page():
         pills(card, 228, y, row_pills)
 
     top = 580
-    section(card, top, 150, "EVERY DAY", GREEN)
+    section(card, top, 150, "EVERY DAY, FROM 00:00 UTC", GREEN)
     flow(
         card,
         top + 22,
         [
-            ("kit/icon_clock", "Clock In", f"+{DAILY_BEANS:,} Beans"),
+            ("kit/icon_calendar", "Clock In", f"+{DAILY_BEANS:,} Beans"),
             ("kit/icon_quest", "Today's Order", f"+{ORDER_BEANS:,} Beans"),
             ("kit/icon_ranked_round_token", "Stamp", "+1 a day", GREEN),
             (
@@ -310,6 +314,11 @@ def start_page():
     )
     card.hint("Pick a topic below for the numbers.")
     return card.jpg().getvalue()
+
+
+def panel_page():
+    """The start page under the store's name, for the panel in the store channel."""
+    return start_page("THE SERVER STORE")
 
 
 def mean(roast):
@@ -457,7 +466,7 @@ def beans_page():
     card = page("BEANS", "Chat and clock in every day. Beans pay for brews.", 990)
     section(card, 124, 382, "CHAT")
     for spot in range(10):
-        card.icon("items/message_pin", 46 + spot * 30, 156, 24)
+        card.icon("kit/icon_chat", 46 + spot * 30, 156, 24)
     arrow(card, 366, 168)
     card.icon("kit/bean", 388, 148, 40)
     reward = f"+{span(*CHAT_REWARD)}"
@@ -585,7 +594,7 @@ def levels_page():
     """XP in, the ladder of stations, and what each level pays."""
     card = page("LEVELS", "Chat to earn XP. Each level opens something new.", 806)
     section(card, 124, 132, "XP")
-    card.icon("items/message_pin", 46, 150, 34)
+    card.icon("kit/icon_chat", 46, 150, 34)
     arrow(card, 104, 168)
     card.icon("kit/icon_xp", 124, 148, 40)
     gain = f"+{span(*XP_PER_MESSAGE)}"
@@ -648,8 +657,8 @@ def order_page():
         card,
         146,
         [
-            ("kit/icon_clock", "Clock In", "starts the order"),
-            ("items/message_pin", "Chat task", f"+{each}", GOLD),
+            ("kit/icon_calendar", "Clock In", "starts the order"),
+            ("kit/icon_chat", "Chat task", f"+{each}", GOLD),
             ("kit/icon_quest", "Station task", f"+{each}", GOLD),
             ("kit/icon_quest", "Station task", f"+{each}", GOLD),
             ("kit/icon_ranked_round_token", "All done", f"+{bonus} and 1 Stamp", GREEN),
@@ -821,7 +830,7 @@ def stations_page():
         800,
     )
     section(card, 124, 382, "THERMOMETER")
-    card.icon("items/message_pin", 46, 148, 26)
+    card.icon("kit/icon_chat", 46, 148, 26)
     arrow(card, 92, 162, 9)
     heat = f"+{span(*THERMOMETER_MESSAGE_HEAT)} heat"
     card.text(108, 150, heat, 20, GOLD)

@@ -15,7 +15,7 @@ from brawl.Currency.card import (
 from brawl.Currency.helper import STORE_ITEMS
 
 HELD = (
-    ("star_drops", "Star Drop", "kit/icon_ranked_starr_drop", "/stardrop"),
+    ("star_drops", "Star Drop", "items/star_drop", "/stardrop"),
     ("mega_boxes", "Mega Box", "items/mega_box", "/megabox"),
     ("pins", "Message Pin", "items/message_pin", "/pin"),
     ("credits", "Credit", "items/custom_credit", "/customize"),

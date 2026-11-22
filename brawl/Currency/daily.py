@@ -1,3 +1,5 @@
+import asyncio
+import io
 import random
 import time
 
@@ -10,14 +12,8 @@ from brawl.Currency.card import render
 from brawl.Currency.chat import chat_limit, chat_today
 from brawl.Currency.config import (
     BOOSTER_DAILY_BEANS,
-    BREW,
     DAILY_BEANS,
-    HOME,
-    HOW,
-    LADDER,
     LUCKY_DAILY_CHANCE,
-    SELL,
-    STAMP_GOALS,
     STREAK_BEAN_MULTIPLIER,
     STREAK_DAYS,
     STREAK_TOKENS,
@@ -29,24 +25,21 @@ from brawl.Currency.db import sync_shop_effects, u_daily_checkin_streaks
 from brawl.Currency.helper import (
     AUTORESPONSE_MAP,
     BEAN_EMOTE,
-    EFFECT_EMOTE,
     MAIN_GUILD_ID,
     NO_EMOTE,
-    PASS_EMOTE,
     REPLY_EMOTE,
     SERVER_STORE,
-    SHOP_EMOTE,
-    STAMP_EMOTE,
     STAR_DROP_EMOTE,
     TOKEN_EMOTE,
     ULTRA_TIER_ROLE_ID,
     YES_EMOTE,
 )
 from brawl.Currency.home import background
+from brawl.Currency.how import HowView, page_file
+from brawl.Currency.howcard import PAGES, panel_page
 from brawl.Currency.panel import framed, notice
 from brawl.Currency.quests import get_next_daily_reset, standing, update_quest
 from brawl.Currency.rewardcard import draw_clock_in
-from brawl.Currency.shop import open_shop
 from brawl.Currency.staff import StaffInfoView
 from brawl.Currency.tutorial import hint
 
@@ -58,6 +51,32 @@ def runs_staff_text(message):
         and not message.author.bot
         and message.author.guild_permissions.administrator
     )
+
+
+class PanelTopicSelect(discord.ui.Select):
+    """The /how topics under the store panel; a pick opens that page privately."""
+
+    def __init__(self):
+        super().__init__(
+            placeholder="How does this work? Pick a topic",
+            custom_id="daily_topic",
+            options=[
+                discord.SelectOption(label=name, value=key)
+                for key, (name, _) in PAGES.items()
+                if key != "start"
+            ],
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        topic = self.values[0]
+        await interaction.response.send_message(
+            file=await page_file(topic), view=HowView(topic), ephemeral=True
+        )
+        try:
+            await interaction.message.edit(view=self.view)
+        except discord.HTTPException:
+            pass
 
 
 class Daily(commands.Cog):
@@ -272,38 +291,11 @@ class Daily(commands.Cog):
                 pass
 
         if message.content == "-dailypanel" and runs_staff_text(message):
-            embed = discord.Embed(
-                description=(
-                    "# <:BrockCool:1391630483867172935> The Server Store\n"
-                    f"Earn {BEAN_EMOTE} **Beans** and {TOKEN_EMOTE} **Tokens** just by being active in the server, "
-                    "then spend them in the shop on **free** in-game rewards, server perks, or even a **Brawl Pass**!\n"
-                    f"<:slash:1037445915348324505> **Open {HOME} to see your level, your order and what to do next.**\n"
-                    "## <a:leonConfused:1391625863107444820> 5 Ways to Earn\n"
-                    f"1. **Clock In**: Press the button below for {BEAN_EMOTE} `500` every day *(10% chance for **double**)*\n"
-                    f"-# {REPLY_EMOTE} ***Streak**: every 7th day in a row pays 4x {BEAN_EMOTE} plus `2-5` {TOKEN_EMOTE}*\n"
-                    f"-# {REPLY_EMOTE} ***Server Boosters**: an extra {BEAN_EMOTE} `200` every day*\n"
-                    f"-# {REPLY_EMOTE} ***Today's Order**: clocking in starts it. Finish it for {BEAN_EMOTE} `1,000` and {STAMP_EMOTE} `1` Stamp*\n"
-                    f"2. **Chatting**: Up to {BEAN_EMOTE} `1,000` a day just by sending messages\n"
-                    f"-# {REPLY_EMOTE} ***Level Up**: chatting gives XP too, and each level opens something new*\n"
-                    f"-# {REPLY_EMOTE} ***Server Boosters**: the daily limit goes up to {BEAN_EMOTE} `1,500`*\n"
-                    f"-# {REPLY_EMOTE} ***Double Beans Weekend**: the limit doubles on Saturday and Sunday*\n"
-                    f"-# {REPLY_EMOTE} ***Thermometer**: rare {TOKEN_EMOTE} drops when the chat is busy*\n"
-                    f"3. **Brewing**: {BREW} coffee with {BEAN_EMOTE}, wait, then {SELL} it for {TOKEN_EMOTE}\n"
-                    f"-# {REPLY_EMOTE} ***Insurance**: pay a small fee so your brew can't burn*\n"
-                    f"-# {REPLY_EMOTE} ***Roasts**: {HOW} shows what every roast costs and pays*\n"
-                    f"4. **Inviting**: Friends you invite who brew and sell earn you {BEAN_EMOTE} and a {TOKEN_EMOTE} boost\n"
-                    f"-# {REPLY_EMOTE} <a:warning:1391215594430402742> ***They must join from __your__ invite link.** {HOW} shows the rewards*\n"
-                    f"5. **Tables**: Join a table at Level `{LADDER['tables'][0]}` for a shared weekly quest\n"
-                    f"-# {REPLY_EMOTE} ***Top table**: the best table of the week wins {TOKEN_EMOTE} for everyone seated*\n"
-                    f"## {PASS_EMOTE} Brawl Pass\n"
-                    f"Collect {STAMP_EMOTE} `{STAMP_GOALS['brawl_pass']}` Stamps for a **Brawl Pass**, "
-                    f"or `{STAMP_GOALS['brawl_pass_plus']}` for a **Brawl Pass Plus**. You get one Stamp for each finished order.\n"
-                ),
-                color=0xE0E828,
+            card = discord.File(
+                io.BytesIO(await asyncio.to_thread(panel_page)), "store.jpg"
             )
-            embed.set_footer(text="🔻 Clock In and Today's Order reset at midnight UTC")
             view = self.DailyPanelView(self)
-            await message.channel.send(embed=embed, view=view)
+            await message.channel.send(file=card, view=view)
             try:
                 await message.delete()
             except:
@@ -313,46 +305,19 @@ class Daily(commands.Cog):
         def __init__(self, cog: "Daily"):
             super().__init__(timeout=None)
             self.cog = cog
+            self.add_item(PanelTopicSelect())
 
         @discord.ui.button(
             label="Clock In",
             style=discord.ButtonStyle.green,
             custom_id="daily_button",
             emoji="🗓️",
+            row=1,
         )
         async def daily_button(
             self, interaction: discord.Interaction, button: discord.ui.Button
         ):
             await self.cog.process_daily(interaction)
-
-        @discord.ui.button(
-            label="Shop",
-            style=discord.ButtonStyle.blurple,
-            custom_id="store_items",
-            emoji=SHOP_EMOTE,
-        )
-        async def store_items(
-            self, interaction: discord.Interaction, button: discord.ui.Button
-        ):
-            await interaction.response.defer(ephemeral=True)
-            view, file = await open_shop(interaction)
-            view.message = await interaction.followup.send(
-                file=file, view=view, ephemeral=True
-            )
-
-        @discord.ui.button(
-            label="How does this work",
-            style=discord.ButtonStyle.grey,
-            custom_id="daily_how",
-        )
-        async def how(
-            self, interaction: discord.Interaction, button: discord.ui.Button
-        ):
-            from brawl.Currency.how import HowView, page_file
-
-            await interaction.response.send_message(
-                file=await page_file("start"), view=HowView("start"), ephemeral=True
-            )
 
     class InformationView(View):
         def __init__(self, cog: "Daily"):

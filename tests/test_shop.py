@@ -47,7 +47,7 @@ def test_buy_rejects_an_item_out_of_stock(cafe):
 
 def test_buy_rejects_an_unknown_item(cafe):
     reply = buy(cafe, "Boat", [["Nitro", "A month", 3000, "Beans", True, 2]])
-    assert "not found" in text(reply)
+    assert "no item called `Boat`" in text(reply)
     assert u_balance(USER).get() == {"Beans": 5000, "Tokens": 10}
 
 
@@ -209,3 +209,41 @@ def test_an_item_in_the_bag_is_marked_and_left_off_the_buy_menu(cafe):
         view.lay_out()
         assert "Sell Alarm" not in options(view)
     assert [component["type"] for component in view.to_components()] == [1, 1, 1, 1]
+
+
+def queued(cafe, item, process=None):
+    """Runs one purchase through the queue, as /buy and the shop menu do."""
+    from brawl.Currency import shop
+
+    interaction = cafe.interaction(USER)
+    interaction.response.send_message = AsyncMock()
+    interaction.client.get_cog = cafe.cogs.get
+    if process:
+        cafe.cogs["Shop"]._process_purchase = process
+
+    async def run():
+        request = await shop.order(interaction, item)
+        await asyncio.wait_for(request.done.wait(), 5)
+
+    asyncio.run(run())
+    return interaction.edit_original_response.call_args.kwargs
+
+
+def test_a_typed_name_that_matches_nothing_points_to_the_shop_menu(cafe):
+    g_shops(MAIN_GUILD_ID).set([["Nitro", "A month", 3000, "Beans", True, 2]])
+    reply = text(queued(cafe, "stardrop"))
+    assert "no item called `stardrop`" in reply and "</shop:" in reply
+
+
+def test_a_stuck_or_broken_purchase_ends_its_waiting_note(cafe, monkeypatch):
+    from brawl.Currency import shop
+
+    async def stuck(request):
+        await asyncio.sleep(9)
+
+    async def broken(request):
+        raise KeyError("x")
+
+    monkeypatch.setattr(shop, "PURCHASE_SECONDS", 0.05)
+    for process in (stuck, broken):
+        assert "did not go through" in text(queued(cafe, "Nitro", process))

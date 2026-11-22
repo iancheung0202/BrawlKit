@@ -90,8 +90,20 @@ def test_only_admins_post_the_store_panel(cafe):
 
     assert not typed(False).called
     panel = typed(True)
-    text = panel.call_args.kwargs["embed"].description
-    assert "Clock In" in text and len(text) < 4096
+    sent = panel.call_args.kwargs
+    assert sent["file"].filename == "store.jpg" and "embed" not in sent
+    clock_in, menu = sorted(sent["view"].children, key=lambda item: -item.row)
+    assert clock_in.custom_id == "daily_button" and clock_in.emoji
+    topics = [option.value for option in menu.options]
+    assert "start" not in topics and "brewing" in topics
+
+    interaction = MagicMock()
+    interaction.response.send_message = AsyncMock()
+    interaction.message.edit = AsyncMock()
+    menu._values = ["brewing"]
+    asyncio.run(menu.callback(interaction))
+    opened = interaction.response.send_message.call_args.kwargs
+    assert opened["ephemeral"] and opened["file"].filename == "brewing.jpg"
 
 
 def test_clocking_in_answers_with_a_card(cafe, monkeypatch):
