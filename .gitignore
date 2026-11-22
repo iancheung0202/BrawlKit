@@ -1,5 +1,13 @@
 *.json
-assets/
+assets/*
+!assets/bg/
+!assets/items/
+!assets/kit/
+!assets/brewing.png
+!assets/empty.png
+!assets/ready.png
+!assets/DefaultIcon.png
+!assets/LilitaOne-Regular.ttf
 __pycache__/
 .env
 *.log
