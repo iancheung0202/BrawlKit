@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from brawl.Currency.config import HOW
 from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE
 from brawl.Currency.howcard import PAGES
 from brawl.Currency.panel import notice
@@ -28,6 +29,15 @@ class TopicSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        asked = getattr(interaction.message, "interaction_metadata", None)
+        if asked and asked.user.id != interaction.user.id:
+            return await interaction.response.send_message(
+                embed=notice(
+                    f"{NO_EMOTE} This menu belongs to someone else. Use {HOW} for your own.",
+                    "bad",
+                ),
+                ephemeral=True,
+            )
         topic = self.values[0]
         await interaction.response.edit_message(
             attachments=[await page_file(topic)], view=HowView(topic)
@@ -47,22 +57,29 @@ class How(commands.Cog):
     async def cog_load(self):
         self.bot.add_view(HowView())
 
-    @app_commands.command(name="how", description="See how the cafe works, with every number")
+    @app_commands.command(
+        name="how", description="See how the cafe works, with every number"
+    )
     @app_commands.describe(topic="The page to open")
     @app_commands.choices(
-        topic=[app_commands.Choice(name=name, value=key) for key, (name, _) in PAGES.items()]
+        topic=[
+            app_commands.Choice(name=name, value=key)
+            for key, (name, _) in PAGES.items()
+        ]
     )
     async def how(
         self, interaction: discord.Interaction, topic: app_commands.Choice[str] = None
     ):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
-                embed=notice(f"{NO_EMOTE} The cafe is only open in Brawl Stars Cafe.", "bad"),
+                embed=notice(
+                    f"{NO_EMOTE} The cafe is only open in Brawl Stars Cafe.", "bad"
+                ),
                 ephemeral=True,
             )
         topic = topic.value if topic else "start"
         await interaction.response.send_message(
-            file=await page_file(topic), view=HowView(topic), ephemeral=True
+            file=await page_file(topic), view=HowView(topic)
         )
 
 

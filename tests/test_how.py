@@ -36,10 +36,10 @@ def ask(cafe, topic=None):
     return sent.response.send_message.call_args.kwargs
 
 
-def test_how_opens_on_the_start_page_in_private(cafe):
+def test_how_opens_on_the_start_page_for_everyone_to_see(cafe):
     sent = ask(cafe)
     assert sent["file"].filename == "start.jpg"
-    assert sent["ephemeral"] is True
+    assert "ephemeral" not in sent
     assert "embed" not in sent
 
 
@@ -52,9 +52,24 @@ def test_the_menu_swaps_the_page_in_place(cafe):
         menu = how.HowView().children[0]
         menu._values = ["brewing"]
         sent = cafe.interaction()
+        sent.message.interaction_metadata.user.id = sent.user.id
         await menu.callback(sent)
         return sent.response.edit_message.call_args.kwargs
 
     swapped = asyncio.run(pick())
     assert swapped["attachments"][0].filename == "brewing.jpg"
     assert swapped["view"].children[0].options[4].default
+
+
+def test_the_menu_only_works_for_the_member_who_asked(cafe):
+    async def pick():
+        menu = how.HowView().children[0]
+        menu._values = ["brewing"]
+        sent = cafe.interaction(2)
+        sent.message.interaction_metadata.user.id = 1
+        await menu.callback(sent)
+        return sent
+
+    sent = asyncio.run(pick())
+    sent.response.edit_message.assert_not_called()
+    assert sent.response.send_message.call_args.kwargs["ephemeral"] is True
