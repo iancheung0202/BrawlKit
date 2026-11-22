@@ -1,38 +1,67 @@
-import discord
+import asyncio
+import io
+import math
+import os
 import random
 import time
-import math
-import io
+from datetime import datetime, timezone
+
 import aiohttp
 import asyncpg
-import asyncio
-
-from datetime import datetime, timezone
-from firebase_admin import db
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from discord.ext import commands, tasks
+import discord
 from discord import app_commands
+from discord.ext import commands, tasks
+from firebase_admin import db
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
 
 class LevelRewardInfoView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(style=discord.ButtonStyle.grey, custom_id="level_info", emoji="<:information:855023058255478794>")
-    async def level_info(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        style=discord.ButtonStyle.grey,
+        custom_id="level_info",
+        emoji="<:information:855023058255478794>",
+    )
+    async def level_info(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         embed = discord.Embed(
             title="<:information:855023058255478794> Level Rewards Information",
             description="Level Rewards are special rewards you earn as you level up in the server. Each level milestone grants you unique rewards such as beans, tokens, and exclusive roles.",
-            color=0x3498DB
+            color=0x3498DB,
         )
-        from brawl.Currency.currency import BEAN_EMOTE, TOKEN_EMOTE
-        embed.add_field(name="Level Roles", value="**5.** <@&866947914286759957>\n**10.** <@&866947962273267712>\n**20.** <@&866948001057865759>\n**35.** <@&866948039973404692>\n**50.** <@&866948080618962954>\n**69.** <@&866948113906663424>\n**90.** <@&1335747405571948635>", inline=False)
-        embed.add_field(name="Beans", value=f"You earn some {BEAN_EMOTE} beans every time you level up. Lower levels give the best-value beans, and higher levels give more beans.", inline=False)
-        embed.add_field(name="Tokens", value=f"You also earn {TOKEN_EMOTE} tokens when you reach every 10 levels. Tokens can be used our server shop to purchase exclusive items and perks.", inline=False)
+        from brawl.Currency.helper import BEAN_EMOTE, TOKEN_EMOTE
+
+        embed.add_field(
+            name="Level Roles",
+            value="**5.** <@&866947914286759957>\n**10.** <@&866947962273267712>\n**20.** <@&866948001057865759>\n**35.** <@&866948039973404692>\n**50.** <@&866948080618962954>\n**69.** <@&866948113906663424>\n**90.** <@&1335747405571948635>",
+            inline=False,
+        )
+        embed.add_field(
+            name="Beans",
+            value=f"You earn some {BEAN_EMOTE} beans every time you level up. Lower levels give the best-value beans, and higher levels give more beans.",
+            inline=False,
+        )
+        embed.add_field(
+            name="Tokens",
+            value=f"You also earn {TOKEN_EMOTE} tokens when you reach every 10 levels. Tokens can be used our server shop to purchase exclusive items and perks.",
+            inline=False,
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(style=discord.ButtonStyle.grey, disabled=True, label="Use /balance to view card", custom_id="level_card")
-    async def level_card(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        style=discord.ButtonStyle.grey,
+        disabled=True,
+        label="Use /balance to view card",
+        custom_id="level_card",
+    )
+    async def level_card(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         pass
+
 
 LEVEL_REWARDS = {
     5: 866947914286759957,
@@ -44,20 +73,22 @@ LEVEL_REWARDS = {
     90: 1335747405571948635,
 }
 
+
 def xp_for_level(level: int) -> int:
     """XP required to go from this level to the next."""
     return (100 * level) + 75
+
 
 def get_level(xp: int) -> tuple:
     """Calculate level and progress based on total XP."""
     level = 0
     xp_needed = xp_for_level(level)
-    
+
     while xp >= xp_needed:
         xp -= xp_needed
         level += 1
         xp_needed = xp_for_level(level)
-    
+
     return level, xp, xp_needed
 
 
@@ -72,39 +103,48 @@ class Leveling(commands.Cog):
 
     async def create_pool(self):
         try:
-            self.pool = await asyncpg.create_pool(
-                database="db",
-                user="ian",
-                password="Ian.1402000202",
-                host="localhost",
-            )
+            self.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"])
         except Exception as e:
             print(f"Failed to create DB pool: {e}")
 
-    async def add_xp(self, user_id: int, guild_id: int, xp_amount: int, message: discord.Message = None, booster: bool = False, ultra: bool = False) -> None:
-        from brawl.Currency.currency import BEAN_EMOTE, TOKEN_EMOTE, REPLY_EMOTE
+    async def add_xp(
+        self,
+        user_id: int,
+        guild_id: int,
+        xp_amount: int,
+        message: discord.Message = None,
+        booster: bool = False,
+        ultra: bool = False,
+    ) -> None:
+        from brawl.Currency.helper import BEAN_EMOTE, REPLY_EMOTE, TOKEN_EMOTE
+
         """Add XP to a user and update their level."""
         if not self.pool:
             return
 
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("SELECT xp, level FROM levels WHERE id = $1 AND guild = $2", str(user_id), str(guild_id))
-            
+            row = await conn.fetchrow(
+                "SELECT xp, level FROM levels WHERE id = $1 AND guild = $2",
+                str(user_id),
+                str(guild_id),
+            )
+
             if row:
-                total_xp = row['xp']
-                current_level = row['level']
+                total_xp = row["xp"]
+                current_level = row["level"]
             else:
                 total_xp = 0
                 current_level = 0
-            
+
             total_xp += xp_amount
             new_level, _, _ = get_level(total_xp)
-            
+
             if message:
                 username = message.author.name
                 avatar = str(message.author.display_avatar.url)
                 last_channel = str(message.channel.id)
-                await conn.execute("""
+                await conn.execute(
+                    """
                     INSERT INTO levels (id, guild, xp, level, messages, username, avatar, lastChannel)
                     VALUES ($1, $2, $3, $4, 1, $5, $6, $7)
                     ON CONFLICT (id, guild) DO UPDATE SET
@@ -114,28 +154,44 @@ class Leveling(commands.Cog):
                         username = $5,
                         avatar = $6,
                         lastChannel = $7
-                """, str(user_id), str(guild_id), total_xp, new_level, username, avatar, last_channel)
+                """,
+                    str(user_id),
+                    str(guild_id),
+                    total_xp,
+                    new_level,
+                    username,
+                    avatar,
+                    last_channel,
+                )
             else:
-                 await conn.execute("""
+                await conn.execute(
+                    """
                     INSERT INTO levels (id, guild, xp, level, messages, username, avatar, lastChannel)
                     VALUES ($1, $2, $3, $4, 1, '', '', '')
                     ON CONFLICT (id, guild) DO UPDATE SET
                         xp = $3,
                         level = $4
-                """, str(user_id), str(guild_id), total_xp, new_level)
+                """,
+                    str(user_id),
+                    str(guild_id),
+                    total_xp,
+                    new_level,
+                )
 
             if new_level > current_level:
-                assigned_roles = await self.assign_level_roles(user_id, guild_id, current_level, new_level)
+                assigned_roles = await self.assign_level_roles(
+                    user_id, guild_id, current_level, new_level
+                )
                 if message:
                     beans_earned = 200 + int(50 * math.log(new_level))
                     tokens_earned = new_level // 10 if new_level % 10 == 0 else 0
-                    
+
                     currency_cog = self.bot.get_cog("CurrencySystem")
                     if currency_cog:
                         await currency_cog.add_beans(str(user_id), beans_earned)
                         if tokens_earned > 0:
                             await currency_cog.add_tokens(str(user_id), tokens_earned)
-                    
+
                     role_msg = ""
                     if assigned_roles:
                         role_names = [f"`{r.name}`" for r in assigned_roles]
@@ -149,20 +205,29 @@ class Leveling(commands.Cog):
                         emoji = "<a:TrophyThumbsUp:1394194270617079859>"
                     else:
                         emoji = "<a:SpikeWin:1391625613273727137>"
-                    
+
                     final_msg = f"{emoji} {msg_content} \n{REPLY_EMOTE} You also earned {BEAN_EMOTE} `{beans_earned}`{' and ' + TOKEN_EMOTE + f' `{tokens_earned}`' if tokens_earned > 0 else ''}!"
-                    
+
                     try:
-                        await message.channel.send(embed=discord.Embed(description=final_msg, color=discord.Color.random()), view=LevelRewardInfoView() if new_level <= 20 else None)
+                        await message.channel.send(
+                            embed=discord.Embed(
+                                description=final_msg, color=discord.Color.random()
+                            ),
+                            view=LevelRewardInfoView() if new_level <= 20 else None,
+                        )
                     except:
                         pass
-    
-    async def assign_level_roles(self, user_id: int, guild_id: int, old_level: int, new_level: int) -> list[discord.Role]:
+
+    async def assign_level_roles(
+        self, user_id: int, guild_id: int, old_level: int, new_level: int
+    ) -> list[discord.Role]:
         """Assign level roles appropriately, handling intermediate levels."""
         guild = self.bot.get_guild(guild_id)
-        if not guild: return []
+        if not guild:
+            return []
         member = guild.get_member(user_id)
-        if not member: return []
+        if not member:
+            return []
 
         assigned_roles = []
         for level, role_id in LEVEL_REWARDS.items():
@@ -175,17 +240,25 @@ class Leveling(commands.Cog):
                     except:
                         pass
         return assigned_roles
-    
+
     async def validate_user_level_role(self, user_id: int, guild_id: int) -> None:
         """Validate and correct a user's level role based on their current level."""
         guild = self.bot.get_guild(guild_id)
-        if not guild: return
+        if not guild:
+            return
         member = guild.get_member(user_id)
-        if not member: return
-        
-        if not self.pool: return
-        level = await self.pool.fetchval("SELECT level FROM levels WHERE id = $1 AND guild = $2", str(user_id), str(guild_id))
-        if level is None: return
+        if not member:
+            return
+
+        if not self.pool:
+            return
+        level = await self.pool.fetchval(
+            "SELECT level FROM levels WHERE id = $1 AND guild = $2",
+            str(user_id),
+            str(guild_id),
+        )
+        if level is None:
+            return
 
         for req_level, role_id in LEVEL_REWARDS.items():
             role = guild.get_role(role_id)
@@ -197,21 +270,23 @@ class Leveling(commands.Cog):
                     if role in member.roles:
                         await member.remove_roles(role)
 
-
-    
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot or not message.guild or message.guild.id != 791534106919305226:
+        if (
+            message.author.bot
+            or not message.guild
+            or message.guild.id != 791534106919305226
+        ):
             return
-        
+
         user_id = message.author.id
         guild_id = message.guild.id
         key = (guild_id, user_id)
-        
+
         current_time = time.time()
         if key in self.cooldowns and current_time - self.cooldowns[key] < 60:
             return
-        
+
         xp_gain = random.randint(15, 40)
 
         booster = False
@@ -219,18 +294,28 @@ class Leveling(commands.Cog):
         if booster_role in message.author.roles:
             xp_gain *= 2
             booster = True
-        
+
         ultra = False
         ultra_role = message.guild.get_role(1457507581227700374)
         if ultra_role and ultra_role in message.author.roles:
             xp_gain *= 10
             ultra = True
 
-        await self.add_xp(user_id, guild_id, xp_gain, message, booster=booster, ultra=ultra)
-        
+        await self.add_xp(
+            user_id, guild_id, xp_gain, message, booster=booster, ultra=ultra
+        )
+
         self.cooldowns[key] = current_time
 
-    async def generate_rank_card(self, user: discord.Member, xp: int, level: int, current_xp: int, xp_needed: int, rank: int) -> discord.File:
+    async def generate_rank_card(
+        self,
+        user: discord.Member,
+        xp: int,
+        level: int,
+        current_xp: int,
+        xp_needed: int,
+        rank: int,
+    ) -> discord.File:
         WIDTH, HEIGHT = 900, 250
         BG = (34, 34, 38)
         img = Image.new("RGB", (WIDTH, HEIGHT), BG)
@@ -261,15 +346,17 @@ class Leveling(commands.Cog):
             return ImageFont.load_default()
 
         bold_candidates = [
-            "/root/Vanity/assets/LilitaOne-Regular.ttf",
-            "arialbd.ttf", "Arial Bold.ttf",
+            "assets/LilitaOne-Regular.ttf",
+            "arialbd.ttf",
+            "Arial Bold.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         ]
         regular_candidates = [
-            "arial.ttf", "Arial.ttf",
+            "arial.ttf",
+            "Arial.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         ]
 
         LABEL_SIZE = 18
@@ -291,16 +378,30 @@ class Leveling(commands.Cog):
             async with aiohttp.ClientSession() as session:
                 async with session.get(avatar_url) as resp:
                     avatar_bytes = await resp.read()
-            avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA").resize((AVATAR_SIZE, AVATAR_SIZE))
+            avatar = (
+                Image.open(io.BytesIO(avatar_bytes))
+                .convert("RGBA")
+                .resize((AVATAR_SIZE, AVATAR_SIZE))
+            )
             mask = Image.new("L", (AVATAR_SIZE, AVATAR_SIZE), 0)
             mask_draw = ImageDraw.Draw(mask)
             mask_draw.ellipse((0, 0, AVATAR_SIZE, AVATAR_SIZE), fill=255)
             img.paste(avatar, (AVATAR_X, AVATAR_Y), mask)
         except Exception:
-            draw.ellipse((AVATAR_X, AVATAR_Y, AVATAR_X + AVATAR_SIZE, AVATAR_Y + AVATAR_SIZE),
-                         fill=(80, 80, 80))
-            draw.ellipse((AVATAR_X - 3, AVATAR_Y - 3, AVATAR_X + AVATAR_SIZE + 3, AVATAR_Y + AVATAR_SIZE + 3),
-                         outline=(255, 140, 0), width=4)
+            draw.ellipse(
+                (AVATAR_X, AVATAR_Y, AVATAR_X + AVATAR_SIZE, AVATAR_Y + AVATAR_SIZE),
+                fill=(80, 80, 80),
+            )
+            draw.ellipse(
+                (
+                    AVATAR_X - 3,
+                    AVATAR_Y - 3,
+                    AVATAR_X + AVATAR_SIZE + 3,
+                    AVATAR_Y + AVATAR_SIZE + 3,
+                ),
+                outline=(255, 140, 0),
+                width=4,
+            )
 
         badge_size = 80
         badge_gap = 20
@@ -318,7 +419,11 @@ class Leveling(commands.Cog):
                 async with aiohttp.ClientSession() as session:
                     async with session.get(badge_url) as resp:
                         badge_bytes = await resp.read()
-                badge_img = Image.open(io.BytesIO(badge_bytes)).convert("RGBA").resize((badge_size, badge_size))
+                badge_img = (
+                    Image.open(io.BytesIO(badge_bytes))
+                    .convert("RGBA")
+                    .resize((badge_size, badge_size))
+                )
                 img.paste(badge_img, (badge_x, badge_y), badge_img)
                 badge_x += badge_size + badge_gap
             except Exception:
@@ -339,12 +444,14 @@ class Leveling(commands.Cog):
         safe_xp_needed = max(1, int(xp_needed))
         current_xp_str = format_number(int(current_xp))
         rest_xp_str = f" / {format_number(safe_xp_needed)} XP"
-        xp_width_total = draw.textlength(current_xp_str, font=xp_font) + draw.textlength(rest_xp_str, font=xp_font)
+        xp_width_total = draw.textlength(
+            current_xp_str, font=xp_font
+        ) + draw.textlength(rest_xp_str, font=xp_font)
 
         username_text = "@" + str(user.name)
         username_font = None
         available_for_username = bar_width - xp_width_total - 20
-        
+
         for size in range(USERNAME_MAX, USERNAME_MIN - 1, -1):
             f = try_load_font(bold_candidates, size)
             if draw.textlength(username_text, font=f) <= available_for_username:
@@ -356,9 +463,17 @@ class Leveling(commands.Cog):
             username_font = try_load_font(bold_candidates, chosen_username_size)
         username_x = bar_x
         username_y = bar_y - chosen_username_size - 26
-        while draw.textlength(username_text, font=username_font) > available_for_username and len(username_text) > 3:
+        while (
+            draw.textlength(username_text, font=username_font) > available_for_username
+            and len(username_text) > 3
+        ):
             username_text = username_text[:-4] + "..."
-        draw.text((username_x, username_y), username_text, font=username_font, fill=(255, 255, 255))
+        draw.text(
+            (username_x, username_y),
+            username_text,
+            font=username_font,
+            fill=(255, 255, 255),
+        )
 
         xp_x = bar_x + bar_width - xp_width_total
         xp_y = username_y + (chosen_username_size - XP_SMALL)
@@ -377,36 +492,63 @@ class Leveling(commands.Cog):
         level_value_w = draw.textlength(level_value, font=big_num_font)
         level_label_w = draw.textlength(level_label, font=label_font)
 
-        rank_x = WIDTH - right_margin - rank_value_w - level_value_w - padding_between - 50
+        rank_x = (
+            WIDTH - right_margin - rank_value_w - level_value_w - padding_between - 50
+        )
         rank_label_y = 26
-        draw.text((rank_x, rank_label_y), rank_label, font=label_font, fill=(200, 200, 200))
-        draw.text((rank_x, rank_label_y + LABEL_SIZE + 6), rank_value, font=big_num_font, fill=(255, 255, 255))
+        draw.text(
+            (rank_x, rank_label_y), rank_label, font=label_font, fill=(200, 200, 200)
+        )
+        draw.text(
+            (rank_x, rank_label_y + LABEL_SIZE + 6),
+            rank_value,
+            font=big_num_font,
+            fill=(255, 255, 255),
+        )
 
         level_x = rank_x + rank_value_w + padding_between
-        draw.text((level_x, rank_label_y), level_label, font=label_font, fill=(200, 200, 200))
-        draw.text((level_x, rank_label_y + LABEL_SIZE + 6), level_value, font=big_num_font, fill=fill_color)
+        draw.text(
+            (level_x, rank_label_y), level_label, font=label_font, fill=(200, 200, 200)
+        )
+        draw.text(
+            (level_x, rank_label_y + LABEL_SIZE + 6),
+            level_value,
+            font=big_num_font,
+            fill=fill_color,
+        )
 
         radius = bar_height // 2
         bg_bar_color = (60, 60, 60)
         border_color = (90, 90, 90)
-        draw.rounded_rectangle([(bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height)],
-                               radius=radius, fill=bg_bar_color)
-        draw.rounded_rectangle([(bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height)],
-                               radius=radius, outline=border_color, width=2)
+        draw.rounded_rectangle(
+            [(bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height)],
+            radius=radius,
+            fill=bg_bar_color,
+        )
+        draw.rounded_rectangle(
+            [(bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height)],
+            radius=radius,
+            outline=border_color,
+            width=2,
+        )
 
         progress = min(max(0.0, float(current_xp) / safe_xp_needed), 1.0)
         progress_width = int(bar_width * progress)
         if progress_width > 0:
-            draw.rounded_rectangle([(bar_x, bar_y), (bar_x + progress_width, bar_y + bar_height)],
-                                   radius=radius, fill=fill_color)
+            draw.rounded_rectangle(
+                [(bar_x, bar_y), (bar_x + progress_width, bar_y + bar_height)],
+                radius=radius,
+                fill=fill_color,
+            )
 
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
         return discord.File(buffer, filename="rank.png")
-    
+
 
 @app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
 class LevelingAdmin(commands.GroupCog, name="xp"):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -414,28 +556,44 @@ class LevelingAdmin(commands.GroupCog, name="xp"):
 
     @app_commands.command(name="add", description="Add XP to a user")
     @app_commands.checks.has_permissions(administrator=True)
-    @app_commands.describe(user="The user to add XP to", amount="The amount of XP to add")
-    async def xp_add(self, interaction: discord.Interaction, user: discord.Member, amount: int):
+    @app_commands.describe(
+        user="The user to add XP to", amount="The amount of XP to add"
+    )
+    async def xp_add(
+        self, interaction: discord.Interaction, user: discord.Member, amount: int
+    ):
         """Add XP to a user."""
         cog = self.bot.get_cog("Leveling")
         if cog:
             await cog.add_xp(user.id, interaction.guild.id, amount)
-            await interaction.response.send_message(f"Added {amount} XP to {user.mention}.")
+            await interaction.response.send_message(
+                f"Added {amount} XP to {user.mention}."
+            )
         else:
-            await interaction.response.send_message("Leveling system not available.", ephemeral=True)
-    
+            await interaction.response.send_message(
+                "Leveling system not available.", ephemeral=True
+            )
+
     @app_commands.command(name="remove", description="Remove XP from a user")
     @app_commands.checks.has_permissions(administrator=True)
-    @app_commands.describe(user="The user to remove XP from", amount="The amount of XP to remove")
-    async def xp_remove(self, interaction: discord.Interaction, user: discord.Member, amount: int):
+    @app_commands.describe(
+        user="The user to remove XP from", amount="The amount of XP to remove"
+    )
+    async def xp_remove(
+        self, interaction: discord.Interaction, user: discord.Member, amount: int
+    ):
         """Remove XP from a user."""
         cog = self.bot.get_cog("Leveling")
         if cog:
             await cog.add_xp(user.id, interaction.guild.id, -amount)
-            await interaction.response.send_message(f"Removed {amount} XP from {user.mention}.")
+            await interaction.response.send_message(
+                f"Removed {amount} XP from {user.mention}."
+            )
         else:
-            await interaction.response.send_message("Leveling system not available.", ephemeral=True)
-    
+            await interaction.response.send_message(
+                "Leveling system not available.", ephemeral=True
+            )
+
     @app_commands.command(name="reset", description="Reset a user's XP")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(user="The user to reset")
@@ -444,11 +602,16 @@ class LevelingAdmin(commands.GroupCog, name="xp"):
         cog = self.bot.get_cog("Leveling")
         if cog and cog.pool:
             async with cog.pool.acquire() as conn:
-                await conn.execute("DELETE FROM levels WHERE id = $1 AND guild = $2", str(user.id), str(interaction.guild.id))
+                await conn.execute(
+                    "DELETE FROM levels WHERE id = $1 AND guild = $2",
+                    str(user.id),
+                    str(interaction.guild.id),
+                )
             await interaction.response.send_message(f"Reset XP for {user.mention}.")
         else:
-            await interaction.response.send_message("Leveling system not available.", ephemeral=True)
-
+            await interaction.response.send_message(
+                "Leveling system not available.", ephemeral=True
+            )
 
 
 async def setup(bot: commands.Bot) -> None:

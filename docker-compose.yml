@@ -1,0 +1,8 @@
+services:
+  bot:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - .:/srv/BrawlKit
+      - ../Fischl/shared:/srv/Fischl/shared:ro

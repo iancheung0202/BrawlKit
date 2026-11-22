@@ -1,14 +1,23 @@
 # stampcard.py
-import discord
 import time
-from discord.ext import commands
+
+import discord
 from discord import app_commands
-from brawl.Currency.db import u_stamp_card, g_stamp_redemptions, u_daily_checkin_streaks
+from discord.ext import commands
+
+from brawl.Currency.db import g_stamp_redemptions, u_daily_checkin_streaks, u_stamp_card
 from brawl.Currency.helper import (
-    STAMP_OBJECTIVES, STAMP_PRICE_RANGES,
-    YES_EMOTE, NO_EMOTE, BEAN_EMOTE, TOKEN_EMOTE, REPLY_EMOTE,
-    MAIN_GUILD_ID, get_current_month_key
+    BEAN_EMOTE,
+    MAIN_GUILD_ID,
+    NO_EMOTE,
+    REPLY_EMOTE,
+    STAMP_OBJECTIVES,
+    STAMP_PRICE_RANGES,
+    TOKEN_EMOTE,
+    YES_EMOTE,
+    get_current_month_key,
 )
+
 
 class StampCard(commands.Cog):
     def __init__(self, bot):
@@ -17,14 +26,16 @@ class StampCard(commands.Cog):
     async def update_progress(self, user_id: int, action: str, amount: int = 1):
         """Called when a stampable action occurs."""
         data = u_stamp_card(user_id).get()
-        all_valid_objectives = set(STAMP_OBJECTIVES["brawl_pass"].keys()) | set(STAMP_OBJECTIVES["brawl_pass_plus"].keys())
+        all_valid_objectives = set(STAMP_OBJECTIVES["brawl_pass"].keys()) | set(
+            STAMP_OBJECTIVES["brawl_pass_plus"].keys()
+        )
         if action not in all_valid_objectives:
-            return 
+            return
 
         if not data:
             data = {
                 "stamps": {k: 0 for k in STAMP_OBJECTIVES["brawl_pass"].keys()},
-                "selected_at": int(time.time())
+                "selected_at": int(time.time()),
             }
 
         stamps = data.get("stamps", {})
@@ -86,23 +97,35 @@ class StampCard(commands.Cog):
             self.embed = embed
 
         @discord.ui.button(label="↻ Refresh", style=discord.ButtonStyle.grey)
-        async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        async def refresh_button(
+            self, interaction: discord.Interaction, button: discord.ui.Button
+        ):
             if interaction.user.id != self.user_id:
-                return await interaction.response.send_message("Not your stamp card.", ephemeral=True)
-            embed, _ = await self.cog.get_stamp_embed(interaction.user, interaction.guild)
+                return await interaction.response.send_message(
+                    "Not your stamp card.", ephemeral=True
+                )
+            embed, _ = await self.cog.get_stamp_embed(
+                interaction.user, interaction.guild
+            )
             self.embed = embed
             await interaction.response.edit_message(embed=embed, view=self)
 
         @discord.ui.button(label="◀ Back to Balance", style=discord.ButtonStyle.blurple)
-        async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        async def back_button(
+            self, interaction: discord.Interaction, button: discord.ui.Button
+        ):
             if interaction.user.id != self.user_id:
-                return await interaction.response.send_message("Not your stamp card.", ephemeral=True)
+                return await interaction.response.send_message(
+                    "Not your stamp card.", ephemeral=True
+                )
             # Re‑invoke the balance command
-            currency_cog = interaction.client.get_cog("CurrencySystem")
-            if currency_cog:
-                await currency_cog.balance(interaction)
+            balance_cog = interaction.client.get_cog("Balance")
+            if balance_cog:
+                await balance_cog.balance.callback(balance_cog, interaction)
             else:
-                await interaction.response.send_message("Balance system unavailable.", ephemeral=True)
+                await interaction.response.send_message(
+                    "Balance system unavailable.", ephemeral=True
+                )
 
     async def get_stamp_embed(self, user: discord.Member, guild: discord.Guild):
         """Build the embed – no interactive elements, only information."""
@@ -113,12 +136,27 @@ class StampCard(commands.Cog):
         objectives = list(STAMP_OBJECTIVES["brawl_pass"].keys())
         # Human‑readable names and emojis
         obj_info = {
-            "daily_checkins": ("Daily check-ins at <#1391361575641677956>", "<a:streak:1371651844652273694>"),
-            "brew_sells": ("Successful </sell:1396588612790784071> of non-burnt brews", "☕"),
-            "quests_completed": ("Daily/weekly/monthly quests completed", "<:quest:1490123182345293824>"),
-            "shop_purchases": ("</shop:1393376242501157009> purchases with </buy:1393376242501157010>", "<:KitBrawlPassDiamond:1394206796888932393>"),
+            "daily_checkins": (
+                "Daily check-ins at <#1391361575641677956>",
+                "<a:streak:1371651844652273694>",
+            ),
+            "brew_sells": (
+                "Successful </sell:1396588612790784071> of non-burnt brews",
+                "☕",
+            ),
+            "quests_completed": (
+                "Daily/weekly/monthly quests completed",
+                "<:quest:1490123182345293824>",
+            ),
+            "shop_purchases": (
+                "</shop:1393376242501157009> purchases with </buy:1393376242501157010>",
+                "<:KitBrawlPassDiamond:1394206796888932393>",
+            ),
             "boss_inspections": ("Boss inspections participated in chat", "👔"),
-            "thermometer_bonuses": ("</thermometer:1413211262233477272> token bonuses received", ":thermometer:")
+            "thermometer_bonuses": (
+                "</thermometer:1413211262233477272> token bonuses received",
+                ":thermometer:",
+            ),
         }
 
         # Build progress table
@@ -150,32 +188,41 @@ class StampCard(commands.Cog):
                 f"Complete these tasks to earn free Brawl Passes! There is no catch! Once you meet the requirements, use </redeem:1514483191275192474> to claim it automatically.\n"
                 f"### Your Progress\n{progress_text}"
             ),
-            color=0xF1C40F
+            color=0xF1C40F,
         )
         embed.add_field(
             name="Your Brawl Pass Price",
             value=f"-# {TOKEN_EMOTE} `{price_bp}` Tokens \n-# *(based on your daily streak)*",
-            inline=True
+            inline=True,
         )
         embed.add_field(
             name="Your Brawl Pass Plus Price",
             value=f"-# {TOKEN_EMOTE} `{price_bpp}` Tokens \n-# *(based on your daily streak)*",
-            inline=True
+            inline=True,
         )
         embed.set_footer(text=f"Server-wide redemptions this month: {used}/5")
-        return embed, price_bp   # price not used in view
+        return embed, price_bp  # price not used in view
 
     # ------------------------------------------------------------------
     # /redeem command
     # ------------------------------------------------------------------
-    @app_commands.command(name="redeem", description="Redeem your completed Stamp Card for a Brawl Pass or Brawl Pass Plus")
-    @app_commands.choices(tier=[
-        app_commands.Choice(name="Brawl Pass", value="brawl_pass"),
-        app_commands.Choice(name="Brawl Pass Plus", value="brawl_pass_plus")
-    ])
-    async def redeem(self, interaction: discord.Interaction, tier: app_commands.Choice[str]):
+    @app_commands.command(
+        name="redeem",
+        description="Redeem your completed Stamp Card for a Brawl Pass or Brawl Pass Plus",
+    )
+    @app_commands.choices(
+        tier=[
+            app_commands.Choice(name="Brawl Pass", value="brawl_pass"),
+            app_commands.Choice(name="Brawl Pass Plus", value="brawl_pass_plus"),
+        ]
+    )
+    async def redeem(
+        self, interaction: discord.Interaction, tier: app_commands.Choice[str]
+    ):
         if interaction.guild.id != MAIN_GUILD_ID:
-            return await interaction.response.send_message(f"{NO_EMOTE} Not available here.", ephemeral=True)
+            return await interaction.response.send_message(
+                f"{NO_EMOTE} Not available here.", ephemeral=True
+            )
 
         user_id = interaction.user.id
         tier_value = tier.value
@@ -187,7 +234,7 @@ class StampCard(commands.Cog):
             await interaction.response.send_message(
                 f"{NO_EMOTE} You haven't completed all stamps for **{tier.name}**.\n"
                 f"{missing_list}",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -196,7 +243,7 @@ class StampCard(commands.Cog):
         if used >= 5:
             await interaction.response.send_message(
                 f"{NO_EMOTE} The monthly redemption limit (5) has been reached. Try again next month.",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -204,14 +251,16 @@ class StampCard(commands.Cog):
         price = await self.get_user_price(user_id, tier_value)
         currency_cog = interaction.client.get_cog("CurrencySystem")
         if not currency_cog:
-            return await interaction.response.send_message("Currency system unavailable.", ephemeral=True)
+            return await interaction.response.send_message(
+                "Currency system unavailable.", ephemeral=True
+            )
 
         beans, tokens = await currency_cog.get_balance(user_id)
         if tokens < price:
             await interaction.response.send_message(
                 f"{NO_EMOTE} You need {TOKEN_EMOTE} `{price}` Tokens to redeem **{tier.name}**.\n"
                 f"Your balance: {TOKEN_EMOTE} `{tokens}`",
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -220,23 +269,27 @@ class StampCard(commands.Cog):
         await currency_cog.update_balance(user_id, tokens=new_tokens)
 
         # Reset stamp card (all stamps to 0)
-        u_stamp_card(user_id).set({
-            "stamps": {k: 0 for k in STAMP_OBJECTIVES["brawl_pass"].keys()},
-            "redeemed_at": int(time.time()),
-            "selected_at": int(time.time())
-        })
+        u_stamp_card(user_id).set(
+            {
+                "stamps": {k: 0 for k in STAMP_OBJECTIVES["brawl_pass"].keys()},
+                "redeemed_at": int(time.time()),
+                "selected_at": int(time.time()),
+            }
+        )
 
         # 5. Update monthly counter
         month_key = get_current_month_key()
         ref = g_stamp_redemptions(interaction.guild.id, month_key)
         counter_data = ref.get() or {"count": 0, "users": []}
         counter_data["count"] += 1
-        counter_data["users"].append({
-            "user_id": user_id,
-            "timestamp": int(time.time()),
-            "tier": tier_value,
-            "price": price
-        })
+        counter_data["users"].append(
+            {
+                "user_id": user_id,
+                "timestamp": int(time.time()),
+                "tier": tier_value,
+                "price": price,
+            }
+        )
         ref.set(counter_data)
 
         # 6. Success message
@@ -248,14 +301,19 @@ class StampCard(commands.Cog):
                 f"-# **Next step:** Please open a ticket in <#1390908939767648328> and provide proof of this redemption. "
                 f"Our server owner will deliver your pass."
             ),
-            color=discord.Color.green()
+            color=discord.Color.green(),
         )
-        embed.set_footer(text="Your stamp card has been reset and can start a new one immediately.")
+        embed.set_footer(
+            text="Your stamp card has been reset and can start a new one immediately."
+        )
         await interaction.response.send_message(embed=embed, ephemeral=False)
 
     @redeem.error
     async def redeem_error(self, interaction: discord.Interaction, error):
-        await interaction.response.send_message(f"An error occurred: {error}", ephemeral=True)
+        await interaction.response.send_message(
+            f"An error occurred: {error}", ephemeral=True
+        )
+
 
 async def setup(bot):
     await bot.add_cog(StampCard(bot))

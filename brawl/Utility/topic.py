@@ -1,6 +1,6 @@
-import discord
 import random
 
+import discord
 from discord import app_commands
 from discord.ext import commands
 
@@ -126,13 +126,12 @@ class Topic(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="topic", description="Get a random conversation topic to break the ice")
+    @app_commands.command(
+        name="topic", description="Get a random conversation topic to break the ice"
+    )
     async def topic(self, interaction: discord.Interaction) -> None:
         random_topic = random.choice(ICEBREAKERS)
-        embed = discord.Embed(
-            title=random_topic,
-            color=discord.Color.random()
-        )
+        embed = discord.Embed(title=random_topic, color=discord.Color.random())
         embed.set_footer(text="Use /topic to get another one!")
         await interaction.response.send_message(embed=embed)
 
