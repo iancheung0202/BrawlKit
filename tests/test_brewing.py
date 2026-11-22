@@ -39,13 +39,6 @@ def test_only_the_brewer_can_insure(cafe):
     assert user(cafe, "inventory/brews/active_brew/insured").get() is False
 
 
-def test_the_roast_guide_is_a_card(cafe):
-    cog = cafe.cogs["Brewing"]
-    sent = cafe.interaction(USER)
-    asyncio.run(cog.brew.callback(cog, sent, None))
-    assert sent.response.send_message.call_args.kwargs["file"].filename == "roasts.jpg"
-
-
 def sell(cafe):
     cog = cafe.cogs["Brewing"]
     sent = cafe.interaction(USER)

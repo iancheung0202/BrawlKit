@@ -12,9 +12,14 @@ from brawl.Currency.boss import start_inspection
 from brawl.Currency.card import render, roster
 from brawl.Currency.chat import ChatRewardSystem
 from brawl.Currency.config import (
+    BOSS_VISITS,
+    INVITEE_BREW_BEANS,
+    INVITEE_SELL_BEANS,
+    REFERRAL_ACCOUNT_DAYS,
     REFERRAL_BRIDGE_BEANS,
     REFERRAL_MASTER_SELLS,
     REFERRAL_TRAINEE_BEANS,
+    THERMOMETER_COOLING,
 )
 from brawl.Currency.db import (
     g_boss_inspection,
@@ -116,14 +121,10 @@ class CurrencySystem(commands.Cog):
 
             current_heat = self.thermometer_heat
             if current_heat > 0:
-                if current_heat > 100:
-                    new_heat = max(0, current_heat - 20)
-                elif current_heat > 75:
-                    new_heat = max(0, current_heat - 10)
-                elif current_heat > 50:
-                    new_heat = max(0, current_heat - 5)
-                else:
-                    new_heat = max(0, current_heat - 2)
+                lost = next(
+                    lost for above, lost in THERMOMETER_COOLING if current_heat > above
+                )
+                new_heat = max(0, current_heat - lost)
                 self.thermometer_heat = new_heat
                 g_thermometer(MAIN_GUILD_ID).set({"heat": new_heat})
 
@@ -242,7 +243,7 @@ class CurrencySystem(commands.Cog):
                 inspection_data = ref.get() or {}
 
                 if not inspection_data:
-                    drops_today = random.randint(1, 3)
+                    drops_today = random.randint(*BOSS_VISITS)
                     inspection_data = {
                         "total_drops": drops_today,
                         "completed_drops": 0,
@@ -496,7 +497,7 @@ class CurrencySystem(commands.Cog):
             return None
 
         account_age = (datetime.now(timezone.utc) - invitee.created_at).days
-        if account_age < 14:
+        if account_age < REFERRAL_ACCOUNT_DAYS:
             return None
 
         current_month = get_current_month_key()
@@ -517,7 +518,7 @@ class CurrencySystem(commands.Cog):
         ref_mapping.set(mapping)
 
         if event_type == "brew":
-            beans_earned = 150
+            beans_earned = INVITEE_BREW_BEANS
             message_invitee = f"🎉 **Welcome bonus!** You earned a bonus {BEAN_EMOTE} **{beans_earned} Beans** for your first brew!"
             message_inviter = f"☕ Your invitee {invitee.mention} **brewed** their first coffee and earned a welcome bonus!"
             await self.log_referral_milestone(
@@ -525,7 +526,7 @@ class CurrencySystem(commands.Cog):
                 "Brew Welcome Bonus",
             )
         else:
-            beans_earned = 500
+            beans_earned = INVITEE_SELL_BEANS
             message_invitee = f"🎉 **Welcome bonus!** You earned a bonus {BEAN_EMOTE} **{beans_earned} Beans** for your first sale!"
             message_inviter = f"☕ Your invitee {invitee.mention} **sold** their first coffee and earned a welcome bonus!"
             await self.log_referral_milestone(
@@ -563,7 +564,7 @@ class CurrencySystem(commands.Cog):
             return None, None
 
         account_age = (datetime.now(timezone.utc) - invitee.created_at).days
-        if account_age < 14:
+        if account_age < REFERRAL_ACCOUNT_DAYS:
             return None, None
 
         ref_history = g_member_history(interaction.guild.id, invitee.id)

@@ -28,7 +28,7 @@ from brawl.Currency.db import (
     u_star_drops,
     u_star_drops_pending,
 )
-from brawl.Currency.dropcard import draw_mega_box, draw_rates, draw_star_drop
+from brawl.Currency.dropcard import draw_mega_box, draw_star_drop
 from brawl.Currency.helper import (
     MAIN_GUILD_ID,
     MEGA_BOX_EMOTE,
@@ -498,17 +498,6 @@ class Gacha(commands.Cog):
         await view.reveal(interaction.guild.id)
         view.refresh()
         await self.send(interaction, view)
-
-    @app_commands.command(
-        name="rates", description="See what Star Drops and Mega Boxes can give"
-    )
-    async def rates(self, interaction: discord.Interaction):
-        await interaction.response.send_message(
-            file=await render(
-                draw_rates, background(interaction.user.id), name="rates"
-            ),
-            ephemeral=True,
-        )
 
 
 async def setup(bot):

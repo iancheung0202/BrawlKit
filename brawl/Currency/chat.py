@@ -7,6 +7,17 @@ from difflib import SequenceMatcher
 
 from brawl.Currency import heat
 from brawl.Currency.card import render
+from brawl.Currency.config import (
+    CHAT_BOOST_MULTIPLIER,
+    CHAT_BOOSTED_REWARD,
+    CHAT_LIMITS,
+    CHAT_MESSAGES,
+    CHAT_REWARD,
+    CHAT_ULTRA_MULTIPLIER,
+    CHAT_WEEKEND_MULTIPLIER,
+    THERMOMETER_MAX,
+    THERMOMETER_MESSAGE_HEAT,
+)
 from brawl.Currency.db import g_thermometer, u_daily_chat_earnings
 from brawl.Currency.helper import (
     BEAN_EMOTE,
@@ -25,16 +36,16 @@ from brawl.Currency.stationcard import draw_token_drop
 
 def chat_limit(member, effects):
     """How many Beans this member can earn from chat today."""
-    limit = 1000
+    limit = CHAT_LIMITS["member"]
     if member.guild.premium_subscriber_role in member.roles:
-        limit = 1500
+        limit = CHAT_LIMITS["booster"]
     ultra = member.guild.get_role(ULTRA_TIER_ROLE_ID)
     if ultra and ultra in member.roles:
-        limit = 5000
+        limit = CHAT_LIMITS["ultra"]
     if datetime.now(timezone.utc).weekday() >= 5:
-        limit *= 2
+        limit *= CHAT_WEEKEND_MULTIPLIER
     if "chat_boost" in effects:
-        limit *= 3
+        limit *= CHAT_BOOST_MULTIPLIER
     return limit
 
 
@@ -110,7 +121,7 @@ class ChatRewardSystem:
             self.user_cooldowns[user_id] = 0
             self.message_counts[user_id] = 0
             self.last_messages[user_id] = ""
-            self.daily_thresholds[user_id] = random.randint(9, 11)
+            self.daily_thresholds[user_id] = random.randint(*CHAT_MESSAGES)
 
         if user_id in self.earnings_cache:
             earnings_data = self.earnings_cache[user_id]
@@ -146,7 +157,10 @@ class ChatRewardSystem:
         if message.channel.id in MAIN_CHAT_CHANNELS and not heat.freeze(
             message.guild.id
         ):
-            cog.thermometer_heat = min(130, cog.thermometer_heat + random.randint(1, 2))
+            cog.thermometer_heat = min(
+                THERMOMETER_MAX,
+                cog.thermometer_heat + random.randint(*THERMOMETER_MESSAGE_HEAT),
+            )
             g_thermometer(message.guild.id).update({"heat": cog.thermometer_heat})
 
         level = heat.level_of(min(cog.thermometer_heat, 100))
@@ -184,23 +198,24 @@ class ChatRewardSystem:
 
         if self.message_counts[user_id] >= daily_threshold:
             self.message_counts[user_id] = 0
-            self.daily_thresholds[user_id] = random.randint(9, 11)
+            self.daily_thresholds[user_id] = random.randint(*CHAT_MESSAGES)
 
             if today_earnings < MAX_DAILY_CHAT_BEAN_LIMIT:
                 active_effects = await cog.effect_manager.get_user_active_effects(
                     user_id
                 )
 
-                min_beans = 100 if "chat_bean_boost" not in active_effects else 150
-                max_beans = 201 if "chat_bean_boost" not in active_effects else 301
-                beans_earned = random.randint(min_beans, max_beans)
+                boosted = "chat_bean_boost" in active_effects
+                beans_earned = random.randint(
+                    *(CHAT_BOOSTED_REWARD if boosted else CHAT_REWARD)
+                )
 
                 if chat_boost_active:
-                    beans_earned *= 3
+                    beans_earned *= CHAT_BOOST_MULTIPLIER
 
                 ultra_role = message.guild.get_role(ULTRA_TIER_ROLE_ID)
                 if ultra_role and ultra_role in message.author.roles:
-                    beans_earned *= 3
+                    beans_earned *= CHAT_ULTRA_MULTIPLIER
 
                 if today_earnings + beans_earned > MAX_DAILY_CHAT_BEAN_LIMIT:
                     beans_earned = MAX_DAILY_CHAT_BEAN_LIMIT - today_earnings

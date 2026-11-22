@@ -2,6 +2,7 @@ from brawl.Currency.card import render
 from brawl.Currency.config import (
     BREW,
     HOME,
+    HOW,
     SELL,
     STAMP_GOALS,
     TUTORIAL_BEANS,
@@ -19,7 +20,7 @@ STEPS = {"brew": BREW_STEP, "sell": SELL_STEP, "clock_in": CLOCK_IN}
 HINTS = {
     BREW_STEP: (
         "Step 1 of 3: brew your first coffee",
-        f"Go to <#{BOT_COMMANDS}> and type {BREW}. It is free and ready right away.",
+        f"Go to <#{BOT_COMMANDS}>, type {BREW} and pick Light Roast. It is free and ready right away.",
     ),
     SELL_STEP: (
         "Step 2 of 3: sell your coffee",
@@ -32,7 +33,7 @@ HINTS = {
     FINISHED: (
         "First shift done",
         f"Finish Today's Order to earn a {STAMP_EMOTE} Stamp. "
-        f"{STAMP_GOALS['brawl_pass']} Stamps let you redeem a Brawl Pass. {HOME} shows your progress.",
+        f"{STAMP_GOALS['brawl_pass']} Stamps let you redeem a Brawl Pass. {HOME} shows your progress and {HOW} explains the whole cafe.",
     ),
 }
 

@@ -1,4 +1,4 @@
-from brawl.Currency.config import HOME, LADDER
+from brawl.Currency.config import HOME, HOW, LADDER
 from brawl.Currency.db import u_veteran
 from brawl.Currency.helper import NO_EMOTE
 from brawl.Currency.panel import notice
@@ -19,7 +19,7 @@ def lock_line(station, level):
     need, name, _ = LADDER[station]
     return (
         f"{NO_EMOTE} {name} unlocks at Level {need}. You are Level {level}.\n"
-        f"Chat to level up. {HOME} shows your next unlock."
+        f"Chat to level up. {HOME} shows your next unlock and {HOW} explains every station."
     )
 
 

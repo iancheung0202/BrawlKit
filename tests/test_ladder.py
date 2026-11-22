@@ -121,9 +121,9 @@ def test_selling_ends_the_tutorial_for_a_member_who_already_clocked_in(cafe):
     assert u_tutorial(USER).get() == tutorial.DONE
 
 
-def test_a_new_member_brews_before_level_one_without_picking_a_roast(cafe):
+def test_a_new_member_brews_a_light_roast_before_level_one(cafe):
     u_tutorial(USER).set(tutorial.BREW_STEP)
-    interaction = run(cafe, "Brewing", "brew")
+    interaction = run(cafe, "Brewing", "brew", MagicMock(value="light"))
     assert "Step 2 of 3" in text(interaction.followup.send.call_args_list[0])
     assert u_brews(USER).child("active_brew").get()["insured"]
 

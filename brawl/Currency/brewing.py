@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View
 
-from brawl.Currency.brewcard import draw_brewing, draw_roasts, draw_sold
+from brawl.Currency.brewcard import draw_brewing, draw_sold
 from brawl.Currency.card import GOLD, GREEN, MUTED, RED, render
 from brawl.Currency.db import g_invites_member_data, sync_sell_alarm
 from brawl.Currency.helper import (
@@ -187,12 +187,12 @@ class Brewing(commands.Cog):
     )
     @app_commands.checks.cooldown(rate=1, per=10.0)
     @app_commands.describe(
-        roast_type="Type of roast (Leave blank to view rewards breakdown)"
+        roast_type="The roast to brew. /how shows what each one pays"
     )
     async def brew(
         self,
         interaction: discord.Interaction,
-        roast_type: app_commands.Choice[str] = None,
+        roast_type: app_commands.Choice[str],
     ):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
@@ -204,19 +204,8 @@ class Brewing(commands.Cog):
         training = step_of(interaction.user.id) == BREW_STEP
         if not training and await locked(interaction, "brewing"):
             return
-        if roast_type is None and not training:
-            stats = await self.economy.get_brew_stats(interaction.user.id) or {}
-            guide = {
-                "background": background(interaction.user.id),
-                "brews": stats.get("total_brews", 0),
-            }
-            return await interaction.response.send_message(
-                file=await render(draw_roasts, guide, name="roasts"),
-                ephemeral=True,
-            )
-
         user_id = interaction.user.id
-        roast = roast_type.value if roast_type else "light"
+        roast = roast_type.value
 
         active_brew = await self.economy.get_active_brew(user_id)
         if active_brew:

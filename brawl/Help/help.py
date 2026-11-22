@@ -52,12 +52,12 @@ PAGES = {
     ),
     "Cafe": (
         "☕",
-        "The cafe game, **in Brawl Stars Cafe** only. Chat to earn Beans and XP, brew Beans into Tokens, and finish Today's Order for Stamps. Start with {balance}: it shows what to do next and what your level unlocks.",
+        "The cafe game, **in Brawl Stars Cafe** only. Chat to earn Beans and XP, brew Beans into Tokens, and finish Today's Order for Stamps. Start with {balance}: it shows what to do next and what your level unlocks. {how} explains every part with the exact numbers.",
         {
-            "Start": ["balance", "leaderboard"],
+            "Start": ["balance", "how", "leaderboard"],
             "Earn": ["brew", "sell", "thermometer"],
             "Spend": ["shop", "buy", "redeem"],
-            "Open": ["stardrop", "megabox", "rates"],
+            "Open": ["stardrop", "megabox"],
             "Play": ["table", "blackjack", "coinflip"],
             "Extras": ["customize", "pin"],
             STAFF: [

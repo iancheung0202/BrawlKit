@@ -9,14 +9,21 @@ from brawl.Currency.boss import start_inspection
 from brawl.Currency.card import render
 from brawl.Currency.chat import chat_limit, chat_today
 from brawl.Currency.config import (
+    BOOSTER_DAILY_BEANS,
     BREW,
     DAILY_BEANS,
     HOME,
+    HOW,
     LADDER,
+    LUCKY_DAILY_CHANCE,
     SELL,
     STAMP_GOALS,
+    STREAK_BEAN_MULTIPLIER,
+    STREAK_DAYS,
+    STREAK_TOKENS,
     TUTORIAL_BEANS,
     TUTORIAL_TOKENS,
+    ULTRA_DAILY_BONUS,
 )
 from brawl.Currency.db import sync_shop_effects, u_daily_checkin_streaks
 from brawl.Currency.helper import (
@@ -283,9 +290,9 @@ class Daily(commands.Cog):
                     f"-# {REPLY_EMOTE} ***Thermometer**: rare {TOKEN_EMOTE} drops when the chat is busy*\n"
                     f"3. **Brewing**: {BREW} coffee with {BEAN_EMOTE}, wait, then {SELL} it for {TOKEN_EMOTE}\n"
                     f"-# {REPLY_EMOTE} ***Insurance**: pay a small fee so your brew can't burn*\n"
-                    f"-# {REPLY_EMOTE} ***Roast Guide**: use {BREW} without picking a roast to see every payout*\n"
+                    f"-# {REPLY_EMOTE} ***Roasts**: {HOW} shows what every roast costs and pays*\n"
                     f"4. **Inviting**: Friends you invite who brew and sell earn you {BEAN_EMOTE} and a {TOKEN_EMOTE} boost\n"
-                    f"-# {REPLY_EMOTE} <a:warning:1391215594430402742> ***They must join from __your__ invite link.** [See how it works](https://discord.com/channels/{MAIN_GUILD_ID}/1396565294582857738/1397799340646338673)*\n"
+                    f"-# {REPLY_EMOTE} <a:warning:1391215594430402742> ***They must join from __your__ invite link.** {HOW} shows the rewards*\n"
                     f"5. **Tables**: Join a table at Level `{LADDER['tables'][0]}` for a shared weekly quest\n"
                     f"-# {REPLY_EMOTE} ***Top table**: the best table of the week wins {TOKEN_EMOTE} for everyone seated*\n"
                     f"## {PASS_EMOTE} Brawl Pass\n"
@@ -602,7 +609,7 @@ class Daily(commands.Cog):
 
         booster_role = interaction.guild.premium_subscriber_role
         is_booster = booster_role in interaction.user.roles if booster_role else False
-        base_beans = 700 if is_booster else DAILY_BEANS
+        base_beans = BOOSTER_DAILY_BEANS if is_booster else DAILY_BEANS
 
         active_effects = await self.economy.effect_manager.get_user_active_effects(
             user_id
@@ -611,8 +618,8 @@ class Daily(commands.Cog):
         if double_daily_active:
             base_beans *= 2
 
-        is_streak_day = streak_data["current_streak"] % 7 == 0
-        random_bonus = random.random() < 0.1
+        is_streak_day = streak_data["current_streak"] % STREAK_DAYS == 0
+        random_bonus = random.random() < LUCKY_DAILY_CHANCE
 
         if random_bonus:
             base_beans *= 2
@@ -621,8 +628,8 @@ class Daily(commands.Cog):
         tokens_earned = 0
 
         if is_streak_day:
-            beans_earned *= 4
-            tokens_earned = random.randint(2, 5)
+            beans_earned *= STREAK_BEAN_MULTIPLIER
+            tokens_earned = random.randint(*STREAK_TOKENS)
 
         ultra_role = interaction.guild.get_role(ULTRA_TIER_ROLE_ID)
         if (
@@ -630,7 +637,7 @@ class Daily(commands.Cog):
             and ultra_role in interaction.user.roles
             and interaction.channel.id == SERVER_STORE
         ):
-            beans_earned += 1500
+            beans_earned += ULTRA_DAILY_BONUS
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         await self.economy.add_beans(user_id, beans_earned)

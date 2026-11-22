@@ -168,10 +168,6 @@ def chip(card, x, y, name, amount, odds="", outline=(0, 0, 0)):
     return x + w + 16
 
 
-def draw_rates(background):
-    return io.BytesIO(rates_image(background))
-
-
 @lru_cache
 def rates_image(background):
     rates, drops = STAR_DROP_RATES["rarity_rates"], STAR_DROP_RATES["drops"]

@@ -59,7 +59,7 @@ def test_a_new_member_reaches_a_pass(cafe, monkeypatch):
     asyncio.run(economy.tutorial_manager.start(MagicMock(id=USER)))
     assert u_tutorial(USER).get() == BREW_STEP
 
-    press(cafe, "Brewing", "brew")
+    press(cafe, "Brewing", "brew", MagicMock(value="light"))
     assert u_tutorial(USER).get() == SELL_STEP
     press(cafe, "Brewing", "sell")
     assert u_tutorial(USER).get() == CLOCK_IN

@@ -15,7 +15,13 @@ from firebase_admin import db
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from brawl.Currency.card import plain, render
-from brawl.Currency.config import LADDER
+from brawl.Currency.config import (
+    LADDER,
+    XP_BOOSTER_MULTIPLIER,
+    XP_COOLDOWN,
+    XP_PER_MESSAGE,
+    XP_ULTRA_MULTIPLIER,
+)
 from brawl.Currency.home import background
 from brawl.Currency.ladder import lessons
 from brawl.Currency.panel import framed, notice
@@ -84,6 +90,11 @@ LEVEL_REWARDS = {
 def xp_for_level(level: int) -> int:
     """XP required to go from this level to the next."""
     return (100 * level) + 75
+
+
+def level_up_reward(level: int) -> tuple:
+    """(Beans, Tokens) paid for reaching this level."""
+    return 200 + int(50 * math.log(level)), level // 10 if level % 10 == 0 else 0
 
 
 def get_level(xp: int) -> tuple:
@@ -201,8 +212,7 @@ class Leveling(commands.Cog):
                     user_id, guild_id, current_level, new_level
                 )
                 if message:
-                    beans_earned = 200 + int(50 * math.log(new_level))
-                    tokens_earned = new_level // 10 if new_level % 10 == 0 else 0
+                    beans_earned, tokens_earned = level_up_reward(new_level)
 
                     currency_cog = self.bot.get_cog("CurrencySystem")
                     if currency_cog:
@@ -322,21 +332,21 @@ class Leveling(commands.Cog):
         key = (guild_id, user_id)
 
         current_time = time.time()
-        if key in self.cooldowns and current_time - self.cooldowns[key] < 60:
+        if key in self.cooldowns and current_time - self.cooldowns[key] < XP_COOLDOWN:
             return
 
-        xp_gain = random.randint(15, 40)
+        xp_gain = random.randint(*XP_PER_MESSAGE)
 
         booster = False
         booster_role = message.guild.premium_subscriber_role
         if booster_role in message.author.roles:
-            xp_gain *= 2
+            xp_gain *= XP_BOOSTER_MULTIPLIER
             booster = True
 
         ultra = False
         ultra_role = message.guild.get_role(1457507581227700374)
         if ultra_role and ultra_role in message.author.roles:
-            xp_gain *= 10
+            xp_gain *= XP_ULTRA_MULTIPLIER
             ultra = True
 
         await self.add_xp(

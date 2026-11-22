@@ -21,60 +21,6 @@ def chip(card, x, y, label, odds, fill=WHITE):
     return x + w + 8
 
 
-def draw_roasts(guide):
-    """The Roast Guide: what each roast costs, how long it takes and what it pays."""
-    card = Card(700, 164 + len(ROAST_TYPES) * 122, guide["background"])
-    card.title("ROAST GUIDE", "Pick a roast with /brew. It turns Beans into Tokens.")
-    for row, (key, roast) in enumerate(ROAST_TYPES.items()):
-        y = 126 + row * 122
-        locked = key == "golden" and guide["brews"] < UNLOCK_REQ
-        card.panel(16, y, 668, 108)
-        card.tag(32, y - 12, roast["name"].upper(), TINTS[key])
-        card.icon("kit/bean", 34, y + 24, 26)
-        card.text(66, y + 22, f"{roast['cost']:,}", 24, GOLD)
-        card.text(
-            68 + card.measure(f"{roast['cost']:,}", 24) + 12,
-            y + 28,
-            f"ready in {hours(roast['time'])}",
-            16,
-            MUTED,
-            "la",
-            2,
-        )
-        note = (
-            f"{guide['brews']} / {UNLOCK_REQ} brews to unlock"
-            if locked
-            else (
-                f"Insure for {roast['insurance_cost']:,}"
-                if roast["insurance_cost"]
-                else "Never burns"
-            )
-        )
-        card.text(664, y + 28, note, 16, RED if locked else GREEN, "ra", 2)
-        if roast["insurance_cost"] and not locked:
-            card.icon("kit/bean", 640 - card.measure(note, 16), y + 26, 20)
-        x = 34
-        for reward, weight in zip(roast["payout"], roast["weights"]):
-            x = chip(
-                card,
-                x,
-                y + 64,
-                f"{reward} Token{'s' * (reward != 1)}" if reward else "Burnt",
-                f"{weight}%",
-                GOLD if reward else RED,
-            )
-    card.text(
-        350,
-        126 + len(ROAST_TYPES) * 122 - 2,
-        f"Any brew has a {PERFECT_BREW_CHANCE}% chance to be perfect and pay double.",
-        15,
-        MUTED,
-        "ma",
-        2,
-    )
-    return card.jpg()
-
-
 def draw_brewing(brew):
     """A strip for a brew that just started."""
     roast = ROAST_TYPES[brew["roast"]]
