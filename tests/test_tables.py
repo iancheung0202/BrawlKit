@@ -63,6 +63,26 @@ def test_a_kicked_member_cannot_come_straight_back(cafe):
     assert "kicked" in text(sent(run(cafe, 2, "table_seat", "Roasters")))
 
 
+def test_a_kick_with_no_user_clears_only_members_who_left(cafe, monkeypatch):
+    import discord
+
+    reserve(cafe)
+    for user in (2, 3):
+        run(cafe, user, "table_seat", "Roasters")
+    gone = discord.NotFound(AsyncMock(status=404), "gone")
+    interaction = cafe.interaction(HOST)
+    interaction.guild.get_member = lambda user: user != 3
+    interaction.guild.fetch_member = AsyncMock(side_effect=gone)
+    cog = cafe.cogs["TableSystem"]
+    asyncio.run(cog.table_kick.callback(cog, interaction))
+    assert "Cleared 1 seat" in text(sent(interaction))
+    assert g_tables(MAIN_GUILD_ID, "roasters").get()["members"] == [HOST, 2]
+    assert g_user_tables(MAIN_GUILD_ID, 3).get() is None
+    asyncio.run(cog.table_kick.callback(cog, interaction))
+    assert "still in the server" in text(sent(interaction))
+    assert "kicked" not in text(sent(run(cafe, 3, "table_seat", "Roasters")))
+
+
 def test_the_host_leaving_hands_over_or_closes(cafe):
     reserve(cafe)
     run(cafe, 2, "table_seat", "Roasters")

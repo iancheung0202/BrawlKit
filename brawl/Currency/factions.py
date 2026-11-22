@@ -838,8 +838,12 @@ class TableSystem(commands.GroupCog, name="table"):
     @app_commands.command(
         name="kick", description="Kick a user from your table (Host only)"
     )
-    @app_commands.describe(user="The user to kick")
-    async def table_kick(self, interaction: discord.Interaction, user: discord.User):
+    @app_commands.describe(
+        user="The user to kick. Leave empty to clear members who left the server"
+    )
+    async def table_kick(
+        self, interaction: discord.Interaction, user: discord.User = None
+    ):
         if interaction.guild.id != MAIN_GUILD_ID:
             return await interaction.response.send_message(
                 embed=notice(
@@ -866,6 +870,8 @@ class TableSystem(commands.GroupCog, name="table"):
                 ),
                 ephemeral=True,
             )
+        if user is None:
+            return await self.clear_left(interaction, table_data)
         if user.id == interaction.user.id:
             return await interaction.response.send_message(
                 embed=notice(f"{NO_EMOTE} You cannot kick yourself.", "bad"),
@@ -901,6 +907,38 @@ class TableSystem(commands.GroupCog, name="table"):
         await interaction.response.send_message(
             embed=notice(
                 f"{YES_EMOTE} Kicked <@{user.id}> from the table. They cannot rejoin for 14 days.",
+                "good",
+            )
+        )
+
+    async def clear_left(self, interaction, table_data):
+        """Frees the seats of members who are no longer in the server."""
+        guild = interaction.guild
+        left = []
+        for user_id in table_data.get("members", []):
+            if user_id == table_data["host"] or guild.get_member(user_id):
+                continue
+            try:
+                await guild.fetch_member(user_id)
+            except discord.NotFound:
+                left.append(user_id)
+            except discord.HTTPException:
+                pass
+        if not left:
+            return await interaction.response.send_message(
+                embed=notice("Everyone at your table is still in the server."),
+                ephemeral=True,
+            )
+        table_name = table_data["name"].lower()
+        members = [user for user in table_data["members"] if user not in left]
+        self._get_table_ref(guild.id, table_name).update({"members": members})
+        for user_id in left:
+            self._get_user_table_ref(guild.id, user_id).delete()
+        await self.update_table_formalization(guild.id, table_name)
+        seats = "1 seat" if len(left) == 1 else f"{len(left)} seats"
+        await interaction.response.send_message(
+            embed=notice(
+                f"{YES_EMOTE} Cleared {seats} held by members who left the server.",
                 "good",
             )
         )
