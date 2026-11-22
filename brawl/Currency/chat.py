@@ -248,8 +248,7 @@ class ChatRewardSystem:
                         {
                             "name": message.author.display_name,
                             "avatar": await face(message.author),
-                            "beans": done.beans,
-                            "stamp": done.stamp,
+                            **paid(done),
                         },
                         name="order",
                     )
@@ -268,7 +267,7 @@ class ChatRewardSystem:
                         "today": new_earnings,
                         "limit": MAX_DAILY_CHAT_BEAN_LIMIT,
                         "reset": reset_time,
-                        "order": order and {"beans": order.beans, "stamp": order.stamp},
+                        "order": order and paid(order),
                     },
                     name="chat",
                 )
@@ -277,6 +276,10 @@ class ChatRewardSystem:
                 await message.channel.send(message.author.mention, file=drop)
         except Exception as e:
             print(f"Failed to send bean reward message: {e}")
+
+
+def paid(order):
+    return {"beans": order.beans, "stamp": order.stamp, "redeem": order.redeem}
 
 
 async def face(member):

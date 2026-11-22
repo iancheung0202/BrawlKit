@@ -16,6 +16,7 @@ from brawl.Currency.config import (
     ORDER_TASK_LEVELS,
     QUEST_BEAN_REWARDS,
     QUEST_BONUS_BEANS,
+    STAMP_GOALS,
 )
 from brawl.Currency.db import u_daily_checkin_streaks, u_quests
 from brawl.Currency.helper import (
@@ -38,6 +39,8 @@ class Progress(list):
 
     beans = 0
     stamp = False
+    # The pass the member can redeem now, named once their Stamps reach its goal.
+    redeem = None
 
 
 ARROW = "<:fastforward:1351972114433048719>"
@@ -165,6 +168,17 @@ async def update_quest(
         beans += bonus
         messages.stamp = True
         await events.emit("order", user_id)
+        from brawl.Currency.stampcard import TIERS, stamps
+
+        have = stamps(user_id)
+        messages.redeem = next(
+            (
+                TIERS[tier]
+                for tier in reversed(list(TIERS))
+                if have >= STAMP_GOALS[tier]
+            ),
+            None,
+        )
         messages.append(
             f"<a:tada:1227425729654820885> **Order complete!** ‎ {ARROW} ‎ "
             f"{STAMP_EMOTE} **1 Stamp** and {BEAN_EMOTE} `+{bonus}`"
@@ -208,6 +222,7 @@ async def order_card(user_id, messages):
         "tasks": standing(user_id),
         "beans": getattr(messages, "beans", 0),
         "stamp": getattr(messages, "stamp", False),
+        "redeem": getattr(messages, "redeem", None),
         "background": background(user_id),
     }
     return await render(draw_order, progress, name="order")

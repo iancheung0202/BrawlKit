@@ -709,7 +709,7 @@ def order_page():
             if spot:
                 arrow(card, x - 22, y + 62, 8)
     card.icon("kit/icon_ranked_round_token", 46, top + 242, 26)
-    card.text(80, top + 246, "1 Stamp a day", 16, GREEN, "la", 2)
+    card.text(80, top + 246, "1 Stamp a day, then /redeem", 16, GREEN, "la", 2)
     month = f"{STAMP_MONTHLY_LIMIT} passes a month for the whole server"
     card.text(854, top + 246, month, 16, MUTED, "ra", 2)
     return card.jpg().getvalue()

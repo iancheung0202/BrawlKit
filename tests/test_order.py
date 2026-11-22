@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from brawl.Currency import quests, stampcard
+from brawl.Currency import quests, rewardcard, stampcard
 from brawl.Currency.config import (
     ORDER_CHAT_BEANS,
     QUEST_BEAN_REWARDS,
@@ -235,3 +235,25 @@ def test_chat_limits_stack_roles_weekends_and_boosts(monkeypatch):
     assert rewards.chat_limit(member, {"chat_boost": 1}) == 15000
     clock.now.return_value = datetime(2026, 11, 21, tzinfo=timezone.utc)
     assert rewards.chat_limit(member, {}) == 10000
+
+
+def test_the_order_that_fills_the_card_points_to_redeem(order):
+    level(order, 1)
+    u_stamp_card(USER).set({"count": STAMP_GOALS["brawl_pass"] - 1})
+    messages = do(order, brew_start=1, brew_sells=1, chat_earnings=ORDER_CHAT_BEANS)
+    assert messages.redeem == "Brawl Pass"
+    assert rewardcard.draw_paid(
+        {
+            "name": "Sam",
+            "avatar": None,
+            "beans": 600,
+            "stamp": True,
+            "redeem": "Brawl Pass",
+        }
+    )
+
+
+def test_an_order_short_of_a_pass_does_not_point_to_redeem(order):
+    level(order, 1)
+    messages = do(order, brew_start=1, brew_sells=1, chat_earnings=ORDER_CHAT_BEANS)
+    assert messages.stamp and messages.redeem is None

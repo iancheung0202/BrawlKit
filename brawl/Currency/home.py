@@ -102,7 +102,7 @@ def draw_stamps(card, stamps, level, streak):
         28,
         have / need,
         GOLD if left else GREEN,
-        f"{left} more to redeem" if left else "Ready to redeem",
+        f"{left} more to redeem" if left else "Ready, use /redeem",
     )
     card.text(46, 492, next_unlock(level), 15, MUTED, "la", 2)
     card.text(854, 492, f"{streak}-day streak", 15, MUTED, "ra", 2)
@@ -168,7 +168,11 @@ def draw_stamp_card(member):
             26,
             stamps / need,
             GREEN if left <= 0 else GOLD,
-            "Ready to redeem" if left <= 0 else f"{left} more Stamp{'s' * (left != 1)}",
+            (
+                "Ready, use /redeem"
+                if left <= 0
+                else f"{left} more Stamp{'s' * (left != 1)}"
+            ),
         )
     return card.jpg()
 

@@ -89,9 +89,9 @@ def draw_order(progress):
     card.text(
         36,
         y + 6,
-        "Order complete" if progress["stamp"] else "You earned",
+        done_label(progress) if progress["stamp"] else "You earned",
         17,
-        MUTED,
+        GREEN if progress.get("redeem") else MUTED,
         "la",
         2,
     )
@@ -142,6 +142,13 @@ def draw_shift(shift):
     return card.jpg()
 
 
+def done_label(order):
+    """What a finished order says: the pass to redeem, once there are Stamps for it."""
+    if order.get("redeem"):
+        return f"{order['redeem']} ready, use /redeem"
+    return "Order complete"
+
+
 def earned(order):
     rewards = [("kit/bean", order["beans"])]
     if order["stamp"]:
@@ -157,7 +164,10 @@ def right(card, y, rewards, size):
 
 def draw_paid(order):
     """A strip for an order that finished with no other card to carry it."""
-    card = Card.strip(small=True)
+    pass_name = order.get("redeem")
+    card = Card.strip(
+        pass_name and f"Redeem your {pass_name} with /redeem.", small=True
+    )
     card.tag(32, 12, "TODAY'S ORDER")
     card.avatar(order["avatar"], 34, 40, 52)
     card.text(100, 40, card.fit(order["name"], 16, 260), 16, MUTED, "la", 2)
@@ -191,7 +201,7 @@ def draw_chat(reward):
     card.text(604, 40, count, 17, color, "ra", 2)
     card.bar(300, 66, 304, 20, reward["today"] / reward["limit"], color)
     if order:
-        label = "Order complete" if order["stamp"] else "Order task done"
+        label = done_label(order) if order["stamp"] else "Order task done"
         card.text(36, card.foot, label, 15, GREEN if order["stamp"] else GOLD, "la", 2)
         right(card, card.foot - 2, earned(order), 15)
     return card.jpg()
