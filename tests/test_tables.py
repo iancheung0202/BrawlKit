@@ -123,3 +123,39 @@ def test_members_the_bot_has_not_loaded_are_asked_for():
     guild.query_members = AsyncMock(side_effect=query)
     assert asyncio.run(roster(guild, [1, "2", 3])) == ["Ann", "member 2", None]
     guild.query_members.assert_awaited_once_with(user_ids=[2, 3], cache=True)
+
+
+def test_a_missed_sunday_still_resets_the_week(cafe):
+    import asyncio
+    import time
+    from datetime import datetime, timezone
+
+    from brawl.Currency import factions
+    from brawl.Currency.db import g_table_reset, g_tables
+    from brawl.Currency.helper import MAIN_GUILD_ID
+
+    wednesday = datetime(2026, 11, 25, 15, 30, tzinfo=timezone.utc)
+    assert factions.week_start(wednesday) == datetime(2026, 11, 22, tzinfo=timezone.utc)
+    sunday = datetime(2026, 11, 22, 0, 0, tzinfo=timezone.utc)
+    assert factions.week_start(sunday) == sunday
+
+    cog = cafe.cogs["TableSystem"]
+    cog.bot.get_channel = lambda _: None
+    g_tables(MAIN_GUILD_ID, "owls").set(
+        {
+            "name": "Owls",
+            "emoji": "o",
+            "color": "#ffffff",
+            "formalized": True,
+            "members": [],
+            "weekly_beans": 900,
+            "user_contributions": {"1": 900},
+            "quest": {"start_time": 1, "current_tier": 5, "progress": 900},
+        }
+    )
+    assert cog.reset_due()
+    g_table_reset(MAIN_GUILD_ID).set(time.time())
+    asyncio.run(cog.reset_week())
+    table = g_tables(MAIN_GUILD_ID, "owls").get()
+    assert table["weekly_beans"] == 0 and table["quest"]["current_tier"] == 0
+    assert not cog.reset_due()

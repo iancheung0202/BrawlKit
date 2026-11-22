@@ -12,6 +12,7 @@ from brawl.Currency.card import faces, plain, render, roster
 from brawl.Currency.config import TABLE_SEATS, TABLE_SEATS_NEEDED, TABLE_WINNER_TOKENS
 from brawl.Currency.db import (
     g_table_kicks,
+    g_table_reset,
     g_tables,
     g_user_tables,
     u_table_notifications,
@@ -58,6 +59,13 @@ async def table_card(table, interaction, tag="TABLE", name="table"):
         },
         name=name,
     )
+
+
+def week_start(now=None):
+    """The Sunday 00:00 UTC that began the current table week."""
+    now = now or datetime.now(timezone.utc)
+    day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return day - timedelta(days=(now.weekday() + 1) % 7)
 
 
 class TableConfigModal(Modal, title="Configure Table"):
@@ -226,102 +234,111 @@ class TableSystem(commands.GroupCog, name="table"):
         table_ref.update({"quest/progress": current_beans})
         return None
 
+    def reset_due(self):
+        """True once a Sunday 00:00 UTC has passed since the last weekly reset."""
+        last = g_table_reset(MAIN_GUILD_ID).get()
+        if last is None:
+            tables = self._get_table_ref(MAIN_GUILD_ID).get() or {}
+            last = max(
+                ((t.get("quest") or {}).get("start_time", 0) for t in tables.values()),
+                default=0,
+            )
+        return last < week_start().timestamp()
+
     async def weekly_bean_reset(self):
         await self.bot.wait_until_ready()
         while not self.bot.is_closed():
-            now = datetime.now(timezone.utc)
-            days_until_sunday = (6 - now.weekday()) % 7
-            next_sunday = now + timedelta(days=days_until_sunday)
-            next_sunday = next_sunday.replace(hour=0, minute=0, second=0, microsecond=0)
+            try:
+                if self.reset_due():
+                    g_table_reset(MAIN_GUILD_ID).set(time.time())
+                    await self.reset_week()
+            except Exception as error:
+                print(f"Weekly table reset failed: {error}")
+            await asyncio.sleep(300)
 
-            if now.weekday() == 6 and now.hour == 0 and now.minute <= 5:
-                all_tables = self._get_table_ref(MAIN_GUILD_ID).get() or {}
+    async def reset_week(self):
+        """Pays the top table, then starts every table's week again."""
+        all_tables = self._get_table_ref(MAIN_GUILD_ID).get() or {}
 
-                formalized_tables = {
-                    name: data
-                    for name, data in all_tables.items()
-                    if data.get("formalized", False)
-                }
+        formalized_tables = {
+            name: data
+            for name, data in all_tables.items()
+            if data.get("formalized", False)
+        }
 
-                if formalized_tables:
-                    sorted_tables = sorted(
-                        formalized_tables.items(),
-                        key=lambda x: x[1].get("weekly_beans", 0),
-                        reverse=True,
-                    )
+        if formalized_tables:
+            sorted_tables = sorted(
+                formalized_tables.items(),
+                key=lambda x: x[1].get("weekly_beans", 0),
+                reverse=True,
+            )
 
-                    top_table_name, top_table_data = sorted_tables[0]
-                    top_table_members = top_table_data.get("members", [])
-                    top_table_beans = top_table_data.get("weekly_beans", 0)
+            top_table_name, top_table_data = sorted_tables[0]
+            top_table_members = top_table_data.get("members", [])
+            top_table_beans = top_table_data.get("weekly_beans", 0)
 
-                    if top_table_members and top_table_beans > 0:
-                        currency_cog = self.bot.get_cog("CurrencySystem")
+            if top_table_members and top_table_beans > 0:
+                currency_cog = self.bot.get_cog("CurrencySystem")
 
-                        if currency_cog:
-                            for member_id in top_table_members:
-                                try:
-                                    await currency_cog.add_tokens(
-                                        member_id, TABLE_WINNER_TOKENS
-                                    )
+                if currency_cog:
+                    for member_id in top_table_members:
+                        try:
+                            await currency_cog.add_tokens(
+                                member_id, TABLE_WINNER_TOKENS
+                            )
 
-                                    if await self.should_send_dm(member_id):
-                                        user = self.bot.get_user(member_id)
-                                        if user:
-                                            try:
-                                                await user.send(
-                                                    f"{top_table_data['emoji']} **{top_table_data['name']}** was the top table this week.",
-                                                    file=await render(
-                                                        draw_table_reward,
-                                                        {
-                                                            "background": background(
-                                                                member_id
-                                                            ),
-                                                            "tag": "TOP TABLE",
-                                                            "color": top_table_data[
-                                                                "color"
-                                                            ],
-                                                            "currency": "token",
-                                                            "headline": f"+{TABLE_WINNER_TOKENS} Tokens",
-                                                            "line": f"{plain(top_table_data['name'])} was the top table this week with {top_table_beans:,} Beans.",
-                                                        },
-                                                        name="table",
-                                                    ),
-                                                )
-                                            except discord.Forbidden:
-                                                pass
-                                except Exception as e:
-                                    print(f"Error rewarding user {member_id}: {e}")
+                            if await self.should_send_dm(member_id):
+                                user = self.bot.get_user(member_id)
+                                if user:
+                                    try:
+                                        await user.send(
+                                            f"{top_table_data['emoji']} **{top_table_data['name']}** was the top table this week.",
+                                            file=await render(
+                                                draw_table_reward,
+                                                {
+                                                    "background": background(member_id),
+                                                    "tag": "TOP TABLE",
+                                                    "color": top_table_data["color"],
+                                                    "currency": "token",
+                                                    "headline": f"+{TABLE_WINNER_TOKENS} Tokens",
+                                                    "line": f"{plain(top_table_data['name'])} was the top table this week with {top_table_beans:,} Beans.",
+                                                },
+                                                name="table",
+                                            ),
+                                        )
+                                    except discord.Forbidden:
+                                        pass
+                        except Exception as e:
+                            print(f"Error rewarding user {member_id}: {e}")
 
-                            channel = self.bot.get_channel(1400797909976612884)
-                            if channel:
-                                log_embed = discord.Embed(
-                                    title="<a:tada:1227425729654820885> Weekly Top Table Rewards Distributed",
-                                    description=(
-                                        f"**Table:** {top_table_data['emoji']} {top_table_data['name']}\n"
-                                        f"**Weekly Beans:** {BEAN_EMOTE} {top_table_beans:,}\n"
-                                        f"**Members Rewarded:** {len(top_table_members)}\n"
-                                        f"**Reward:** {TABLE_WINNER_TOKENS} {TOKEN_EMOTE} Tokens per member"
-                                    ),
-                                    color=discord.Color.gold(),
-                                )
-                                await channel.send(embed=log_embed)
-
-                for table_name in all_tables:
-                    table_ref = self._get_table_ref(MAIN_GUILD_ID, table_name)
-                    table_ref.update({"weekly_beans": 0, "user_contributions": {}})
-                    self.initialize_table_quest(table_ref)
-
-                channel = self.bot.get_channel(1400797909976612884)
-                if channel:
-                    await channel.send(
-                        embed=discord.Embed(
-                            title="🔄 Weekly Table Bean Reset",
-                            description="All table bean contributions have been reset.",
-                            color=discord.Color.green(),
+                    channel = self.bot.get_channel(1400797909976612884)
+                    if channel:
+                        log_embed = discord.Embed(
+                            title="<a:tada:1227425729654820885> Weekly Top Table Rewards Distributed",
+                            description=(
+                                f"**Table:** {top_table_data['emoji']} {top_table_data['name']}\n"
+                                f"**Weekly Beans:** {BEAN_EMOTE} {top_table_beans:,}\n"
+                                f"**Members Rewarded:** {len(top_table_members)}\n"
+                                f"**Reward:** {TABLE_WINNER_TOKENS} {TOKEN_EMOTE} Tokens per member"
+                            ),
+                            color=discord.Color.gold(),
                         )
-                    )
+                        await channel.send(embed=log_embed)
 
-            await asyncio.sleep(3600)
+        for table_name in all_tables:
+            table_ref = self._get_table_ref(MAIN_GUILD_ID, table_name)
+            table_ref.update({"weekly_beans": 0, "user_contributions": {}})
+            self.initialize_table_quest(table_ref)
+
+        channel = self.bot.get_channel(1400797909976612884)
+        if channel:
+            await channel.send(
+                embed=discord.Embed(
+                    title="🔄 Weekly Table Bean Reset",
+                    description="All table bean contributions have been reset.",
+                    color=discord.Color.green(),
+                )
+            )
 
     async def update_table_formalization(self, guild_id, table_name):
         table_ref = self._get_table_ref(guild_id, table_name)

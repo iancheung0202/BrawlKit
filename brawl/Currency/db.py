@@ -132,6 +132,10 @@ def g_tables(guild_id: int, table_name: str = None):
     return db.reference(f"{G_ROOT}/{guild_id}/tables")
 
 
+def g_table_reset(guild_id: int):
+    return db.reference(f"{G_ROOT}/{guild_id}/table_reset")
+
+
 def g_user_tables(guild_id: int, user_id: int = None):
     if user_id:
         return db.reference(f"{G_ROOT}/{guild_id}/user_tables/{user_id}")
