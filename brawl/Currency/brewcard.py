@@ -27,9 +27,9 @@ def draw_brewing(brew):
     card = Card.strip(brew.get("next"))
     card.tag(32, 12, "BREW STARTED", BLUE, WHITE)
     card.icon("brewing", 34, 44, 76)
-    card.text(124, 44, roast["name"], 26)
+    card.text(122, 44, roast["name"], 26)
     ready = f"Ready in {hours(brew['time'])}" if brew["time"] else "Ready now"
-    card.text(124, 82, ready, 16, MUTED, "la", 2)
+    card.text(122, 82, ready, 16, MUTED, "la", 2)
     state, color = {
         "insured": ("Insured", GREEN),
         "free": ("Insured for free", GREEN),
@@ -37,7 +37,7 @@ def draw_brewing(brew):
         "first": ("First brew, free and can't burn", GREEN),
         "open": (f"Not insured, {roast['weights'][0]}% burn chance", GOLD),
     }[brew["insurance"]]
-    card.text(124, 102, state, 16, color, "la", 2)
+    card.text(122, 102, state, 16, color, "la", 2)
     card.text(604, 46, "You paid", 13, MUTED, "ra", 2)
     paid = f"{brew['paid']:,}" if brew["paid"] else "Free"
     card.text(604, 62, paid, 22, GOLD, "ra")
@@ -63,9 +63,9 @@ def draw_sold(sale):
     )
     card.tag(32, 12, label, fill, color)
     card.icon("ready" if tokens else "empty", 34, 44, 76)
-    card.text(124, 44, roast["name"], 26)
+    card.text(122, 44, roast["name"], 26)
     for row, (line, tint) in enumerate(sale["notes"][:2]):
-        card.text(124, 82 + row * 20, card.fit(line, 16, 330), 16, tint, "la", 2)
+        card.text(122, 82 + row * 20, card.fit(line, 16, 330), 16, tint, "la", 2)
     card.text(604, 46, "You earned", 13, MUTED, "ra", 2)
     earned = f"+{tokens}"
     card.text(604, 62, earned, 26, GOLD if tokens else MUTED, "ra")

@@ -122,7 +122,7 @@ def stake(card, y, game):
     card.icon("kit/bean", card.width - 68 - card.measure(bet, 22), y + 16, 26)
     if "beans" in game:
         card.text(
-            card.width - 36, y + 54, f"{game['beans']:,} Beans left", 15, MUTED, "ra", 2
+            card.width - 36, y + 56, f"{game['beans']:,} Beans left", 15, MUTED, "ra", 2
         )
 
 
@@ -156,7 +156,7 @@ def draw_coinflip(game):
     card.text(122, 44, game["headline"], 26, TONES[game["tone"]])
     for row, line in enumerate(card.wrap(game["line"], 16, 300)):
         card.text(122, 82 + row * 20, line, 16, MUTED, "la", 2)
-    stake(card, 42, game)
+    stake(card, 46, game)
     return card.jpg()
 
 

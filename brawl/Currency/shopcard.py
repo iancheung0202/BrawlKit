@@ -231,15 +231,15 @@ def draw_purchase(sale):
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "PURCHASED", GREEN, BLACK)
     card.icon(sale["icon"], 34, 46, 68)
-    card.text(120, 44, card.fit(sale["name"], 26, 300), 26)
+    card.text(122, 44, card.fit(sale["name"], 26, 300), 26)
     for row, line in enumerate(card.wrap(sale["next"], 16, 300)):
-        card.text(120, 80 + row * 20, line, 16, MUTED, "la", 2)
-    card.text(604, 42, "You paid", 13, MUTED, "ra", 2)
+        card.text(122, 82 + row * 20, line, 16, MUTED, "la", 2)
+    card.text(604, 46, "You paid", 13, MUTED, "ra", 2)
     paid = f"{sale['cost']:,}"
-    card.text(604, 58, paid, 22, GOLD, "ra")
-    card.icon(f"kit/{sale['currency'][:-1]}", 572 - card.measure(paid, 22), 58, 26)
+    card.text(604, 62, paid, 22, GOLD, "ra")
+    card.icon(f"kit/{sale['currency'][:-1]}", 572 - card.measure(paid, 22), 62, 26)
     left = f"{sale[sale['currency']]:,} {sale['currency'].title()} left"
-    card.text(604, 100, left, 15, MUTED, "ra", 2)
+    card.text(604, 102, left, 15, MUTED, "ra", 2)
     return card.jpg()
 
 

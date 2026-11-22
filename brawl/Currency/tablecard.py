@@ -79,7 +79,7 @@ def draw_table_reward(reward):
     card.icon(f"kit/{reward['currency']}", 34, 46, 72)
     card.text(122, 44, reward["headline"], 24, GOLD)
     for row, line in enumerate(card.wrap(reward["line"], 15, 470)):
-        card.text(122, 80 + row * 19, line, 15, MUTED, "la", 2)
+        card.text(122, 82 + row * 19, line, 15, MUTED, "la", 2)
     return card.jpg()
 
 

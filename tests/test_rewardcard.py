@@ -62,3 +62,21 @@ def test_reward_cards_draw_for_every_state():
     cards += [rewardcard.draw_shift({**base, "step": step}) for step in range(1, 5)]
     cards += [rewardcard.draw_ready({**base, "roast": roast}) for roast in ROAST_TYPES]
     assert all(size(card)[0] > 0 for card in cards)
+
+
+def test_order_strips_draw_with_and_without_the_stamp():
+    import time
+
+    chat = {
+        "name": "Sam",
+        "avatar": None,
+        "beans": 150,
+        "boosted": False,
+        "today": 2000,
+        "limit": 2000,
+        "reset": time.time() + 60,
+    }
+    for stamp in (False, True):
+        order = {"beans": 600, "stamp": stamp}
+        assert rewardcard.draw_chat({**chat, "order": order})
+        assert rewardcard.draw_paid({"name": "Sam", "avatar": None, **order})

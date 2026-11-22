@@ -27,9 +27,8 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.ladder import unlocked
-from brawl.Currency.panel import notice
 from brawl.Currency.quests import get_next_daily_reset, update_quest
-from brawl.Currency.rewardcard import draw_chat
+from brawl.Currency.rewardcard import draw_chat, draw_paid
 from brawl.Currency.stationcard import draw_token_drop
 
 
@@ -244,16 +243,21 @@ class ChatRewardSystem:
                     chat=(today_earnings, MAX_DAILY_CHAT_BEAN_LIMIT),
                 )
                 if done:
-                    await message.channel.send(embed=notice("\n".join(done)))
+                    strip = await render(
+                        draw_paid,
+                        {
+                            "name": message.author.display_name,
+                            "avatar": await face(message.author),
+                            "beans": done.beans,
+                            "stamp": done.stamp,
+                        },
+                        name="order",
+                    )
+                    await message.channel.send(file=strip)
 
         try:
             if reward_triggered:
-                try:
-                    avatar = await message.author.display_avatar.replace(
-                        size=128
-                    ).read()
-                except Exception:
-                    avatar = None
+                avatar = await face(message.author)
                 strip = await render(
                     draw_chat,
                     {
@@ -264,17 +268,22 @@ class ChatRewardSystem:
                         "today": new_earnings,
                         "limit": MAX_DAILY_CHAT_BEAN_LIMIT,
                         "reset": reset_time,
+                        "order": order and {"beans": order.beans, "stamp": order.stamp},
                     },
                     name="chat",
                 )
-                await message.channel.send(
-                    embed=notice("\n".join(order)) if order else None,
-                    files=[strip, drop] if drop else [strip],
-                )
+                await message.channel.send(files=[strip, drop] if drop else [strip])
             elif drop:
                 await message.channel.send(message.author.mention, file=drop)
         except Exception as e:
             print(f"Failed to send bean reward message: {e}")
+
+
+async def face(member):
+    try:
+        return await member.display_avatar.replace(size=128).read()
+    except Exception:
+        return None
 
 
 async def setup(bot):

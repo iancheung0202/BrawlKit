@@ -142,27 +142,58 @@ def draw_shift(shift):
     return card.jpg()
 
 
-def draw_chat(reward):
-    """A short strip posted when chatting pays Beans: the gain and today's limit."""
-    card = Card(640, 122)
-    card.panel(16, 24, 608, 82)
-    card.tag(32, 12, "CHAT BEANS", GOLD)
-    card.avatar(reward["avatar"], 34, 40, 52)
-    card.text(100, 40, card.fit(reward["name"], 16, 180), 16, MUTED, "la", 2)
-    gain = f"+{reward['beans']:,}"
-    card.icon("kit/bean", 98, 62, 30)
-    card.text(134, 62, gain, 26, GOLD)
-    if reward["boosted"]:
-        card.icon("items/effect", 142 + card.measure(gain, 26), 64, 26)
-    left = max(0, int(reward["reset"] - time.time())) // 60
-    card.icon("kit/icon_clock", 300, 44, 15)
-    card.text(322, 42, f"{left // 60}h {left % 60}m", 14, GREY, "la", 2)
-    done = reward["today"] >= reward["limit"]
-    count = f"{reward['today']:,} / {reward['limit']:,}"
-    card.text(604, 40, count, 17, GREEN if done else GOLD, "ra", 2)
-    card.bar(
-        300, 66, 304, 20, reward["today"] / reward["limit"], GREEN if done else GOLD
+def earned(order):
+    rewards = [("kit/bean", order["beans"])]
+    if order["stamp"]:
+        rewards.append(("kit/icon_ranked_round_token", 1))
+    return rewards
+
+
+def right(card, y, rewards, size):
+    """Rewards ending at the right edge of a strip."""
+    width = sum(size + 28 + card.measure(f"+{n:,}", size) for _, n in rewards) - 18
+    gains(card, 604 - width, y, rewards, size)
+
+
+def draw_paid(order):
+    """A strip for an order that finished with no other card to carry it."""
+    card = Card.strip()
+    card.tag(32, 12, "TODAY'S ORDER")
+    card.avatar(order["avatar"], 34, 44, 76)
+    done = order["stamp"]
+    card.text(
+        122, 44, "Order complete" if done else "Task done", 26, GREEN if done else WHITE
     )
+    card.text(122, 82, card.fit(order["name"], 16, 260), 16, MUTED, "la", 2)
+    card.text(604, 46, "You earned", 13, MUTED, "ra", 2)
+    right(card, 62, earned(order), 22)
+    return card.jpg()
+
+
+def draw_chat(reward):
+    """A strip posted when chatting pays Beans: the gain and today's limit."""
+    order = reward.get("order")
+    card = Card.strip(foot=bool(order))
+    card.tag(32, 12, "CHAT BEANS", GOLD)
+    card.avatar(reward["avatar"], 34, 44, 76)
+    gain = f"+{reward['beans']:,}"
+    card.icon("kit/bean", 122, 46, 30)
+    card.text(158, 44, gain, 26, GOLD)
+    if reward["boosted"]:
+        card.icon("items/effect", 166 + card.measure(gain, 26), 46, 28)
+    card.text(122, 82, card.fit(reward["name"], 16, 190), 16, MUTED, "la", 2)
+    done = reward["today"] >= reward["limit"]
+    color = GREEN if done else GOLD
+    left = max(0, int(reward["reset"] - time.time())) // 60
+    card.icon("kit/icon_clock", 330, 48, 15)
+    card.text(352, 46, f"{left // 60}h {left % 60}m", 13, MUTED, "la", 2)
+    count = f"{reward['today']:,} / {reward['limit']:,}"
+    card.text(604, 44, count, 17, color, "ra", 2)
+    card.bar(330, 72, 274, 22, reward["today"] / reward["limit"], color)
+    if order:
+        label = "Order complete" if order["stamp"] else "Order task done"
+        card.text(36, 138, label, 15, GREEN if order["stamp"] else GOLD, "la", 2)
+        right(card, 136, earned(order), 15)
     return card.jpg()
 
 
@@ -172,14 +203,13 @@ def draw_level_up(member):
     card.panel(16, 24, 608, 110)
     card.tag(32, 12, "LEVEL UP", BLUE, WHITE)
     card.avatar(member["avatar"], 34, 44, 76)
-    card.text(126, 42, card.fit(member["name"], 20, 280), 20, MUTED, "la", 2)
+    card.text(122, 42, card.fit(member["name"], 20, 280), 20, MUTED, "la", 2)
     card.icon("kit/icon_xp", 122, 68, 44)
     card.text(172, 70, f"Level {member['level']}", 32, GOLD)
     rewards = [("kit/bean", member["beans"])]
     if member["tokens"]:
         rewards.append(("kit/token", member["tokens"]))
-    width = sum(50 + card.measure(f"+{amount:,}", 22) for _, amount in rewards) - 28
-    gains(card, 604 - width, 44, rewards, 22)
+    right(card, 44, rewards, 22)
     for row, (label, name) in enumerate(member["unlocks"][:2]):
         card.text(
             604, 82 + row * 20, card.fit(f"{label} {name}", 15, 230), 15, GREEN, "ra", 2
@@ -215,7 +245,7 @@ def draw_redeemed(sale):
         x -= 14
     card.text(
         604,
-        104,
+        102,
         f"Pass {sale['month']} of {sale['limit']} this month",
         14,
         MUTED,
@@ -231,8 +261,8 @@ def draw_ready(brew):
     card = Card.strip(brew.get("next"))
     card.tag(32, 12, "BREW READY", GREEN)
     card.icon("ready", 34, 44, 76)
-    card.text(124, 44, roast["name"], 26)
-    card.text(124, 84, "From your Sell Alarm", 17, MUTED, "la", 2)
+    card.text(122, 44, roast["name"], 26)
+    card.text(122, 82, "From your Sell Alarm", 17, MUTED, "la", 2)
     best = max(roast["payout"])
     card.text(604, 46, "Pays up to", 13, MUTED, "ra", 2)
     card.text(604, 62, f"{best}", 26, GOLD, "ra")
