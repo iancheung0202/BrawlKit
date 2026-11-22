@@ -91,11 +91,17 @@ def test_only_admins_post_the_store_panel(cafe):
     assert not typed(False).called
     panel = typed(True)
     sent = panel.call_args.kwargs
-    assert sent["file"].filename == "store.jpg" and "embed" not in sent
+    assert [file.filename for file in sent["files"]] == ["store0.png", "store1.png"]
+    start, stamps = sent["embeds"]
+    assert start.image.url == "attachment://store0.png"
+    assert stamps.image.url == "attachment://store1.png"
+    assert "Clock In" in start.description and "Brawl Pass" in stamps.description
     clock_in, menu = sorted(sent["view"].children, key=lambda item: -item.row)
-    assert clock_in.custom_id == "daily_button" and clock_in.emoji
+    assert (
+        clock_in.custom_id == "daily_button" and clock_in.emoji.name == "Cafe_calendar"
+    )
     topics = [option.value for option in menu.options]
-    assert "start" not in topics and "brewing" in topics
+    assert topics[0] == "start" and "brewing" in topics
 
     interaction = MagicMock()
     interaction.response.send_message = AsyncMock()

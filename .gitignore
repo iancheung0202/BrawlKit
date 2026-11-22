@@ -3,6 +3,7 @@ assets/*
 !assets/bg/
 !assets/items/
 !assets/kit/
+!assets/game/
 !assets/brewing.png
 !assets/empty.png
 !assets/ready.png

@@ -43,6 +43,21 @@ BOARDS = {
         None,
     ),
 }
+# In-game boards, for members who linked a Brawl Stars account: the stat ranked by
+GAME = {
+    "Trophies": ("Most trophies", "game/trophies", "trophies"),
+    "Ranked": ("Best ranked", "game/ranked", "highestRankedPoints"),
+    "Fame": ("Most Fame", "game/fame", "famePoints"),
+    "Solo wins": ("Most Solo wins", "game/solo", "soloVictories"),
+    "Duo wins": ("Most Duo wins", "game/duo", "duoVictories"),
+    "3v3 wins": ("Most 3v3 wins", "game/3v3", "3vs3Victories"),
+}
+BOARDS.update(
+    {
+        name: (title, icon, "member", icon, None)
+        for name, (title, icon, _) in GAME.items()
+    }
+)
 
 
 def ranks(member):
@@ -308,7 +323,7 @@ class Leaderboard(commands.Cog):
 
     @app_commands.command(
         name="leaderboard",
-        description="See who is on top: Beans, Tokens, Stamps, levels, tables and more",
+        description="See who is on top: Beans, Tokens, Stamps, levels, tables and in-game stats",
     )
     @app_commands.choices(
         currency=[
@@ -321,6 +336,7 @@ class Leaderboard(commands.Cog):
             app_commands.Choice(name="Levels", value="Levels"),
             app_commands.Choice(name="Stamps", value="Stamps"),
         ]
+        + [app_commands.Choice(name=f"In-game {name}", value=name) for name in GAME]
     )
     @app_commands.checks.cooldown(rate=1, per=10.0)
     @app_commands.describe(currency="Which leaderboard to view")
@@ -339,7 +355,7 @@ class Leaderboard(commands.Cog):
             int(user_id): user
             for user_id, user in (
                 (db.reference(U_ROOT).get() or {})
-                if currency in ("Beans", "Tokens", "Streaks", "Brews", "Stamps")
+                if currency in ("Beans", "Tokens", "Streaks", "Brews", "Stamps", *GAME)
                 else {}
             ).items()
             if user_id.isdigit()
@@ -424,6 +440,16 @@ class Leaderboard(commands.Cog):
                 (user_id, None, f"{stamps:,}", None)
                 for user_id, stamps in ranked(
                     lambda user: stamp_count(user.get("stamp_card") or {})
+                )
+            ]
+        elif currency in GAME:
+            stat = GAME[currency][2]
+            entries = [
+                (user_id, None, f"{amount:,}", None)
+                for user_id, amount in ranked(
+                    lambda user: ((user.get("settings") or {}).get("tag") or {})
+                    .get("stats", {})
+                    .get(stat, 0)
                 )
             ]
         elif currency == "Brews":

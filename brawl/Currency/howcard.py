@@ -212,32 +212,100 @@ def split(card, x, y, width, parts):
         at += part
 
 
+def loop():
+    """Chat to Shop in five steps, each with its one number."""
+    roasts = list(ROAST_TYPES.values())
+    tokens = [pay for roast in roasts for pay in roast["payout"] if pay]
+    return [
+        (
+            "kit/icon_chat",
+            "Chat",
+            f"every {CHAT_MESSAGES[0]} to {CHAT_MESSAGES[1]} messages",
+        ),
+        ("kit/bean", "Beans", f"+{CHAT_REWARD[0]} to +{CHAT_REWARD[1]}", GOLD),
+        (
+            "brewing",
+            "Brew",
+            f"{hours(roasts[0]['time'])} to {hours(roasts[-1]['time'])}",
+        ),
+        ("kit/token", "Tokens", f"+{min(tokens)} to +{max(tokens)}", GOLD),
+        ("kit/icon_shop", "Shop", "perks and rewards"),
+    ]
+
+
+# The store for someone new, a row a flow: (icon, name, two short lines, name colour)
+BANNER = (
+    (
+        "HOW TO START",
+        GOLD,
+        BLACK,
+        (
+            ("kit/icon_chat", "Chat", ("Talk in", "any channel"), WHITE),
+            ("kit/bean", "Beans", ("You earn these", "as you chat"), GOLD),
+            ("brewing", "Brew", ("Spend Beans", "on a coffee"), WHITE),
+            ("kit/token", "Tokens", ("Sell the coffee", "to get these"), GOLD),
+            ("kit/icon_shop", "Shop", ("Spend both on", "free rewards"), WHITE),
+        ),
+    ),
+    (
+        "STAMP CARD",
+        GREEN,
+        WHITE,
+        (
+            (
+                "kit/icon_calendar",
+                "Clock In",
+                ("Press the button", "once a day"),
+                WHITE,
+            ),
+            (
+                "kit/icon_quest",
+                "Today's Order",
+                ("Finish the tasks", "it gives you"),
+                WHITE,
+            ),
+            (
+                "kit/icon_ranked_round_token",
+                "Stamp",
+                ("You get one for", "each finished order"),
+                GREEN,
+            ),
+            (
+                "kit/icon_brawl_pass",
+                "Brawl Pass",
+                (f"Trade {STAMP_GOALS['brawl_pass']} Stamps", "for a real one"),
+                GOLD,
+            ),
+        ),
+    ),
+)
+
+
+@lru_cache
+def panel_banner(flow):
+    """One flow in plain words, as the picture under its text on the store panel."""
+    label, fill, color, steps = BANNER[flow]
+    card = Card(WIDTH, 200)
+    card.panel(2, 14, WIDTH - 4, 180)
+    card.tag(18, 2, label, fill, color)
+    gap = (WIDTH - 4) / len(steps)
+    for spot, (picture, name, lines, tint) in enumerate(steps):
+        x = 2 + gap * (spot + 0.5)
+        card.icon(picture, x - icon_width(picture, 70) / 2, 36, 70)
+        card.text(x, 112, name, 22, tint, "ma")
+        for line, words in enumerate(lines):
+            card.text(x, 142 + line * 19, words, 15, MUTED, "ma", 2)
+        if spot:
+            arrow(card, x - gap / 2, 71)
+    return card.jpg().getvalue()
+
+
 @lru_cache
 def start_page(title="HOW THE CAFE WORKS"):
     """The whole cafe on one card: the loop, what each currency buys, a day."""
     card = page(title, "Chat for Beans, brew them into Tokens, spend both.", 782)
-    roasts = list(ROAST_TYPES.values())
-    tokens = [pay for roast in roasts for pay in roast["payout"] if pay]
     section(card, 124, 162, "THE LOOP")
-    flow(
-        card,
-        146,
-        [
-            (
-                "kit/icon_chat",
-                "Chat",
-                f"every {CHAT_MESSAGES[0]} to {CHAT_MESSAGES[1]} messages",
-            ),
-            ("kit/bean", "Beans", f"+{CHAT_REWARD[0]} to +{CHAT_REWARD[1]}", GOLD),
-            (
-                "brewing",
-                "Brew",
-                f"{hours(roasts[0]['time'])} to {hours(roasts[-1]['time'])}",
-            ),
-            ("kit/token", "Tokens", f"+{min(tokens)} to +{max(tokens)}", GOLD),
-            ("kit/icon_shop", "Shop", "perks and rewards"),
-        ],
-    )
+    flow(card, 146, loop())
 
     top = 318
     section(card, top, 230, "WHAT EACH ONE IS FOR", BLUE, WHITE)
@@ -314,11 +382,6 @@ def start_page(title="HOW THE CAFE WORKS"):
     )
     card.hint("Pick a topic below for the numbers.")
     return card.jpg().getvalue()
-
-
-def panel_page():
-    """The start page under the store's name, for the panel in the store channel."""
-    return start_page("THE SERVER STORE")
 
 
 def mean(roast):

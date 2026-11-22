@@ -16,9 +16,9 @@ load_dotenv()
 from brawl.Currency.daily import ClockInView
 from brawl.Currency.levels import LevelRewardInfoView
 from brawl.Currency.staff import AcceptRejectView, StaffInfoView
+from brawl.Milestone.milestone import IconChangeView, VerificationEmbedView
 from brawl.Partnership.partnershipSystem import RequestView as PartnerRequestView
 from brawl.TeamFinder.teamFind import PanelView, RequestView
-from brawl.Verify.verify import IconChangeView, VerificationEmbedView
 
 
 def import_from_parent(module_name, path):

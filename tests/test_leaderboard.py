@@ -132,3 +132,20 @@ def test_stamps_board_counts_new_and_converted_cards(cafe):
     u_stamp_card(3).set({"stamps": {"boss_inspections": 1}})
     view = board(cafe, "Stamps").kwargs["view"]
     assert [entry[:3] for entry in view.entries] == [(2, None, "10"), (1, None, "4")]
+
+
+def test_in_game_boards_rank_linked_members_by_their_saved_stats(cafe):
+    from brawl.Currency.db import u_tag
+    from brawl.Utility.profile import keep_stats
+
+    for user, trophies in ((1, 500), (2, 90000), (ME, 20000)):
+        u_tag(user).set({"tag": f"#A{user}"})
+        keep_stats(user, {"trophies": trophies, "famePoints": 0})
+    view = board(cafe, "Trophies").kwargs["view"]
+    assert [entry[:3] for entry in view.entries] == [
+        (2, None, "90,000"),
+        (ME, None, "20,000"),
+        (1, None, "500"),
+    ]
+    assert view.board["yours"] == 2
+    assert "Nobody" in text(board(cafe, "Fame"))

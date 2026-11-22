@@ -8,8 +8,14 @@ from discord.ext import commands
 from discord.ui import Button, Modal, TextInput, View
 from firebase_admin import db
 
+from brawl.Currency.card import MUTED, render
 from brawl.Currency.db import u_tag
+from brawl.Currency.helper import MAIN_GUILD_ID, REPLY_EMOTE
+from brawl.Currency.home import background
+from brawl.Currency.panel import notice
 from brawl.Utility.api import clean_tag, get_icon, get_player, get_stats
+from brawl.Utility.playercard import draw_milestones, face
+from brawl.Utility.profile import keep_stats, linked
 from brawl.Utility.style import NO, YES
 
 ICON = "https://cdn.brawlify.com/profile-icons/regular/{}.png"
@@ -37,21 +43,72 @@ CATEGORIES = {
     "wins_duo": (f"{DUO} Duo Wins", "duoVictories"),
     "wins_3v3": (f"{TRIO} 3v3 Wins", "3vs3Victories"),
 }
+# Category: (icon and name on the milestone card)
+ROWS = {
+    "trophy": ("game/trophies", "Trophies"),
+    "ranked": ("game/ranked", "Best ranked"),
+    "fame": ("game/fame", "Fame"),
+    "wins_solo": ("game/solo", "Solo wins"),
+    "wins_duo": ("game/duo", "Duo wins"),
+    "wins_3v3": ("game/3v3", "3v3 wins"),
+}
+CONFIG = f"Brawl Milestone Roles/{MAIN_GUILD_ID}"
+LEADERBOARD = "</leaderboard:1393376242501157006>"
+MINE = "</milestone mine:1392998294732410990>"
+PROFILE = "</profile:1341939588301590551>"
 NOT_LINKED = f"{NO} You must verify and link your Brawl Stars account first."
 FAILED = f"{WARN} Something went wrong. Please try again later."
 
 
-def get_tag(user_id: int):
-    data = u_tag(user_id).get()
-    return clean_tag(data["tag"]) if data and "tag" in data else None
+async def in_cafe(interaction: discord.Interaction) -> bool:
+    """Milestone roles belong to the cafe; anywhere else gets a short refusal."""
+    if interaction.guild and interaction.guild.id == MAIN_GUILD_ID:
+        return True
+    await interaction.response.send_message(
+        embed=notice(f"{NO} Not available here.", "bad"), ephemeral=True
+    )
+    return False
 
 
-def get_config(guild_id: int) -> dict:
-    return db.reference(f"Brawl Milestone Roles/{guild_id}").get() or {}
+def get_config() -> dict:
+    return db.reference(CONFIG).get() or {}
 
 
-def set_config(guild_id: int, config: dict):
-    db.reference(f"Brawl Milestone Roles/{guild_id}").set(config)
+def set_config(config: dict):
+    db.reference(CONFIG).set(config)
+
+
+async def milestone_card(member: discord.Member, tag: str, stats: dict, label: str):
+    """Syncs a member's roles, saves their numbers, and draws where they stand."""
+    config = get_config()
+    await sync_roles(member, config, stats)
+    keep_stats(member.id, stats)
+    rows = []
+    for category, (_, stat) in CATEGORIES.items():
+        tiers = sorted(get_tiers(config, category), key=lambda tier: tier["threshold"])
+        if not tiers:
+            continue
+        value = stats.get(stat, 0)
+        held = [tier for tier in tiers if value >= tier["threshold"]]
+        role = member.guild.get_role(int(held[-1]["role_id"])) if held else None
+        icon, name = ROWS[category]
+        rows.append(
+            {
+                "icon": icon,
+                "name": name,
+                "value": value,
+                "role": role.name if role else None,
+                "color": role.color.to_rgb() if role and role.color.value else MUTED,
+                "goals": [tier["threshold"] for tier in tiers],
+            }
+        )
+    sheet = {
+        "rows": rows,
+        "player": await face(tag, stats),
+        "label": label,
+        "background": background(member.id),
+    }
+    return await render(draw_milestones, sheet, name="milestones")
 
 
 def get_tiers(config: dict, category: str) -> list:
@@ -179,7 +236,9 @@ class VerifyButton(Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        tag = get_tag(interaction.user.id)
+        if not await in_cafe(interaction):
+            return
+        tag = linked(interaction.user.id)
         if not tag:
             await interaction.response.send_modal(VerifyModal())
             return
@@ -209,8 +268,10 @@ class UpdateRolesButton(Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        if not await in_cafe(interaction):
+            return
         await interaction.response.defer(ephemeral=True, thinking=True)
-        tag = get_tag(interaction.user.id)
+        tag = linked(interaction.user.id)
         if not tag:
             await interaction.followup.send(NOT_LINKED)
             return
@@ -218,11 +279,9 @@ class UpdateRolesButton(Button):
         if not stats:
             await interaction.followup.send(FAILED)
             return
-        config = get_config(interaction.guild.id)
-        await sync_roles(interaction.user, config, stats)
-        embed = discord.Embed(title=f"Milestone roles updated! {YES}", color=COLOR)
-        add_progress(embed, config, stats)
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(
+            file=await milestone_card(interaction.user, tag, stats, "ROLES UPDATED")
+        )
 
 
 class VerificationEmbedView(View):
@@ -241,6 +300,8 @@ class IconChangeButton(Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        if not await in_cafe(interaction):
+            return
         prompt = interaction.message.embeds[0]
         tag = clean_tag(prompt.fields[0].value.split("`")[1])
         icon_id = int(re.search(r"/(\d+)\.png$", prompt.thumbnail.url).group(1))
@@ -280,8 +341,9 @@ class IconChangeButton(Button):
         )
         stats = await get_stats(tag)
         if stats:
-            config = get_config(interaction.guild.id)
+            config = get_config()
             await sync_roles(interaction.user, config, stats)
+            keep_stats(interaction.user.id, stats)
             add_progress(embed, config, stats)
         await message.edit(embed=embed)
 
@@ -302,9 +364,11 @@ class UnlinkAccountButton(Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        if not await in_cafe(interaction):
+            return
         await interaction.response.defer()
         u_tag(interaction.user.id).delete()
-        await clear_roles(interaction.user, get_config(interaction.guild.id))
+        await clear_roles(interaction.user, get_config())
         embed = discord.Embed(
             title=f"{YES} Account Unlinked",
             description="Your Brawl Stars account has been successfully unlinked.",
@@ -321,33 +385,6 @@ class UnlinkAccountView(View):
         self.add_item(UnlinkAccountButton())
 
 
-class Verify(commands.GroupCog, name="verify"):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-
-    @app_commands.command(name="embed", description="Sends the verification embed")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def verify_embed(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            description=f"# <a:brawlstars:1393743461030694962> Exclusive Self Roles!\nLink your **Brawl Stars account** with your Discord to **unlock exclusive roles** based on your {TROPHY} trophies, {RANKED} Ranked, {TRIO} victories, and even {FAME} fame!\n\n<a:pikachucool:855023776398573608> **You can flex your highest in-game achievements**! \n-# <:reply:1036792837821435976> *Use </milestone mine:1392998294732410990> to **view** the server milestones once linked.*",
-            color=COLOR,
-        )
-        embed.set_footer(
-            text="We verify by checking a temporary icon change — never your password."
-        )
-        embed.set_image(url=BANNER)
-        await interaction.channel.send(embed=embed, view=VerificationEmbedView())
-        await interaction.response.send_message(
-            f"{YES} Verification embed sent.", ephemeral=True
-        )
-
-    @verify_embed.error
-    async def verify_embed_error(
-        self, interaction: discord.Interaction, error: Exception
-    ):
-        await interaction.response.send_message(f"```{error}```", ephemeral=True)
-
-
 class MilestoneRolesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -355,6 +392,35 @@ class MilestoneRolesCog(commands.Cog):
     milestone = app_commands.Group(
         name="milestone", description="Manage Brawl Stars milestone roles"
     )
+
+    @milestone.command(name="embed", description="Post the account linking panel")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def embed(self, interaction: discord.Interaction):
+        if not await in_cafe(interaction):
+            return
+        embed = discord.Embed(
+            description=(
+                "# <a:brawlstars:1393743461030694962> Exclusive Self Roles!\n"
+                "Link your **Brawl Stars account** with your Discord to **unlock "
+                f"exclusive roles** based on your {TROPHY} trophies, {RANKED} Ranked, "
+                f"{FAME} Fame and {TRIO} wins.\n\n"
+                "<a:SpikeWin:1391625613273727137> **Flex your highest "
+                f"in-game achievements** on {LEADERBOARD}!\n"
+                f"-# {REPLY_EMOTE} *Use {MINE} to **view** the server milestones.*\n"
+                f"-# {REPLY_EMOTE} *Use {PROFILE} to see your Brawl Stars account.*"
+            ),
+            color=COLOR,
+        )
+        embed.set_footer(
+            text="We verify by checking a temporary icon change, never your password."
+        )
+        embed.set_image(url=BANNER)
+        await interaction.channel.send(embed=embed, view=VerificationEmbedView())
+        await interaction.response.send_message(f"{YES} Panel sent.", ephemeral=True)
+
+    @embed.error
+    async def embed_error(self, interaction: discord.Interaction, error: Exception):
+        await interaction.response.send_message(f"```{error}```", ephemeral=True)
 
     @milestone.command(name="add", description="Add a milestone role")
     @app_commands.describe(
@@ -375,12 +441,14 @@ class MilestoneRolesCog(commands.Cog):
         name: str,
         emoji: str,
     ):
+        if not await in_cafe(interaction):
+            return
         if category not in CATEGORIES:
             await interaction.response.send_message(
                 f"{NO} Unknown category **{category}**.", ephemeral=True
             )
             return
-        config = get_config(interaction.guild.id)
+        config = get_config()
         tier = {
             "threshold": threshold,
             "role_id": str(role.id),
@@ -388,7 +456,7 @@ class MilestoneRolesCog(commands.Cog):
             "emoji": emoji,
         }
         set_tiers(config, category, get_tiers(config, category) + [tier])
-        set_config(interaction.guild.id, config)
+        set_config(config)
         await interaction.response.send_message(
             f"{YES} Added {role.mention} ({emoji} {name}) to **{category}**.",
             ephemeral=True,
@@ -402,7 +470,9 @@ class MilestoneRolesCog(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(category=category_autocomplete)
     async def remove(self, interaction: discord.Interaction, category: str, name: str):
-        config = get_config(interaction.guild.id)
+        if not await in_cafe(interaction):
+            return
+        config = get_config()
         tiers = get_tiers(config, category)
         kept = [tier for tier in tiers if tier["name"] != name]
         if len(kept) == len(tiers):
@@ -411,7 +481,7 @@ class MilestoneRolesCog(commands.Cog):
             )
             return
         set_tiers(config, category, kept)
-        set_config(interaction.guild.id, config)
+        set_config(config)
         await interaction.response.send_message(
             f"{YES} Removed {name} from **{category}**.", ephemeral=True
         )
@@ -421,7 +491,9 @@ class MilestoneRolesCog(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(category=category_autocomplete)
     async def list(self, interaction: discord.Interaction, category: str):
-        tiers = get_tiers(get_config(interaction.guild.id), category)
+        if not await in_cafe(interaction):
+            return
+        tiers = get_tiers(get_config(), category)
         if not tiers:
             await interaction.response.send_message(
                 f"No milestones in {category}.", ephemeral=True
@@ -437,8 +509,10 @@ class MilestoneRolesCog(commands.Cog):
 
     @milestone.command(name="mine", description="Show your milestone progress")
     async def mine(self, interaction: discord.Interaction):
+        if not await in_cafe(interaction):
+            return
         await interaction.response.defer(thinking=True)
-        tag = get_tag(interaction.user.id)
+        tag = linked(interaction.user.id)
         if not tag:
             await interaction.followup.send(NOT_LINKED)
             return
@@ -446,15 +520,10 @@ class MilestoneRolesCog(commands.Cog):
         if not stats:
             await interaction.followup.send(FAILED)
             return
-        config = get_config(interaction.guild.id)
-        await sync_roles(interaction.user, config, stats)
-        embed = discord.Embed(
-            title=f"{stats['name']}'s Server Milestone Progress", color=COLOR
+        await interaction.followup.send(
+            file=await milestone_card(interaction.user, tag, stats, "MILESTONE ROLES")
         )
-        add_progress(embed, config, stats, full=True)
-        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Verify(bot))
     await bot.add_cog(MilestoneRolesCog(bot))

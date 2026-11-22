@@ -12,8 +12,13 @@ from brawl.Currency.card import render
 from brawl.Currency.chat import chat_limit, chat_today
 from brawl.Currency.config import (
     BOOSTER_DAILY_BEANS,
+    BREW,
+    CHAT_LIMITS,
     DAILY_BEANS,
     LUCKY_DAILY_CHANCE,
+    SELL,
+    SHOP,
+    STAMP_GOALS,
     STREAK_BEAN_MULTIPLIER,
     STREAK_DAYS,
     STREAK_TOKENS,
@@ -25,10 +30,13 @@ from brawl.Currency.db import sync_shop_effects, u_daily_checkin_streaks
 from brawl.Currency.helper import (
     AUTORESPONSE_MAP,
     BEAN_EMOTE,
+    CALENDAR_EMOTE,
     MAIN_GUILD_ID,
     NO_EMOTE,
+    PASS_EMOTE,
     REPLY_EMOTE,
     SERVER_STORE,
+    STAMP_EMOTE,
     STAR_DROP_EMOTE,
     TOKEN_EMOTE,
     ULTRA_TIER_ROLE_ID,
@@ -36,12 +44,33 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.how import HowView, page_file
-from brawl.Currency.howcard import PAGES, panel_page
+from brawl.Currency.howcard import PAGES, panel_banner
 from brawl.Currency.panel import framed, notice
 from brawl.Currency.quests import get_next_daily_reset, standing, update_quest
 from brawl.Currency.rewardcard import draw_clock_in
 from brawl.Currency.staff import StaffInfoView
 from brawl.Currency.tutorial import hint
+
+# The store panel: one embed a flow, each (text, the flow drawn under it)
+PANEL = (
+    (
+        "# <:BrockCool:1391630483867172935> The Server Store\n"
+        f"Earn {BEAN_EMOTE} **Beans** and {TOKEN_EMOTE} **Tokens** just by being "
+        "active in the server, then spend them on **free** in-game rewards, server "
+        "perks, or even a **Brawl Pass**!\n"
+        "## <a:leonConfused:1391625863107444820> How to start\n"
+        f"1. **Clock In** with the button below for {BEAN_EMOTE} `{DAILY_BEANS}` a day\n"
+        f"2. **Chat** to earn up to {BEAN_EMOTE} `{CHAT_LIMITS['member']:,}` a day\n"
+        f"3. **Brew** coffee with {BREW}, then {SELL} it for {TOKEN_EMOTE}\n"
+        f"4. **Spend** both in {SHOP}"
+    ),
+    (
+        f"# {PASS_EMOTE} Brawl Pass\n"
+        f"Clocking in starts Today's Order. Each finished order is {STAMP_EMOTE} `1` "
+        f"Stamp, and `{STAMP_GOALS['brawl_pass']}` Stamps get you a **Brawl Pass**.\n"
+        f"-# {REPLY_EMOTE} *Pick a topic in the menu below to see how each part works.*"
+    ),
+)
 
 
 def runs_staff_text(message):
@@ -54,7 +83,7 @@ def runs_staff_text(message):
 
 
 class PanelTopicSelect(discord.ui.Select):
-    """The /how topics under the store panel; a pick opens that page privately."""
+    """Every /how topic under the store panel; a pick opens that page privately."""
 
     def __init__(self):
         super().__init__(
@@ -63,7 +92,6 @@ class PanelTopicSelect(discord.ui.Select):
             options=[
                 discord.SelectOption(label=name, value=key)
                 for key, (name, _) in PAGES.items()
-                if key != "start"
             ],
             row=0,
         )
@@ -291,11 +319,14 @@ class Daily(commands.Cog):
                 pass
 
         if message.content == "-dailypanel" and runs_staff_text(message):
-            card = discord.File(
-                io.BytesIO(await asyncio.to_thread(panel_page)), "store.jpg"
-            )
+            files, embeds = [], []
+            for flow, text in enumerate(PANEL):
+                picture = await asyncio.to_thread(panel_banner, flow)
+                files.append(discord.File(io.BytesIO(picture), f"store{flow}.png"))
+                embed = discord.Embed(description=text, color=0xFCCA50)
+                embeds.append(embed.set_image(url=f"attachment://store{flow}.png"))
             view = self.DailyPanelView(self)
-            await message.channel.send(file=card, view=view)
+            await message.channel.send(embeds=embeds, files=files, view=view)
             try:
                 await message.delete()
             except:
@@ -311,7 +342,7 @@ class Daily(commands.Cog):
             label="Clock In",
             style=discord.ButtonStyle.green,
             custom_id="daily_button",
-            emoji="🗓️",
+            emoji=CALENDAR_EMOTE,
             row=1,
         )
         async def daily_button(
@@ -669,7 +700,7 @@ class ClockInView(discord.ui.View):
     @discord.ui.button(
         label="Clock In",
         style=discord.ButtonStyle.blurple,
-        emoji="🗓️",
+        emoji=CALENDAR_EMOTE,
         custom_id="clock_in",
     )
     async def clock_in(

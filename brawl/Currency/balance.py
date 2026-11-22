@@ -16,6 +16,7 @@ from brawl.Currency.db import (
 )
 from brawl.Currency.factions import table_card
 from brawl.Currency.helper import (
+    CALENDAR_EMOTE,
     EFFECT_EMOTE,
     INVITES_EMOTE,
     MAIN_GUILD_ID,
@@ -410,7 +411,7 @@ class Balance(commands.Cog):
         if not daily_order.clocked_in(interaction.user.id):
             view.add_item(
                 discord.ui.Button(
-                    emoji="🗓️",
+                    emoji=CALENDAR_EMOTE,
                     label="Go clock in",
                     url=f"https://discord.com/channels/{interaction.guild.id}/{SERVER_STORE}",
                     row=1,

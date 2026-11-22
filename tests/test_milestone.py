@@ -2,8 +2,8 @@ import asyncio
 
 import discord
 
+from brawl.Milestone import milestone
 from brawl.Utility import api
-from brawl.Verify import verify
 
 
 class Role:
@@ -48,7 +48,7 @@ ROLES = [Role(id) for id in range(1, 5)]
 
 def member_roles(held, stats):
     member = Member(Guild(ROLES), [ROLES[id - 1] for id in held])
-    asyncio.run(verify.sync_roles(member, CONFIG, stats))
+    asyncio.run(milestone.sync_roles(member, CONFIG, stats))
     return sorted(role.id for role in member.roles)
 
 
@@ -59,11 +59,11 @@ def test_tag_is_upper_case_with_one_hash():
 
 def test_wins_tiers_are_nested_under_wins():
     config = {}
-    verify.set_tiers(config, "wins_duo", [tier(10, 1)])
-    verify.set_tiers(config, "fame", [tier(20, 2)])
+    milestone.set_tiers(config, "wins_duo", [tier(10, 1)])
+    milestone.set_tiers(config, "fame", [tier(20, 2)])
     assert config == {"wins": {"duo": [tier(10, 1)]}, "fame": [tier(20, 2)]}
-    assert verify.get_tiers(config, "wins_duo") == [tier(10, 1)]
-    assert verify.get_tiers(config, "wins_solo") == []
+    assert milestone.get_tiers(config, "wins_duo") == [tier(10, 1)]
+    assert milestone.get_tiers(config, "wins_solo") == []
 
 
 def test_only_the_highest_reached_role_is_kept():
@@ -76,21 +76,21 @@ def test_roles_stay_when_no_tier_is_reached():
 
 def test_unlink_removes_every_milestone_role():
     member = Member(Guild(ROLES), ROLES[:2])
-    asyncio.run(verify.clear_roles(member, CONFIG))
+    asyncio.run(milestone.clear_roles(member, CONFIG))
     assert member.roles == []
 
 
 def test_summary_shows_the_highest_reached_tier():
     embed = discord.Embed()
-    verify.add_progress(embed, CONFIG, {"trophies": 6000})
+    milestone.add_progress(embed, CONFIG, {"trophies": 6000})
     assert [field.value for field in embed.fields] == [
-        f"> {verify.YES} <@&2>: `6000/5000` (⭐ Tier 2)"
+        f"> {milestone.YES} <@&2>: `6000/5000` (⭐ Tier 2)"
     ]
 
 
 def test_full_progress_marks_every_tier():
     embed = discord.Embed()
-    verify.add_progress(embed, CONFIG, {"trophies": 6000}, full=True)
+    milestone.add_progress(embed, CONFIG, {"trophies": 6000}, full=True)
     marks = [line.split()[1] for line in embed.fields[0].value.split("\n")]
-    assert marks == [verify.YES_DIM, verify.YES, verify.NO]
-    assert embed.fields[1].value.startswith(f"> {verify.NO} <@&4>: `0/100`")
+    assert marks == [milestone.YES_DIM, milestone.YES, milestone.NO]
+    assert embed.fields[1].value.startswith(f"> {milestone.NO} <@&4>: `0/100`")

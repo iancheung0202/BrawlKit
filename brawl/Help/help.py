@@ -77,7 +77,7 @@ PAGES = {
     "In-game Milestones Roles": (
         "👤",
         "Link Brawl Stars accounts and give roles for in-game milestones.",
-        {"": ["profile", "verify", "milestone"]},
+        {"": ["profile", "milestone"]},
     ),
     "Booster Roles": (
         "💎",
