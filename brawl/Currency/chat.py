@@ -5,23 +5,21 @@ import time
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 
-import discord
-
-from brawl.Currency.db import (
-    g_shop_effects,
-    g_thermometer,
-    u_daily_chat_earnings,
-)
+from brawl.Currency import heat
+from brawl.Currency.card import render
+from brawl.Currency.db import g_thermometer, u_daily_chat_earnings
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     EFFECT_EMOTE,
     MAIN_CHAT_CHANNELS,
     NO_EMOTE,
-    TOKEN_EMOTE,
     ULTRA_TIER_ROLE_ID,
     YES_EMOTE,
 )
-from brawl.Currency.quests import update_quest
+from brawl.Currency.home import background
+from brawl.Currency.ladder import unlocked
+from brawl.Currency.quests import get_next_daily_reset, update_quest
+from brawl.Currency.stationcard import draw_token_drop
 
 
 class ChatRewardSystem:
@@ -103,7 +101,7 @@ class ChatRewardSystem:
         reset_time = earnings_data.get("reset_time", 0)
         if current_time > reset_time:
             earnings_data["earnings"] = 0
-            earnings_data["reset_time"] = current_time + 86400
+            earnings_data["reset_time"] = get_next_daily_reset()
             self.earnings_cache[user_id] = earnings_data
 
         today_earnings = earnings_data["earnings"]
@@ -136,102 +134,39 @@ class ChatRewardSystem:
         if chat_boost_active:
             MAX_DAILY_CHAT_BEAN_LIMIT *= 3
 
-        if message.channel.id in MAIN_CHAT_CHANNELS:
-            freeze_ref = g_shop_effects(message.guild.id)
-            all_effects = freeze_ref.get() or {}
-            current_time = time.time()
+        if message.channel.id in MAIN_CHAT_CHANNELS and not heat.freeze(
+            message.guild.id
+        ):
+            cog.thermometer_heat = min(130, cog.thermometer_heat + random.randint(1, 2))
+            g_thermometer(message.guild.id).update({"heat": cog.thermometer_heat})
 
-            frozen = False
-            for user_id_check, user_effects in all_effects.items():
-                freeze_data = user_effects.get("freeze_thermometer", {})
-                if freeze_data.get("active", False) and current_time < freeze_data.get(
-                    "expires_at", 0
-                ):
-                    frozen = True
-                    break
-
-            if not frozen:
-                heat_add = random.randint(1, 2)
-                cog.thermometer_heat = min(130, cog.thermometer_heat + heat_add)
-                g_thermometer(message.guild.id).update({"heat": cog.thermometer_heat})
-
-        display_heat = min(cog.thermometer_heat, 100)
-
-        if display_heat >= 100:
-            thermo_beans = 6
-        elif display_heat >= 75:
-            thermo_beans = 4
-        elif display_heat >= 50:
-            thermo_beans = 2
-        else:
-            thermo_beans = 0
-
-        if thermo_beans > 0:
+        level = heat.level_of(min(cog.thermometer_heat, 100))
+        if level[2]:
             async with self.thermo_bean_lock:
                 self.thermo_bean_cache[user_id] = (
-                    self.thermo_bean_cache.get(user_id, 0) + thermo_beans
+                    self.thermo_bean_cache.get(user_id, 0) + level[2]
                 )
 
-        bonus_tokens = 0
-        bonus_message = None
-        roll = random.random()
-        if display_heat >= 100:
-            if roll < 0.005:
-                bonus_tokens = 5
-                bonus_message = "🎉 **JACKPOT!** You hit the 0.5% jackpot!"
-            elif roll < 0.02:
-                bonus_tokens = random.choice([1, 1, 2])
-        elif display_heat >= 75:
-            if roll < 0.01:
-                bonus_tokens = 1
-
-        if bonus_tokens > 0:
-            can_receive, current_count, reset_time = (
-                await cog.check_and_update_token_reward_limit(user_id)
-            )
-            if not can_receive:
-                bonus_tokens = 0
-                bonus_message = None
-
-        embed = None
-        if bonus_tokens > 0:
-            await cog.add_tokens(user_id, bonus_tokens)
-            _, tokens_balance = await cog.get_balance(user_id)
-
-            embed = discord.Embed(
-                title="☕ Chat Thermometer Bonus!",
-                color=0xFFD700,
-                description=f"You received {TOKEN_EMOTE} **{bonus_tokens} Tokens**!",
-            )
-            if bonus_message:
-                embed.description += f"\n{bonus_message}"
-
-            current_time = time.time()
-            remaining = int(reset_time - current_time)
-            if remaining > 0:
-                hours, remainder = divmod(remaining, 3600)
-                minutes, _ = divmod(remainder, 60)
-                formatted = f"in {hours}h {minutes}m"
-            else:
-                formatted = "soon"
-            embed.set_footer(
-                text=f"Token rewards today: {current_count}/3 (resets {formatted})"
-            )
-
-            embed.add_field(
-                name="Thermometer Level",
-                value=f"{display_heat}% - {'Boiling 🔥' if display_heat >= 100 else 'Hot 🌡️' if display_heat >= 75 else 'Warm ☕'}",
-                inline=True,
-            )
-            embed.add_field(
-                name="New Token Balance",
-                value=f"{TOKEN_EMOTE} `{tokens_balance}`",
-                inline=True,
-            )
-
-            stamp_cog = self.bot.get_cog("StampCard")
-            if stamp_cog:
-                await stamp_cog.update_progress(user_id, "thermometer_bonuses", 1)
+        drop = None
+        bonus_tokens, jackpot = heat.roll_tokens(level)
+        if bonus_tokens and await unlocked(
+            self.bot, user_id, message.guild.id, "thermometer"
+        ):
+            count = heat.take_drop(user_id)
+            if count:
+                await cog.add_tokens(user_id, bonus_tokens)
+                drop = await render(
+                    draw_token_drop,
+                    {
+                        "background": background(user_id),
+                        "amount": bonus_tokens,
+                        "jackpot": jackpot,
+                        "level": level[1],
+                        "count": count,
+                        "tokens": (await cog.get_balance(user_id))[1],
+                    },
+                    name="tokens",
+                )
 
         daily_threshold = self.daily_thresholds[user_id]
         beans_earned = 0
@@ -267,7 +202,7 @@ class ChatRewardSystem:
                 self.earnings_cache[user_id] = earnings_data
 
                 await cog.add_beans(user_id, beans_earned)
-                await update_quest(
+                order = await update_quest(
                     user_id, message.guild.id, {"chat_earnings": beans_earned}, self.bot
                 )
                 reward_triggered = True
@@ -287,11 +222,12 @@ class ChatRewardSystem:
                     f"{emoji} {message.author.mention} earned {BEAN_EMOTE} **{beans_earned} Beans** "
                     f"for chatting actively! *(Daily Cap: `{new_earnings}/{MAX_DAILY_CHAT_BEAN_LIMIT}`)* {EFFECT_EMOTE if chat_boost_active else ''} \n"
                     f"> -# <a:clock:1382887924273774754> Resets <t:{int(reset_time)}:R>. "
-                    "Use </balance:1393376242501157005> to check your progress!",
-                    embed=embed,
+                    "Use </balance:1393376242501157005> to check your progress!"
+                    + "".join(f"\n> {line}" for line in order),
+                    file=drop,
                 )
-            elif embed is not None:
-                await message.channel.send(message.author.mention, embed=embed)
+            elif drop:
+                await message.channel.send(message.author.mention, file=drop)
         except Exception as e:
             print(f"Failed to send bean reward message: {e}")
 

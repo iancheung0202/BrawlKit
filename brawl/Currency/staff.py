@@ -5,15 +5,8 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import Button
 
-from brawl.Currency.db import (
-    staff_app,
-    staff_app_cooldown,
-)
-from brawl.Currency.helper import (
-    MAIN_GUILD_ID,
-    NO_EMOTE,
-    YES_EMOTE,
-)
+from brawl.Currency.db import staff_app, staff_app_cooldown
+from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE, YES_EMOTE
 
 
 class StaffInfoView(discord.ui.View):

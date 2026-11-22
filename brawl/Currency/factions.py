@@ -6,9 +6,10 @@ from datetime import datetime, timedelta, timezone
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import Button, Modal, TextInput, View
-from firebase_admin import db
+from discord.ui import Modal, TextInput
 
+from brawl.Currency.card import faces, plain, render, roster
+from brawl.Currency.config import TABLE_SEATS, TABLE_SEATS_NEEDED, TABLE_WINNER_TOKENS
 from brawl.Currency.db import (
     g_table_kicks,
     g_tables,
@@ -23,6 +24,40 @@ from brawl.Currency.helper import (
     TOKEN_EMOTE,
     YES_EMOTE,
 )
+from brawl.Currency.home import background
+from brawl.Currency.ladder import locked
+from brawl.Currency.tablecard import draw_table, draw_table_reward
+
+
+async def table_card(table, interaction, tag="TABLE", name="table"):
+    """The table as the member sees it: their own seat is outlined."""
+    shares = table.get("user_contributions") or {}
+    ids = table.get("members", [])
+    members = await roster(interaction.guild, ids)
+    seats = [
+        (
+            member.display_name if member else "Member",
+            shares.get(str(member_id), 0),
+            member_id == table["host"],
+            member_id == interaction.user.id,
+            avatar,
+        )
+        for member_id, member, avatar in zip(ids, members, await faces(members))
+    ]
+    return await render(
+        draw_table,
+        {
+            "background": background(interaction.user.id),
+            "tag": tag,
+            "name": table["name"],
+            "motto": table["motto"],
+            "color": table["color"],
+            "weekly_beans": table.get("weekly_beans", 0),
+            "tier": (table.get("quest") or {}).get("current_tier", 0),
+            "members": seats,
+        },
+        name=name,
+    )
 
 
 class TableConfigModal(Modal, title="Configure Table"):
@@ -149,47 +184,21 @@ class TableSystem(commands.GroupCog, name="table"):
                         try:
                             user = await self.bot.fetch_user(member_id)
                             if user:
-                                embed = discord.Embed(
-                                    title=f"🎯 {table_data['emoji']} Quest Milestone Reached!",
-                                    description=f"**{table_data['name']}** has completed a Bean Collector milestone!",
-                                    color=int(table_data["color"].lstrip("#"), 16),
+                                await user.send(
+                                    f"{table_data['emoji']} **{table_data['name']}** reached a step of the weekly table quest.",
+                                    file=await render(
+                                        draw_table_reward,
+                                        {
+                                            "background": background(member_id),
+                                            "tag": "TABLE QUEST",
+                                            "color": table_data["color"],
+                                            "currency": "bean",
+                                            "headline": f"+{reward_per_member:,} Beans",
+                                            "line": f"{plain(table_data['name'])} collected {target:,} Beans this week. Step {current_tier + 1} of {len(quest_config['targets'])}.",
+                                        },
+                                        name="table",
+                                    ),
                                 )
-
-                                embed.add_field(
-                                    name="🎊 Milestone",
-                                    value=f"Tier {current_tier + 1}: {BEAN_EMOTE} **{target:,} Beans** collected",
-                                    inline=False,
-                                )
-                                embed.add_field(
-                                    name="🎁 Your Reward",
-                                    value=f"{BEAN_EMOTE} **{reward_per_member:,} Beans** added to your balance!",
-                                    inline=False,
-                                )
-
-                                if current_tier + 1 < len(quest_config["targets"]):
-                                    next_target = quest_config["targets"][
-                                        current_tier + 1
-                                    ]
-                                    next_reward = quest_config["rewards"][
-                                        current_tier + 1
-                                    ]
-                                    embed.add_field(
-                                        name="🎯 Next Milestone",
-                                        value=f"Collect {BEAN_EMOTE} **{next_target:,} Beans** to earn {BEAN_EMOTE} **{next_reward:,} Beans** each!",
-                                        inline=False,
-                                    )
-                                else:
-                                    embed.add_field(
-                                        name="🏆 All Milestones Complete!",
-                                        value="Your table has completed all quest tiers this week!",
-                                        inline=False,
-                                    )
-
-                                embed.set_footer(
-                                    text=f"Keep chatting to help {table_data['name']} reach the next goal!"
-                                )
-
-                                await user.send(embed=embed)
                         except Exception as e:
                             print(
                                 f"Error sending quest milestone DM to user {member_id}: {e}"
@@ -251,25 +260,33 @@ class TableSystem(commands.GroupCog, name="table"):
                         if currency_cog:
                             for member_id in top_table_members:
                                 try:
-                                    await currency_cog.add_tokens(member_id, 3)
+                                    await currency_cog.add_tokens(
+                                        member_id, TABLE_WINNER_TOKENS
+                                    )
 
                                     if await self.should_send_dm(member_id):
                                         user = self.bot.get_user(member_id)
                                         if user:
                                             try:
-                                                embed = discord.Embed(
-                                                    title="<a:tada:1227425729654820885> Weekly Table Winner!",
-                                                    description=(
-                                                        f"Congratulations! Your table **{top_table_data['name']}** {top_table_data['emoji']} "
-                                                        f"was the **#1 top table** this week with **{top_table_beans:,}** {BEAN_EMOTE} beans earned as a table!\n\n"
-                                                        f"Each member of the table, including you, has been awarded **3 {TOKEN_EMOTE} Tokens** as a reward for your table's achievement!"
+                                                await user.send(
+                                                    f"{top_table_data['emoji']} **{top_table_data['name']}** was the top table this week.",
+                                                    file=await render(
+                                                        draw_table_reward,
+                                                        {
+                                                            "background": background(
+                                                                member_id
+                                                            ),
+                                                            "tag": "TOP TABLE",
+                                                            "color": top_table_data[
+                                                                "color"
+                                                            ],
+                                                            "currency": "token",
+                                                            "headline": f"+{TABLE_WINNER_TOKENS} Tokens",
+                                                            "line": f"{plain(top_table_data['name'])} was the top table this week with {top_table_beans:,} Beans.",
+                                                        },
+                                                        name="table",
                                                     ),
-                                                    color=discord.Color.gold(),
                                                 )
-                                                embed.set_footer(
-                                                    text="Keep earning beans this week to compete again!"
-                                                )
-                                                await user.send(embed=embed)
                                             except discord.Forbidden:
                                                 pass
                                 except Exception as e:
@@ -283,7 +300,7 @@ class TableSystem(commands.GroupCog, name="table"):
                                         f"**Table:** {top_table_data['emoji']} {top_table_data['name']}\n"
                                         f"**Weekly Beans:** {BEAN_EMOTE} {top_table_beans:,}\n"
                                         f"**Members Rewarded:** {len(top_table_members)}\n"
-                                        f"**Reward:** 3 {TOKEN_EMOTE} Tokens per member"
+                                        f"**Reward:** {TABLE_WINNER_TOKENS} {TOKEN_EMOTE} Tokens per member"
                                     ),
                                     color=discord.Color.gold(),
                                 )
@@ -310,7 +327,7 @@ class TableSystem(commands.GroupCog, name="table"):
         table_ref = self._get_table_ref(guild_id, table_name)
         table_data = table_ref.get() or {}
 
-        is_formalized = len(table_data.get("members", [])) >= 5
+        is_formalized = len(table_data.get("members", [])) >= TABLE_SEATS_NEEDED
         was_formalized = table_data.get("formalized", False)
 
         if is_formalized != was_formalized:
@@ -343,7 +360,7 @@ class TableSystem(commands.GroupCog, name="table"):
             app_commands.Choice(name=data["name"], value=name)
             for name, data in tables.items()
             if current.lower() in data["name"].lower()
-            and len(data.get("members", [])) < 10
+            and len(data.get("members", [])) < TABLE_SEATS
         ][:25]
 
     @app_commands.command(name="seat", description="Take a seat at (join) a table")
@@ -357,6 +374,8 @@ class TableSystem(commands.GroupCog, name="table"):
                 f"{NO_EMOTE} This command is only available in the main server.",
                 ephemeral=True,
             )
+        if await locked(interaction, "tables"):
+            return
 
         if current_table := await self.get_user_table(
             interaction.user.id, interaction.guild.id
@@ -391,9 +410,9 @@ class TableSystem(commands.GroupCog, name="table"):
             else:
                 kick_ref.delete()
 
-        if len(table_data.get("members", [])) >= 10:
+        if len(table_data.get("members", [])) >= TABLE_SEATS:
             return await interaction.response.send_message(
-                f"{NO_EMOTE} This table is full (10/10 seats).", ephemeral=True
+                f"{NO_EMOTE} This table is full.", ephemeral=True
             )
 
         members = table_data.get("members", [])
@@ -417,39 +436,10 @@ class TableSystem(commands.GroupCog, name="table"):
             except:
                 pass
 
-        embed = discord.Embed(
-            title=f"{table_data['emoji']} Table Joined: {table_data['name']}",
-            description=f"\"{table_data['motto']}\"",
-            color=int(table_data["color"].lstrip("#"), 16),
-        )
-        embed.add_field(name="🍽️ Host", value=f"<@{table_data['host']}>", inline=False)
-        embed.add_field(
-            name="👥 People Seated",
-            value=f"Currently **{len(members)}/10** people seated!",
-            inline=False,
-        )
-        embed.add_field(name="🎨 Color", value=table_data["color"], inline=True)
-        embed.add_field(
-            name="📅 Reserved At",
-            value=f"<t:{int(table_data['created_at'])}:F>",
-            inline=True,
-        )
-        embed.add_field(
-            name="📋 Status",
-            value=(
-                f"{YES_EMOTE} Officially recognized table!"
-                if table_data.get("formalized")
-                else f"{NO_EMOTE} Not yet recognized (requires **5 people seated**)."
-            ),
-            inline=False,
-        )
-        embed.set_footer(
-            text="Once your table is officially recognized, its emoji will be added to the daily chat bean notification"
-        )
-
+        table_data["members"] = members
         await interaction.response.send_message(
-            content=f"{YES_EMOTE} You've taken a seat at **{table_data['name']}**!",
-            embed=embed,
+            f"{YES_EMOTE} You took a seat at {table_data['emoji']} **{table_data['name']}**.",
+            file=await table_card(table_data, interaction, "JOINED"),
         )
 
     @app_commands.command(name="leave", description="Leave your current table")
@@ -523,6 +513,8 @@ class TableSystem(commands.GroupCog, name="table"):
                 f"{NO_EMOTE} This command is only available in the main server.",
                 ephemeral=True,
             )
+        if await locked(interaction, "tables"):
+            return
 
         if current_table := await self.get_user_table(
             interaction.user.id, interaction.guild.id
@@ -574,36 +566,9 @@ class TableSystem(commands.GroupCog, name="table"):
         self._get_user_table_ref(interaction.guild.id, interaction.user.id).set(
             name.lower()
         )
-        embed = discord.Embed(
-            title=f"{emoji} Table Reserved: {name}",
-            description=f'"{motto}"',
-            color=discord.Color.from_str(color),
-        )
-        embed.add_field(
-            name="🍽️ Host",
-            value=f"{interaction.user.mention} ({interaction.user.display_name})",
-            inline=False,
-        )
-        embed.add_field(
-            name="👥 People Seated",
-            value="Currently **1 person** (you). Ask others to use `/table seat` to reach **5 people seated** and get your table officially recognized.",
-            inline=False,
-        )
-        embed.add_field(name="🎨 Color", value=color, inline=True)
-        embed.add_field(
-            name="📅 Reserved At", value=f"<t:{int(time.time())}:F>", inline=True
-        )
-        embed.add_field(
-            name="📋 Status",
-            value=f"{NO_EMOTE} Not yet recognized (requires **5 people seated**).",
-            inline=False,
-        )
-        embed.set_footer(
-            text="Once your table is officially recognized, your emoji will be added to the daily chat bean notification"
-        )
-
         await interaction.response.send_message(
-            content=f"{YES_EMOTE} Table **{name}** reserved successfully!", embed=embed
+            f"{YES_EMOTE} You reserved {emoji} **{name}**.",
+            file=await table_card(table_data, interaction, "RESERVED"),
         )
 
     @app_commands.command(
@@ -682,44 +647,9 @@ class TableSystem(commands.GroupCog, name="table"):
         else:
             table_ref.update(updates)
 
-        embed = discord.Embed(
-            title=f"{new_emoji} Table Updated: {new_name}",
-            description=f'"{modal.motto.value}"',
-            color=discord.Color.from_str(new_color),
-        )
-
-        embed.add_field(
-            name="🍽️ Host",
-            value=f"{interaction.user.mention} ({interaction.user.display_name})",
-            inline=False,
-        )
-        embed.add_field(
-            name="👥 People Seated",
-            value=f"**{len(table_data.get('members', []))} people** currently at this table.",
-            inline=False,
-        )
-        embed.add_field(name="🎨 Color", value=new_color, inline=True)
-        embed.add_field(
-            name="📅 Reserved At",
-            value=f"<t:{int(table_data['created_at'])}:F>",
-            inline=True,
-        )
-        embed.add_field(
-            name="📋 Status",
-            value=(
-                f"{YES_EMOTE} Officially recognized table!"
-                if table_data.get("formalized")
-                else f"{NO_EMOTE} Not yet recognized (requires **5 people seated**)."
-            ),
-            inline=False,
-        )
-        embed.set_footer(
-            text="Once your table is officially recognized, your emoji will be added to the daily chat bean notification"
-        )
-
         await interaction.followup.send(
-            content=f"{YES_EMOTE} Table **{new_name}** updated successfully!",
-            embed=embed,
+            f"{YES_EMOTE} {new_emoji} **{new_name}** is updated.",
+            file=await table_card({**table_data, **updates}, interaction, "UPDATED"),
         )
 
     @app_commands.command(name="close", description="Close your table (hosts only)")
@@ -772,109 +702,10 @@ class TableSystem(commands.GroupCog, name="table"):
             return await interaction.followup.send(
                 f"{NO_EMOTE} You're not seated at any table.", ephemeral=True
             )
-        host = await interaction.client.fetch_user(table_data["host"])
-        host_name = host.mention if host else f"Unknown ({table_data['host']})"
-
-        user_beans = table_data.get("user_contributions", {}).get(
-            str(interaction.user.id), 0
+        await interaction.followup.send(
+            f"{table_data['emoji']} **{table_data['name']}**",
+            file=await table_card(table_data, interaction),
         )
-
-        embed = discord.Embed(
-            title=f"{table_data['emoji']} Table: {table_data['name']}",
-            description=f"\"{table_data['motto']}\"",
-            color=int(table_data["color"].lstrip("#"), 16),
-        )
-
-        embed.add_field(name="🍽️ Host", value=host_name, inline=True)
-        embed.add_field(name="🎨 Color", value=table_data["color"], inline=True)
-        embed.add_field(
-            name="📋 Status",
-            value=(
-                f"{YES_EMOTE} Officially recognized table!"
-                if table_data.get("formalized")
-                else f"{NO_EMOTE} Not yet recognized (requires **5 people seated**)."
-            ),
-            inline=True,
-        )
-        embed.add_field(
-            name="📦 Weekly Beans",
-            value=f"{BEAN_EMOTE} `{table_data.get('weekly_beans', 0):,}`",
-            inline=True,
-        )
-        embed.add_field(
-            name="🙋 Your Contribution",
-            value=f"{BEAN_EMOTE} `{user_beans:,}`",
-            inline=True,
-        )
-        embed.add_field(
-            name="📅 Reserved At",
-            value=f"<t:{int(table_data['created_at'])}:F>",
-            inline=True,
-        )
-
-        if (quest := table_data.get("quest", {})) and table_data.get(
-            "formalized", False
-        ):
-            quest_config = TABLE_QUEST_TYPES["bean_collector"]
-            current_tier = quest.get("current_tier", 0)
-            completed_tiers = quest.get("completed_tiers", [])
-            weekly_beans = table_data.get("weekly_beans", 0)
-
-            quest_lines = []
-            for i, (target, reward) in enumerate(
-                zip(quest_config["targets"], quest_config["rewards"])
-            ):
-                if i in completed_tiers:
-                    quest_lines.append(
-                        f"- -# **Tier {i+1}:** {BEAN_EMOTE} `{target:,}` <a:Yes_dimmed:1393015472676540436>"
-                    )
-                elif i == current_tier:
-                    progress_pct = min(100, int((weekly_beans / target) * 100))
-                    bar_length = 16
-                    filled = int((progress_pct / 100) * bar_length)
-                    bar = "█" * filled + "░" * (bar_length - filled)
-                    quest_lines.append(f"- **Tier {i+1}: `{bar}` {progress_pct}%**")
-                    quest_lines.append(
-                        f"-# *<:reply:1036792837821435976> {BEAN_EMOTE} `{weekly_beans:,} / {target:,}` • Reward: {BEAN_EMOTE} `{reward}` per member*"
-                    )
-                else:
-                    quest_lines.append(
-                        f"- -# **Tier {i+1}:** {BEAN_EMOTE} `{target:,}` 🔒"
-                    )
-
-            embed.add_field(
-                name="🎯 Weekly Bean Collector Quest",
-                value=(
-                    "\n".join(quest_lines)
-                    if quest_lines
-                    else "Quest data not available..."
-                ),
-                inline=True,
-            )
-
-        members_list = [
-            (
-                f"-# - {(await interaction.client.fetch_user(m)).mention}"
-                if (await interaction.client.fetch_user(m))
-                else f"-# - Unknown member ({m})"
-            )
-            for m in table_data.get("members", [])
-        ]
-        embed.add_field(
-            name=f"📋 Seated Members ({len(table_data.get('members', []))}/10)",
-            value="\n".join(members_list) if members_list else "No one seated",
-            inline=True,
-        )
-        embed.add_field(
-            name="☕ Cocoa Inventory",
-            value=f"`{table_data.get('cocoa_inventory', 0)}` successful cocoa brews collected\n-# Everyone will earn {TOKEN_EMOTE} `2` for every 10 brews!",
-            inline=True,
-        )
-        embed.set_footer(
-            text="Once your table is officially recognized, your emoji will be added to the daily chat bean notification"
-        )
-
-        await interaction.followup.send(embed=embed)
 
     @app_commands.command(
         name="dm", description="Toggle DM notifications for table rewards"
@@ -887,33 +718,16 @@ class TableSystem(commands.GroupCog, name="table"):
             )
 
         ref = self._pref_ref(interaction.user.id)
-        new_state = not ((data := ref.get() or {}).get("enabled", True))
+        new_state = not (ref.get() or {}).get("enabled", True)
         ref.set({"enabled": new_state, "updated_at": time.time()})
-        if new_state:
-            embed = discord.Embed(
-                title="🔔 DM Notifications Enabled",
-                description=(
-                    "You will now receive DM notifications for:\n"
-                    f"{YES_EMOTE} Weekly top table rewards ({TOKEN_EMOTE} Tokens)\n"
-                    f"{YES_EMOTE} Table milestone achievements\n"
-                    f"{YES_EMOTE} Table host transfers\n"
-                    f"{YES_EMOTE} Members joining/leaving your table"
-                ),
-                color=discord.Color.green(),
-            )
-        else:
-            embed = discord.Embed(
-                title="🔕 DM Notifications Disabled",
-                description=(
-                    "You will no longer receive DM notifications for table-related activities.\n\n"
-                    f"-# *You can still check your table status and rewards using `/table mine`*"
-                ),
-                color=discord.Color.red(),
-            )
-
-        embed.set_footer(text="Use /table dm again to toggle this setting")
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(
+            (
+                f"{YES_EMOTE} Table DMs are on. You'll hear about table rewards, new members and host changes."
+                if new_state
+                else f"{YES_EMOTE} Table DMs are off. You can still check your table with `/table mine`."
+            ),
+            ephemeral=True,
+        )
 
     @app_commands.command(
         name="kick", description="Kick a user from your table (Host only)"

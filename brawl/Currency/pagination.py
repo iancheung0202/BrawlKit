@@ -4,19 +4,40 @@ from discord.ext import commands
 from discord.ui import Button, Select, View
 from firebase_admin import db
 
-from brawl.Currency.db import (
-    U_ROOT,
-    g_invites_monthly,
-    g_tables,
-)
-from brawl.Currency.helper import (
-    BEAN_EMOTE,
-    LB_EMOTE,
-    MAIN_GUILD_ID,
-    NO_EMOTE,
-    TOKEN_EMOTE,
-    get_current_month_key,
-)
+from brawl.Currency.boardcard import PER_PAGE, draw_board
+from brawl.Currency.card import faces, render
+from brawl.Currency.config import TABLE_SEATS
+from brawl.Currency.db import U_ROOT, g_invites_monthly, g_tables, g_user_tables
+from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE, get_current_month_key
+from brawl.Currency.home import background
+
+# Leaderboard: (title, icon, what one row is)
+# title, icon, what is counted, icon before the value, icon before the note
+BOARDS = {
+    "Beans": ("Most Beans", "kit/bean", "member", "kit/bean", None),
+    "Tokens": ("Most Tokens", "kit/token", "member", "kit/token", None),
+    "Invites": (
+        "Most invites this month",
+        "kit/icon_inbox",
+        "member",
+        "kit/icon_inbox",
+        None,
+    ),
+    "Tables": ("Top tables this week", "kit/icon_trophy", "table", "kit/bean", None),
+    "Streaks": (
+        "Longest daily streaks",
+        "items/streak_insurance",
+        "member",
+        None,
+        None,
+    ),
+    "Brews": ("Most brews", "brewing", "member", "brewing", None),
+    "Levels": ("Highest levels", "kit/icon_xp", "member", None, "kit/icon_xp"),
+}
+
+
+def ranks(member):
+    return member is not None and not member.bot
 
 
 class BasePaginationView(View):
@@ -56,6 +77,9 @@ class BasePaginationView(View):
             pass
         self.stop()
 
+    async def turn(self, interaction):
+        await interaction.response.edit_message(embed=self.pages[self.page], view=self)
+
     def update_buttons(self):
         if len(self.pages) <= 1:
             for child in self.children:
@@ -89,7 +113,7 @@ class BasePaginationView(View):
     ):
         self.page = 0
         self.update_buttons()
-        await interaction.response.edit_message(embed=self.pages[self.page], view=self)
+        await self.turn(interaction)
 
     @discord.ui.button(
         emoji="<:backarrow:1351972111010369618>",
@@ -103,7 +127,7 @@ class BasePaginationView(View):
         if self.page > 0:
             self.page -= 1
         self.update_buttons()
-        await interaction.response.edit_message(embed=self.pages[self.page], view=self)
+        await self.turn(interaction)
 
     @discord.ui.button(
         emoji="<:rightarrow:1351972116819480616>",
@@ -117,7 +141,7 @@ class BasePaginationView(View):
         if self.page < len(self.pages) - 1:
             self.page += 1
         self.update_buttons()
-        await interaction.response.edit_message(embed=self.pages[self.page], view=self)
+        await self.turn(interaction)
 
     @discord.ui.button(
         emoji="<:fastforward:1351972114433048719>",
@@ -130,7 +154,7 @@ class BasePaginationView(View):
     ):
         self.page = len(self.pages) - 1
         self.update_buttons()
-        await interaction.response.edit_message(embed=self.pages[self.page], view=self)
+        await self.turn(interaction)
 
 
 class JumpToPageModal(discord.ui.Modal, title="Jump to Page"):
@@ -165,21 +189,45 @@ class JumpToPageModal(discord.ui.Modal, title="Jump to Page"):
 
 
 class LeaderboardView(BasePaginationView):
-    def __init__(self, interaction, pages):
+    """Draws a page only when someone turns to it."""
+
+    def __init__(self, interaction, board, entries):
+        pages = range((len(entries) - 1) // PER_PAGE + 1)
         super().__init__(pages=pages, initial_author=interaction.user, timeout=120)
-        self.interaction = interaction
+        self.board, self.entries = board, entries
         self.total_pages = len(pages)
-        self.page = 0
         self.update_buttons()
+
+    async def file(self, interaction):
+        start = self.page * PER_PAGE
+        page = self.entries[start : start + PER_PAGE]
+        members = [
+            interaction.guild.get_member(entry[0]) if entry[1] is None else None
+            for entry in page
+        ]
+        avatars = await faces(members)
+        rows = []
+        for rank, entry in enumerate(page, start + 1):
+            member_id, name, value, note = entry
+            member, avatar = members[rank - start - 1], avatars[rank - start - 1]
+            if name is None:
+                name = member.display_name if member else "Member who left"
+            else:
+                avatar = None
+            rows.append(
+                (rank, name, value, note, member_id == interaction.user.id, avatar)
+            )
+        board = {**self.board, "rows": rows, "page": self.page + 1}
+        return await render(draw_board, board, name="leaderboard")
 
     async def show_page(self, interaction, page_idx):
         self.page = page_idx
         self.update_buttons()
-        embed = self.pages[page_idx]
+        files = [await self.file(interaction)]
         if interaction.response.is_done():
-            await interaction.edit_original_response(embed=embed, view=self)
+            await interaction.edit_original_response(attachments=files, view=self)
         else:
-            await interaction.response.edit_message(embed=embed, view=self)
+            await interaction.response.edit_message(attachments=files, view=self)
 
     @discord.ui.button(
         emoji="<:fastbackward:1351972112696479824>",
@@ -246,17 +294,17 @@ class Leaderboard(commands.Cog):
 
     @app_commands.command(
         name="leaderboard",
-        description="View the top users by Beans, Tokens, or Invites",
+        description="See who is on top: Beans, Tokens, levels, tables and more",
     )
     @app_commands.choices(
         currency=[
-            app_commands.Choice(name="🫘 Starr Beans", value="Beans"),
-            app_commands.Choice(name="🌟 Starr Tokens", value="Tokens"),
-            app_commands.Choice(name="🫂 Monthly Server Invites", value="Invites"),
-            app_commands.Choice(name="🍽️ Weekly Table Beans", value="Tables"),
-            app_commands.Choice(name="🔥 Daily Streaks", value="Streaks"),
-            app_commands.Choice(name="☕ Coffee Brews", value="Brews"),
-            app_commands.Choice(name="📊 XP Levels", value="Levels"),
+            app_commands.Choice(name="Beans", value="Beans"),
+            app_commands.Choice(name="Tokens", value="Tokens"),
+            app_commands.Choice(name="Invites this month", value="Invites"),
+            app_commands.Choice(name="Tables this week", value="Tables"),
+            app_commands.Choice(name="Daily streaks", value="Streaks"),
+            app_commands.Choice(name="Brews", value="Brews"),
+            app_commands.Choice(name="Levels", value="Levels"),
         ]
     )
     @app_commands.checks.cooldown(rate=1, per=10.0)
@@ -269,243 +317,146 @@ class Leaderboard(commands.Cog):
                 ephemeral=True,
             )
 
-        data = []
-        formatter = None
-        title = ""
+        guild = interaction.guild
+        users = {
+            int(user_id): user
+            for user_id, user in (
+                (db.reference(U_ROOT).get() or {})
+                if currency in ("Beans", "Tokens", "Streaks", "Brews")
+                else {}
+            ).items()
+            if user_id.isdigit()
+        }
 
-        async def get_name(guild, uid):
-            if uid == 0:
-                return "Unknown"
-            member = guild.get_member(uid)
-            return member.mention if member else f"<@{uid}>"
+        def ranked(amount):
+            """(member, amount) for everyone above zero, highest first."""
+            found = [(user_id, amount(user)) for user_id, user in users.items()]
+            return sorted((row for row in found if row[1] > 0), key=lambda row: -row[1])
 
         if currency == "Tables":
-            all_tables = g_tables(interaction.guild.id).get() or {}
-            formalized_tables = {
-                name: data
-                for name, data in all_tables.items()
-                if data.get("formalized", False)
-            }
-
-            if not formalized_tables:
-                return await interaction.followup.send(
-                    f"{NO_EMOTE} No officially recognized tables yet!", ephemeral=True
+            tables = [
+                table
+                for table in (g_tables(guild.id).get() or {}).values()
+                if table.get("formalized")
+            ]
+            tables.sort(
+                key=lambda table: (
+                    -table.get("weekly_beans", 0),
+                    -len(table.get("members", [])),
                 )
-
-            data = sorted(
-                formalized_tables.items(),
-                key=lambda x: (
-                    x[1].get("weekly_beans", 0),
-                    len(x[1].get("members", [])),
-                ),
-                reverse=True,
             )
-            title = f"Top Tables"
-
-            async def table_formatter(rank, item, guild):
-                name, tdata = item
-                return (
-                    f"**{rank}. {tdata.get('emoji', '')} {tdata.get('name', name)}**\n"
-                    f"-# <:reply:1036792837821435976> {BEAN_EMOTE} **`{tdata.get('weekly_beans', 0):,}` Beans**\n"
-                    f"-# <:reply:1036792837821435976> `{len(tdata.get('members', []))}/10` people seated\n"
-                    f"-# <:reply:1036792837821435976> **Host:** <@{tdata.get('host')}>"
+            entries = [
+                (
+                    None,
+                    table["name"],
+                    f"{table.get('weekly_beans', 0):,}",
+                    f"{len(table.get('members', []))} / {TABLE_SEATS} seats",
                 )
-
-            formatter = table_formatter
-
-        elif currency == "Streaks":
-            ref = db.reference(U_ROOT)
-            all_users = ref.get() or {}
-
-            for uid_str, user_data in all_users.items():
-                if uid_str and uid_str.isdigit():
-                    progress = user_data.get("progress", {})
-                    sdata = progress.get("daily_checkin_streaks", {})
-                    streak = sdata.get("current_streak", 0)
-                    if streak > 0:
-                        data.append((int(uid_str), streak))
-
-            data.sort(key=lambda x: x[1], reverse=True)
-            title = "Top Daily Streaks"
-
-            async def streak_formatter(rank, item, guild):
-                uid, streak = item
-                name = await get_name(guild, uid)
-                return (
-                    f"{rank}. {name} - **`{streak}`** day{'s' if streak != 1 else ''}"
-                )
-
-            formatter = streak_formatter
-
-        elif currency == "Brews":
-            ref = db.reference(U_ROOT)
-            all_users = ref.get() or {}
-
-            for uid_str, user_data in all_users.items():
-                if uid_str and uid_str.isdigit():
-                    inventory = user_data.get("inventory", {})
-                    bdata = inventory.get("brews", {})
-                    stats = bdata.get("stats", {})
-                    total_brews = stats.get("total_brews", 0)
-                    if total_brews > 0:
-                        data.append((int(uid_str), total_brews))
-
-            data.sort(key=lambda x: x[1], reverse=True)
-            title = "Top Brewers"
-
-            async def brew_formatter(rank, item, guild):
-                uid, brews = item
-                name = await get_name(guild, uid)
-                return (
-                    f"{rank}. {name} - **`{brews:,}`** brew{'s' if brews != 1 else ''}"
-                )
-
-            formatter = brew_formatter
-
+                for table in tables
+            ]
+            mine = (g_user_tables(guild.id, interaction.user.id).get() or "").lower()
+            yours = next(
+                (
+                    rank
+                    for rank, table in enumerate(tables, 1)
+                    if table["name"].lower() == mine
+                ),
+                None,
+            )
         elif currency == "Invites":
-            current_month = get_current_month_key()
-            ref = g_invites_monthly(interaction.guild.id, current_month)
-            all_data = ref.get() or {}
-
-            if not all_data:
-                return await interaction.followup.send(
-                    f"{NO_EMOTE} No invite data available yet", ephemeral=True
+            month = g_invites_monthly(guild.id, get_current_month_key()).get() or {}
+            invites = sorted(month.items(), key=lambda row: -row[1].get("valid", 0))
+            entries = [
+                (
+                    int(user_id),
+                    None,
+                    f"{row.get('valid', 0)}",
+                    f"{row.get('total', 0)} joined, {row.get('left', 0)} left",
                 )
-
-            inv_data = []
-            for uid_str, idata in all_data.items():
-                inv_data.append((uid_str, idata))
-
-            data = sorted(inv_data, key=lambda x: x[1].get("valid", 0), reverse=True)
-            title = "Top Monthly Inviters"
-
-            async def invite_formatter(rank, item, guild):
-                uid_str, idata = item
-                name = await get_name(guild, int(uid_str))
-                valid = idata.get("valid", 0)
-                total = idata.get("total", 0)
-                left = idata.get("left", 0)
-                return f"{rank}. {name} - **`{valid}` invite{'s' if valid > 1 else ''}** (`{total}` total, `{left}` left)"
-
-            formatter = invite_formatter
-
+                for user_id, row in invites
+            ]
         elif currency == "Levels":
             leveling_cog = self.bot.get_cog("Leveling")
             if not leveling_cog or not leveling_cog.pool:
                 return await interaction.followup.send(
-                    f"{NO_EMOTE} Leveling system is currently unavailable.",
-                    ephemeral=True,
+                    f"{NO_EMOTE} Levels are unavailable right now.", ephemeral=True
                 )
-
             async with leveling_cog.pool.acquire() as conn:
                 rows = await conn.fetch(
                     "SELECT id, xp, level FROM levels WHERE guild = $1 ORDER BY xp DESC LIMIT 2000",
-                    str(interaction.guild.id),
+                    str(guild.id),
                 )
+            entries = [
+                (int(row["id"]), None, f"Level {row['level']}", f"{row['xp']:,}")
+                for row in rows
+            ]
+        elif currency == "Streaks":
+            entries = [
+                (user_id, None, f"{days:,} day{'s' * (days != 1)}", None)
+                for user_id, days in ranked(
+                    lambda user: user.get("progress", {})
+                    .get("daily_checkin_streaks", {})
+                    .get("current_streak", 0)
+                )
+            ]
+        elif currency == "Brews":
+            entries = [
+                (user_id, None, f"{brews:,}", None)
+                for user_id, brews in ranked(
+                    lambda user: user.get("inventory", {})
+                    .get("brews", {})
+                    .get("stats", {})
+                    .get("total_brews", 0)
+                )
+            ]
+        else:
+            entries = [
+                (user_id, None, f"{amount:,}", None)
+                for user_id, amount in ranked(
+                    lambda user: user.get("balance", {}).get(currency, 0)
+                )
+            ]
 
-            data = rows
-            title = "Top Level XP"
-
-            async def level_formatter(rank, item, guild):
-                uid = int(item["id"])
-                name = await get_name(guild, uid)
-                level = item["level"]
-                xp = item["xp"]
-                return f"{rank}. {name} - **Level {level}** (`{xp:,}` XP)"
-
-            formatter = level_formatter
-
-        else:  # Beans or Tokens
-            ref = db.reference(U_ROOT)
-            all_users = ref.get() or {}
-
-            target_field = currency
-
-            for uid_str, user_data in all_users.items():
-                if uid_str and uid_str.isdigit():
-                    bdata = user_data.get("balance", {})
-                    amount = bdata.get(target_field, 0)
-                    data.append((int(uid_str), amount))
-
-            data.sort(key=lambda x: x[1], reverse=True)
-            emoji = BEAN_EMOTE if currency == "Beans" else TOKEN_EMOTE
-            title = f"Top Starr {currency} Holders {emoji}"
-
-            async def balance_formatter(rank, item, guild):
-                uid, amt = item
-                name = await get_name(guild, uid)
-                return f"{rank}. {name} - {emoji} `{amt:,}` Starr {currency}"
-
-            formatter = balance_formatter
-
-        if not data:
+        if not guild.chunked:
+            await guild.chunk()
+        # Members who left keep their data but hold no place on a board.
+        entries = [
+            entry
+            for entry in entries
+            if entry[0] is None or ranks(guild.get_member(entry[0]))
+        ]
+        if not entries:
             return await interaction.followup.send(
-                f"{NO_EMOTE} No data available for this leaderboard.", ephemeral=True
+                f"{NO_EMOTE} Nobody is on this leaderboard yet.", ephemeral=True
             )
-
-        pages = []
-        per_page = 10
-        total_pages = (len(data) - 1) // per_page + 1
-
-        user_rank = "N/A"
-        try:
-            if currency == "Levels":
-                rnk = next(
-                    (
-                        i
-                        for i, x in enumerate(data)
-                        if int(x["id"]) == interaction.user.id
-                    ),
-                    None,
-                )
-            elif currency == "Invites":
-                rnk = next(
-                    (i for i, x in enumerate(data) if int(x[0]) == interaction.user.id),
-                    None,
-                )
-            elif currency == "Tables":
-                rnk = None
-            else:
-                rnk = next(
-                    (
-                        i
-                        for i, x in enumerate(data)
-                        if hasattr(x, "__getitem__") and x[0] == interaction.user.id
-                    ),
-                    None,
-                )
-
-            if rnk is not None:
-                user_rank = f"#{rnk + 1}"
-        except Exception:
-            pass
-
-        for page_num in range(total_pages):
-            start = page_num * per_page
-            end = start + per_page
-            current_data = data[start:end]
-
-            description = ""
-            for i, item in enumerate(current_data, start + 1):
-                try:
-                    line = await formatter(i, item, interaction.guild)
-                    description += f"{line}\n"
-                except Exception as e:
-                    print(f"Error formatting leaderboard item: {e}")
-                    continue
-
-            embed = discord.Embed(
-                title=f"{LB_EMOTE} {title}", description=description, color=0xF1C40F
+        if currency != "Tables":
+            yours = next(
+                (
+                    rank
+                    for rank, entry in enumerate(entries, 1)
+                    if entry[0] == interaction.user.id
+                ),
+                None,
             )
-            footer_text = f"Page {page_num + 1}/{total_pages} • Total: {len(data)}"
-            if user_rank != "N/A":
-                footer_text += f" • Your Rank: {user_rank}"
-
-            embed.set_footer(text=footer_text)
-            pages.append(embed)
-
-        view = LeaderboardView(interaction, pages)
-        view.message = await interaction.followup.send(embed=pages[0], view=view)
+        title, icon, unit, value_icon, note_icon = BOARDS[currency]
+        count = len(entries)
+        view = LeaderboardView(
+            interaction,
+            {
+                "background": background(interaction.user.id),
+                "title": title,
+                "icon": icon,
+                "value_icon": value_icon,
+                "note_icon": note_icon,
+                "yours": yours,
+                "pages": (count - 1) // PER_PAGE + 1,
+                "total": f"{count:,} {unit}{'s' * (count != 1)}",
+            },
+            entries,
+        )
+        view.message = await interaction.followup.send(
+            file=await view.file(interaction), view=view
+        )
 
     @leaderboard.error
     async def leaderboard_error(

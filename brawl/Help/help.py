@@ -52,21 +52,14 @@ PAGES = {
     ),
     "Cafe": (
         "☕",
-        "The Starr Beans economy, **in Brawl Stars Cafe** only.",
+        "The cafe game, **in Brawl Stars Cafe** only. Chat to earn Beans and XP, brew Beans into Tokens, and finish Today's Order for Stamps. Start with {balance}: it shows what to do next and what your level unlocks.",
         {
+            "Start": ["balance", "leaderboard"],
             "Earn": ["brew", "sell", "thermometer"],
-            "Spend": [
-                "shop",
-                "buy",
-                "stardrop",
-                "megabox",
-                "rates",
-                "redeem",
-                "customize",
-                "pin",
-            ],
-            "Play": ["blackjack", "coinflip", "table"],
-            "Rank": ["balance", "leaderboard"],
+            "Spend": ["shop", "buy", "redeem"],
+            "Open": ["stardrop", "megabox", "rates"],
+            "Play": ["table", "blackjack", "coinflip"],
+            "Extras": ["customize", "pin"],
             STAFF: [
                 "add",
                 "addinvites",

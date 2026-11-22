@@ -5,32 +5,38 @@ import discord
 from discord.ext import commands
 from discord.ui import Button, View
 
-from brawl.Currency.boss import BossInspectionView
-from brawl.Currency.db import (
-    g_shops,
-    sync_shop_effects,
-    u_daily_checkin_streaks,
-)
+from brawl.Currency.boss import start_inspection
+from brawl.Currency.config import BREW, HOME, LADDER, SELL, STAMP_GOALS
+from brawl.Currency.db import sync_shop_effects, u_daily_checkin_streaks
 from brawl.Currency.helper import (
     AUTORESPONSE_MAP,
     BEAN_EMOTE,
-    BOSS_EMBED,
-    BOSS_INSPECTION_ACTIONS,
-    BOSS_INSPECTION_ROLE_ID,
-    BOT_COMMANDS,
     EFFECT_EMOTE,
     MAIN_GUILD_ID,
     NO_EMOTE,
+    PASS_EMOTE,
     REPLY_EMOTE,
     SERVER_STORE,
+    SHOP_EMOTE,
+    STAMP_EMOTE,
     STAR_DROP_EMOTE,
     TOKEN_EMOTE,
     ULTRA_TIER_ROLE_ID,
     YES_EMOTE,
 )
-from brawl.Currency.quests import update_quest
-from brawl.Currency.shop import Panel, SortSelectionView, get_shop_embeds
+from brawl.Currency.panel import NEXT, panel
+from brawl.Currency.quests import get_next_daily_reset, order_lines, update_quest
+from brawl.Currency.shop import open_shop
 from brawl.Currency.staff import StaffInfoView
+
+
+def runs_staff_text(message):
+    """The dash commands post panels and start events, so only admins run them."""
+    return (
+        message.guild is not None
+        and not message.author.bot
+        and message.author.guild_permissions.administrator
+    )
 
 
 class Daily(commands.Cog):
@@ -95,7 +101,7 @@ class Daily(commands.Cog):
             ):
                 await message.channel.send(response)
 
-        if message.content == "-information" and not message.author.bot:
+        if message.content == "-information" and runs_staff_text(message):
             embed = discord.Embed(
                 description=f"# Welcome to Brawl Stars Cafe \n> We are a passionate and friendly Brawl Stars community where you can earn currency just by chatting to spend it on free Gems or even a Brawl Pass! There are tons of exciting giveaways and server events await for a lot of **freebies**! <a:moneydance:1227425759077859359>\n## <:KitBP:1394206796888932393> Server Economy & Redeeming Free Stuffs\nThis sounds too good to be true, but by chatting actively daily in our server, you can earn {BEAN_EMOTE} **Starr Beans** and {TOKEN_EMOTE} **Starr Tokens**, two of our in-server currency where you could use them to redeem **FREE** goodies in Brawl Stars and in our Discord server. <:Information:855023058255478794> **Visit <#{SERVER_STORE}> to learn about how!**\n## <:PennyGems:1394209288943177828> Weekly Server Giveaways\nYou could be one of the lucky stars to win **additional prizes and freebies**! Don't forget to **check out <#791537582450278400> and <#1394266106377535640> for any giveaways**, both now and in the future!",
                 color=0xFCCA50,
@@ -146,7 +152,7 @@ class Daily(commands.Cog):
                 await message.delete(delay=10)
             return
 
-        if message.content == "-blackjack" and not message.author.bot:
+        if message.content == "-blackjack" and runs_staff_text(message):
             embed = discord.Embed(
                 description=(
                     "## How to Play Blackjack\n"
@@ -188,23 +194,14 @@ class Daily(commands.Cog):
                     f"{NO_EMOTE} I couldn't send you a DM. Please make sure your DMs are open and try again."
                 )
 
-        if message.content == "-inspect" and not message.author.bot:
-            channel = message.channel
-            all_action_keys = list(BOSS_INSPECTION_ACTIONS.keys())
-            selected_action_keys = random.sample(all_action_keys, 3)
-            view = BossInspectionView(self, selected_action_keys)
-            inspection_message = await channel.send(
-                content=f"<@&{BOSS_INSPECTION_ROLE_ID}> The boss has arrived for a surprise inspection! 😰",
-                embed=BOSS_EMBED,
-                view=view,
-            )
-            view.message = inspection_message
+        if message.content == "-inspect" and runs_staff_text(message):
+            await start_inspection(self, message.channel)
             try:
                 await message.delete()
             except:
                 pass
 
-        if message.content == "-supporterperks" and not message.author.bot:
+        if message.content == "-supporterperks" and runs_staff_text(message):
             await message.channel.send(
                 embeds=[
                     discord.Embed(
@@ -253,38 +250,37 @@ class Daily(commands.Cog):
             except:
                 pass
 
-        if message.content == "-dailypanel" and not message.author.bot:
+        if message.content == "-dailypanel" and runs_staff_text(message):
             embed = discord.Embed(
                 description=(
-                    "# <:BrockCool:1391630483867172935> The Server Store!\n"
-                    f"That's right! You can earn {BEAN_EMOTE} **Starr Beans** and {TOKEN_EMOTE} **Starr Tokens** just by actively talking in our server! Use them to redeem **FREE** goodies, including in-game rewards, in our server store, or even win a **Brawl Pass**! "
-                    # "### <:slash:1037445915348324505> Slash Commands\n"
-                    "<:slash:1037445915348324505> **Check out your profile card in `/balance` to see your progress!**\n"
-                    # f"> <:slash:1037445915348324505> Reach **top 10** to flex on the server **`/leaderboard`**\n"
-                    # f"> <a:GeneDizzy:824047000496111676> You can **`/brew`** coffee and **`/sell`** it to earn Tokens\n"
-                    # f"> <a:MortisLove:885470873396588575> Check out **`/shop`** for rewards or click button below"
-                    "## <a:leonConfused:1391625863107444820> 5 Easy Ways to Earn Currency\n"
-                    f"1. **Daily Check-ins**: Claim {BEAN_EMOTE} `500` daily below *(10% chance for **double** {BEAN_EMOTE})*\n"
-                    f"-# <:reply:1036792837821435976> ***Streak**: Get quadriple {BEAN_EMOTE} and bonus {TOKEN_EMOTE} every 7th day of your streak*\n"
-                    f"-# <:reply:1036792837821435976> ***Server Boosters**: Get extra {BEAN_EMOTE} `200` every day*\n"
-                    f"2. **Chatting**: Get up to {BEAN_EMOTE} `1,000` Beans/day just by sending messages\n"
-                    f"-# <:reply:1036792837821435976> ***Level Up**: Earn extra batches of {BEAN_EMOTE} and {TOKEN_EMOTE} effortlessly*\n"
-                    f"-# <:reply:1036792837821435976> ***Server Boosters**: Increased daily cap to {BEAN_EMOTE} `1500` Beans/day*\n"
-                    f"-# <:reply:1036792837821435976> ***Double Beans Weekend**: Get **double** {BEAN_EMOTE} during weekends!*\n"
-                    f"-# <:reply:1036792837821435976> ***Thermometer**: Earn rare {TOKEN_EMOTE} drops while chatting during peak hours!*\n"
-                    f"3. **Brewing**: You can **`/brew`** coffee with {BEAN_EMOTE} and **`/sell`** it to earn {TOKEN_EMOTE}\n"
-                    f"-# <:reply:1036792837821435976> ***Insurance**: Protect your brew from `5%` burnt chance for a small fee*\n"
-                    f"-# <:reply:1036792837821435976> ***Breakdown**: Type `/brew` without selecting a roast to view rewards breakdown*\n"
-                    f"4. **Inviting**: Invite friends monthly to **`/brew`** and **`/sell`** for bonus {TOKEN_EMOTE} buffs!\n"
-                    f"-# <:reply:1036792837821435976> <a:warning:1391215594430402742> ***They must join from __your__ invite link!** See how to unlock roles [here](https://discord.com/channels/{MAIN_GUILD_ID}/1396565294582857738/1397799340646338673)!*\n"
-                    f"5. **Tabling**: Join a table to be part of a social group!\n"
-                    f"-# <:reply:1036792837821435976> ***Complete group quests** for {BEAN_EMOTE} and climb the leaderboard for {TOKEN_EMOTE} rewards!*\n"
+                    "# <:BrockCool:1391630483867172935> The Server Store\n"
+                    f"Earn {BEAN_EMOTE} **Beans** and {TOKEN_EMOTE} **Tokens** just by being active in the server, "
+                    "then spend them in the shop on **free** in-game rewards, server perks, or even a **Brawl Pass**!\n"
+                    f"<:slash:1037445915348324505> **Open {HOME} to see your level, your order and what to do next.**\n"
+                    "## <a:leonConfused:1391625863107444820> 5 Ways to Earn\n"
+                    f"1. **Clock In**: Press the button below for {BEAN_EMOTE} `500` every day *(10% chance for **double**)*\n"
+                    f"-# {REPLY_EMOTE} ***Streak**: every 7th day in a row pays 4x {BEAN_EMOTE} plus `2-5` {TOKEN_EMOTE}*\n"
+                    f"-# {REPLY_EMOTE} ***Server Boosters**: an extra {BEAN_EMOTE} `200` every day*\n"
+                    f"-# {REPLY_EMOTE} ***Today's Order**: clocking in starts it. Finish it for {BEAN_EMOTE} `1,000` and {STAMP_EMOTE} `1` Stamp*\n"
+                    f"2. **Chatting**: Up to {BEAN_EMOTE} `1,000` a day just by sending messages\n"
+                    f"-# {REPLY_EMOTE} ***Level Up**: chatting gives XP too, and each level opens something new*\n"
+                    f"-# {REPLY_EMOTE} ***Server Boosters**: the daily limit goes up to {BEAN_EMOTE} `1,500`*\n"
+                    f"-# {REPLY_EMOTE} ***Double Beans Weekend**: the limit doubles on Saturday and Sunday*\n"
+                    f"-# {REPLY_EMOTE} ***Thermometer**: rare {TOKEN_EMOTE} drops when the chat is busy*\n"
+                    f"3. **Brewing**: {BREW} coffee with {BEAN_EMOTE}, wait, then {SELL} it for {TOKEN_EMOTE}\n"
+                    f"-# {REPLY_EMOTE} ***Insurance**: pay a small fee so your brew can't burn*\n"
+                    f"-# {REPLY_EMOTE} ***Roast Guide**: use {BREW} without picking a roast to see every payout*\n"
+                    f"4. **Inviting**: Friends you invite who brew and sell earn you {BEAN_EMOTE} and a {TOKEN_EMOTE} boost\n"
+                    f"-# {REPLY_EMOTE} <a:warning:1391215594430402742> ***They must join from __your__ invite link.** [See how it works](https://discord.com/channels/{MAIN_GUILD_ID}/1396565294582857738/1397799340646338673)*\n"
+                    f"5. **Tables**: Join a table at Level `{LADDER['tables'][0]}` for a shared weekly quest\n"
+                    f"-# {REPLY_EMOTE} ***Top table**: the best table of the week wins {TOKEN_EMOTE} for everyone seated*\n"
+                    f"## {PASS_EMOTE} Brawl Pass\n"
+                    f"Collect {STAMP_EMOTE} `{STAMP_GOALS['brawl_pass']}` Stamps for a **Brawl Pass**, "
+                    f"or `{STAMP_GOALS['brawl_pass_plus']}` for a **Brawl Pass Plus**. You get one Stamp for each finished order.\n"
                 ),
                 color=0xE0E828,
             )
-            embed.set_footer(
-                text="🔻 Dailies reset 24h after last claim | 24h claim period"
-            )
+            embed.set_footer(text="🔻 Clock In and Today's Order reset at midnight UTC")
             view = self.DailyPanelView(self)
             await message.channel.send(embed=embed, view=view)
             try:
@@ -298,7 +294,7 @@ class Daily(commands.Cog):
             self.cog = cog
 
         @discord.ui.button(
-            label="Daily Check-in",
+            label="Clock In",
             style=discord.ButtonStyle.green,
             custom_id="daily_button",
             emoji="🗓️",
@@ -309,35 +305,18 @@ class Daily(commands.Cog):
             await self.cog.process_daily(interaction)
 
         @discord.ui.button(
-            label="Shop Items",
+            label="Shop",
             style=discord.ButtonStyle.blurple,
             custom_id="store_items",
-            emoji="🛒",
+            emoji=SHOP_EMOTE,
         )
         async def store_items(
             self, interaction: discord.Interaction, button: discord.ui.Button
         ):
             await interaction.response.defer(ephemeral=True)
-            ref = g_shops(interaction.guild.id)
-            shop_data = ref.get() or []
-
-            pages = await get_shop_embeds(interaction, shop_data, empty_condition=False)
-            if interaction.user.guild_permissions.administrator:
-                view = Panel(
-                    sort_default="sort by cost (high to low)",
-                    filter_default=None,
-                    pages=pages,
-                    initial_author=interaction.user,
-                )
-            else:
-                view = SortSelectionView(
-                    sort_default="sort by cost (high to low)",
-                    filter_default=None,
-                    pages=pages,
-                    initial_author=interaction.user,
-                )
+            view, file = await open_shop(interaction)
             view.message = await interaction.followup.send(
-                embed=pages[0], view=view, ephemeral=True
+                file=file, view=view, ephemeral=True
             )
 
     class InformationView(View):
@@ -552,18 +531,20 @@ class Daily(commands.Cog):
         }
 
         current_time = time.time()
-        time_since_last = current_time - streak_data["last_claim"]
+        days_missed = int(current_time // 86400) - int(
+            streak_data["last_claim"] // 86400
+        )
+        next_claim = get_next_daily_reset()
         insurance_used = False
 
-        if time_since_last < 86400:
-            next_claim = streak_data["last_claim"] + 86400
+        if days_missed < 1:
             await interaction.response.send_message(
-                f"{NO_EMOTE} You've already claimed today! Next claim available <a:clock:1382887924273774754> <t:{int(next_claim)}:R>",
+                f"{NO_EMOTE} You've already clocked in today! Next check-in <a:clock:1382887924273774754> <t:{next_claim}:R>",
                 ephemeral=True,
             )
             return
 
-        if time_since_last > 172800:
+        if days_missed > 1:
             active_effects = await self.economy.effect_manager.get_user_active_effects(
                 user_id
             )
@@ -635,20 +616,13 @@ class Daily(commands.Cog):
             beans_earned += 1500
 
         await self.economy.add_beans(user_id, beans_earned)
-        stamp_cog = self.bot.get_cog("StampCard")
-        if stamp_cog:
-            await stamp_cog.update_progress(user_id, "daily_checkins", 1)
-        await update_quest(
+        order = await update_quest(
             user_id, interaction.guild.id, {"daily_checkins": 1}, self.bot
         )
         if tokens_earned:
             await self.economy.add_tokens(user_id, tokens_earned)
 
-        embed = discord.Embed(
-            title="<a:tada:1227425729654820885> Daily Reward Claimed!",
-            description="*Come back tomorrow for more juicy rewards! 🧃*",
-            color=discord.Color.green(),
-        )
+        embed = panel("clock_in", "Clocked in", tone="good")
         reward_text = f"{BEAN_EMOTE} **{beans_earned} Beans**"
         if tokens_earned:
             reward_text += (
@@ -668,42 +642,49 @@ class Daily(commands.Cog):
         embed.add_field(name="Rewards Earned", value=reward_text, inline=False)
         embed.add_field(
             name="Current Streak",
-            value=f"<a:streak:1371651844652273694> `{streak_data['current_streak']} days`",
+            value=f"<a:streak:1371651844652273694> `{streak_data['current_streak']}` days",
             inline=True,
         )
         embed.add_field(
             name="All-Time Record",
-            value=f"<a:max_streak:1371655286049214672> `{streak_data['all_time_high']} days`",
+            value=f"<a:max_streak:1371655286049214672> `{streak_data['all_time_high']}` days",
             inline=True,
         )
         embed.add_field(
-            name="Next Claim",
-            value=f"<a:clock:1382887924273774754> <t:{int(current_time + 86400)}:R>",
+            name="Next Clock In",
+            value=f"<a:clock:1382887924273774754> <t:{next_claim}:R>",
             inline=True,
         )
-        embed.set_footer(
-            text="Tip: You get quadriple rewards + bonus tokens every week!"
+        embed.add_field(
+            name="Today's Order",
+            value="\n".join(order_lines(user_id) + order)
+            + "\n-# Finish all of them for 1 Stamp on your Stamp Card."
+            + f"\n-# **Next:** {NEXT['chat']}",
+            inline=False,
         )
+        embed.set_footer(text="Every 7th day in a row pays 4x Beans plus Tokens.")
         embeds = [embed]
 
-        new_beans, _ = await self.economy.get_balance(user_id)
-
-        passed_tutorial = False
-        if hasattr(self.economy, "tutorial_manager"):
-            passed_tutorial = await self.economy.tutorial_manager.check_balance_update(
-                user_id, new_beans
-            )
-
-        if passed_tutorial:
-            embed_passed = discord.Embed(
-                title="Tutorial Step Completed!",
-                description=(
-                    f"<@{user_id}> Great! You now have enough beans. Head over to <#{BOT_COMMANDS}> for further instructions!"
-                ),
-                color=discord.Color.purple(),
-            )
-            embeds.append(embed_passed)
+        guide = await self.economy.tutorial_manager.advance(user_id, "clock_in")
+        if guide:
+            embeds.append(guide)
         await interaction.response.send_message(embeds=embeds, ephemeral=True)
+
+
+class ClockInView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Clock In",
+        style=discord.ButtonStyle.blurple,
+        emoji="🗓️",
+        custom_id="clock_in",
+    )
+    async def clock_in(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.client.get_cog("Daily").process_daily(interaction)
 
 
 async def setup(bot):

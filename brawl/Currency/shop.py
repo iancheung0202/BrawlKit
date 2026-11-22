@@ -6,271 +6,127 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from brawl.Currency.card import item_icon, plain, render
+from brawl.Currency.config import ITEM_STATIONS
 from brawl.Currency.db import (
     g_shops,
     g_thermometer,
     sync_sell_alarm,
     sync_shop_effects,
+    u_balance,
     u_customization,
     u_daily_chat_earnings,
     u_mega_boxes,
     u_mega_boxes_purchases,
     u_pin_message,
+    u_shop_cooldowns,
     u_star_drops,
     u_star_drops_purchases,
 )
 from brawl.Currency.helper import (
     BEAN_EMOTE,
-    EFFECT_EMOTE,
     MAIN_GUILD_ID,
-    MEGA_BOX_EMOTE,
     NO_EMOTE,
     PERFECT_BREW_CHANCE,
-    REPLY_EMOTE,
     ROAST_TYPES,
-    STAR_DROP_EMOTE,
     STORE_ITEMS,
     TOKEN_EMOTE,
     ULTRA_TIER_ROLE_ID,
-    YES_EMOTE,
     get_current_date_key,
     get_next_day_timestamp,
 )
+from brawl.Currency.home import background
+from brawl.Currency.ladder import level_of, lock_line, locked, unlocked
 from brawl.Currency.pagination import BasePaginationView
-from brawl.Currency.quests import update_quest
+from brawl.Currency.quests import report, update_quest
+from brawl.Currency.shopcard import (
+    CLAIM,
+    FILTERS,
+    ROLE,
+    SORTS,
+    SUPERCELL,
+    after,
+    draw_purchase,
+    draw_shop,
+    listing,
+    reward_icon,
+)
 
 
-class FilterSelection(discord.ui.Select):
-    def __init__(
-        self,
-        default=None,
-        initial_author=None,
-        sort_default="sort by cost (high to low)",
-    ):
-        self.initial_author = initial_author
-        self.sort_default = sort_default
-        options = []
-        filterOptions = [
-            "All Items",
-            "Cost Beans",
-            "Cost Tokens",
-            "Effect Items",
-            "Supercell Items",
-        ]
-        filterOptionsEmoji = [
-            "<:Information:855023058255478794>",
-            BEAN_EMOTE,
-            TOKEN_EMOTE,
-            EFFECT_EMOTE,
-            "<:account:1486161374601154601>",
-        ]
-        # Default to "All Items" if no filter is selected
-        default_filter = default if default else "All Items"
-        for i in filterOptions:
-            options.append(
-                discord.SelectOption(
-                    label=i,
-                    emoji=filterOptionsEmoji[filterOptions.index(i)],
-                    default=(i == default_filter),
-                )
-            )
-
+class ShopSelect(discord.ui.Select):
+    def __init__(self, field, options, chosen, row):
+        self.field = field
         super().__init__(
-            placeholder="Filter items...",
-            max_values=1,
-            min_values=1,
-            options=options,
-            custom_id="filterselection",
-            row=3,
+            custom_id=f"{field}selection",
+            row=row,
+            options=[
+                discord.SelectOption(label=option, default=option == chosen)
+                for option in options
+            ],
         )
 
     async def callback(self, interaction: discord.Interaction):
-        ref = g_shops(interaction.guild.id)
-        rewards = ref.get() or []
-
-        filter_map = {
-            "Cost Beans": "beans",
-            "Cost Tokens": "tokens",
-            "Effect Items": "effect_items",
-            "Supercell Items": "supercell",
-            "All Items": None,
-        }
-        filter_type = filter_map.get(self.values[0])
-
-        sort_by = "cost" if "cost" in self.sort_default else "name"
-        reverse = "high to low" in self.sort_default or "z-a" in self.sort_default
-
-        pages = await get_shop_embeds(
-            interaction,
-            rewards,
-            empty_condition=(len(rewards) == 0),
-            sort_by=sort_by,
-            reverse=reverse,
-            filter_type=filter_type,
-        )
-
-        if interaction.user.guild_permissions.administrator:
-            view = Panel(
-                sort_default=self.sort_default,
-                filter_default=self.values[0],
-                pages=pages,
-                initial_author=self.initial_author,
-            )
-        else:
-            view = SortSelectionView(
-                sort_default=self.sort_default,
-                filter_default=self.values[0],
-                pages=pages,
-                initial_author=self.initial_author,
-            )
-
-        view.page = 0
-        view.update_buttons()
-        await interaction.response.edit_message(embed=pages[0], view=view)
-        view.message = interaction.message
+        setattr(self.view, self.field, self.values[0])
+        for option in self.options:
+            option.default = option.label == self.values[0]
+        self.view.rows = g_shops(interaction.guild.id).get() or []
+        self.view.page = 0
+        await self.view.turn(interaction)
 
 
-class SortSelection(discord.ui.Select):
-    def __init__(
-        self,
-        sort_default="sort by cost (high to low)",
-        filter_default=None,
-        initial_author=None,
-    ):
-        self.initial_author = initial_author
-        self.filter_default = filter_default
-        options = []
-        sortOptions = [
-            "sort by cost (low to high)",
-            "sort by cost (high to low)",
-            "sort by name (a-z)",
-            "sort by name (z-a)",
-        ]
-        sortOptionsEmoji = [
-            "<:price_ascending:1346329079145562112>",
-            "<:price_descending:1346329080462577725>",
-            "<:name_ascending:1346329053455585324>",
-            "<:name_descending:1346329054634053703>",
-        ]
-        for i in sortOptions:
-            options.append(
-                discord.SelectOption(
-                    label=i,
-                    emoji=sortOptionsEmoji[sortOptions.index(i)],
-                    default=(i == sort_default),
-                )
-            )
+class ShopView(BasePaginationView):
+    """The shop card with its page, sort and filter controls."""
 
-        super().__init__(
-            placeholder="Choose the Sorting",
-            max_values=1,
-            min_values=1,
-            options=options,
-            custom_id="sortselection",
-            row=2,
-        )
+    def __init__(self, member, guild, rows, wallet):
+        super().__init__(initial_author=member, timeout=300)
+        self.guild, self.rows, self.wallet = guild, rows, wallet
+        self.sort, self.filter = "Price: low to high", "All items"
+        self.add_item(ShopSelect("sort", SORTS, self.sort, 2))
+        self.add_item(ShopSelect("filter", FILTERS, self.filter, 3))
+        self.lay_out()
 
-    async def callback(self, interaction: discord.Interaction):
-        ref = g_shops(interaction.guild.id)
-        rewards = ref.get() or []
-        sort_by = "cost" if "cost" in self.values[0] else "name"
-        reverse = "high to low" in self.values[0] or "z-a" in self.values[0]
-        filter_map = {
-            "Cost Beans": "beans",
-            "Cost Tokens": "tokens",
-            "Effect Items": "effect_items",
-            "Supercell Items": "supercell",
-            "All Items": None,
-        }
-        filter_type = (
-            filter_map.get(self.filter_default) if self.filter_default else None
-        )
-
-        pages = await get_shop_embeds(
-            interaction,
-            rewards,
-            empty_condition=(len(rewards) == 0),
-            sort_by=sort_by,
-            reverse=reverse,
-            filter_type=filter_type,
-        )
-
-        if interaction.user.guild_permissions.administrator:
-            view = Panel(
-                sort_default=self.values[0],
-                filter_default=self.filter_default,
-                pages=pages,
-                initial_author=self.initial_author,
-            )
-        else:
-            view = SortSelectionView(
-                sort_default=self.values[0],
-                filter_default=self.filter_default,
-                pages=pages,
-                initial_author=self.initial_author,
-            )
-
-        view.page = 0
-        view.update_buttons()
-        await interaction.response.edit_message(embed=pages[0], view=view)
-        view.message = interaction.message
-
-
-class SortSelectionView(BasePaginationView):
-    def __init__(
-        self,
-        sort_default="sort by cost (high to low)",
-        filter_default=None,
-        pages=None,
-        initial_author=None,
-        timeout=300,
-    ):
-        super().__init__(pages=pages, initial_author=initial_author, timeout=timeout)
-        self.sort_default = sort_default
-        self.filter_default = filter_default
-        self.add_item(
-            SortSelection(
-                sort_default=sort_default,
-                filter_default=filter_default,
-                initial_author=self.initial_author,
-            )
-        )
-        self.add_item(
-            FilterSelection(
-                default=filter_default,
-                initial_author=self.initial_author,
-                sort_default=sort_default,
-            )
-        )
+    def lay_out(self):
+        self.pages = listing(self.guild, self.rows, self.sort, self.filter) or [[]]
+        self.page = min(self.page, len(self.pages) - 1)
         self.update_buttons()
 
+    async def file(self):
+        self.lay_out()
+        shop = {
+            **self.wallet,
+            "items": self.pages[self.page],
+            "show": self.filter,
+            "page": self.page + 1,
+            "pages": len(self.pages),
+        }
+        return await render(draw_shop, shop, name="shop")
 
-class Panel(BasePaginationView):
-    def __init__(
-        self,
-        sort_default="sort by cost (high to low)",
-        filter_default=None,
-        pages=None,
-        initial_author=None,
-    ):
-        super().__init__(pages=pages, initial_author=initial_author, timeout=300)
-        self.sort_default = sort_default
-        self.filter_default = filter_default
-        self.add_item(
-            SortSelection(
-                sort_default=sort_default,
-                filter_default=filter_default,
-                initial_author=self.initial_author,
-            )
+    async def turn(self, interaction):
+        await interaction.response.edit_message(
+            attachments=[await self.file()], view=self
         )
-        self.add_item(
-            FilterSelection(
-                default=filter_default,
-                initial_author=self.initial_author,
-                sort_default=sort_default,
+
+
+class Panel(ShopView):
+    """The shop with the admin row for editing custom rewards."""
+
+    async def edit(self, interaction, operation):
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message(
+                f"{NO_EMOTE} Missing Administrator permission.", ephemeral=True
             )
-        )
-        self.update_buttons()
+        modal = RewardModal(operation, interaction.guild.id)
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        if modal.pages is not None:
+            self.rows = modal.pages
+            await interaction.edit_original_response(
+                attachments=[await self.file()], view=self
+            )
+        if modal.on_submit_interaction:
+            await modal.on_submit_interaction.response.send_message(
+                embed=modal.update, ephemeral=True
+            )
 
     @discord.ui.button(
         label="Add Reward",
@@ -278,38 +134,8 @@ class Panel(BasePaginationView):
         custom_id="addreward",
         row=0,
     )
-    async def add_reward(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(
-                f"{NO_EMOTE} Missing Administrator permission.", ephemeral=True
-            )
-        modal = RewardModal("add", interaction.guild.id)
-        await interaction.response.send_modal(modal)
-        await modal.wait()
-        if hasattr(modal, "pages") and modal.pages is not None:
-            view = (
-                Panel(
-                    sort_default=self.sort_default,
-                    filter_default=self.filter_default,
-                    pages=modal.pages,
-                    initial_author=interaction.user,
-                )
-                if interaction.user.guild_permissions.administrator
-                else SortSelectionView(
-                    sort_default=self.sort_default,
-                    filter_default=self.filter_default,
-                    pages=modal.pages,
-                    initial_author=interaction.user,
-                )
-            )
-            view.page = 0
-            view.update_buttons()
-            await interaction.edit_original_response(embed=modal.pages[0], view=view)
-        await modal.on_submit_interaction.response.send_message(
-            embed=modal.update, ephemeral=True
-        )
+    async def add_reward(self, interaction, button):
+        await self.edit(interaction, "add")
 
     @discord.ui.button(
         label="Remove Reward",
@@ -317,110 +143,63 @@ class Panel(BasePaginationView):
         custom_id="removereward",
         row=0,
     )
-    async def remove_reward(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(
-                f"{NO_EMOTE} Missing Administrator permission.", ephemeral=True
-            )
-        modal = RewardModal("remove", interaction.guild.id)
-        await interaction.response.send_modal(modal)
-        await modal.wait()
-        if hasattr(modal, "pages") and modal.pages is not None:
-            view = (
-                Panel(
-                    sort_default=self.sort_default,
-                    filter_default=self.filter_default,
-                    pages=modal.pages,
-                    initial_author=interaction.user,
-                )
-                if interaction.user.guild_permissions.administrator
-                else SortSelectionView(
-                    sort_default=self.sort_default,
-                    filter_default=self.filter_default,
-                    pages=modal.pages,
-                    initial_author=interaction.user,
-                )
-            )
-            view.page = 0
-            view.update_buttons()
-            await interaction.edit_original_response(embed=modal.pages[0], view=view)
-        await modal.on_submit_interaction.response.send_message(
-            embed=modal.update, ephemeral=True
-        )
+    async def remove_reward(self, interaction, button):
+        await self.edit(interaction, "remove")
 
     @discord.ui.button(
         label="Edit Cost", style=discord.ButtonStyle.grey, custom_id="editcost", row=0
     )
-    async def edit_cost(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(
-                f"{NO_EMOTE} Missing Administrator permission.", ephemeral=True
-            )
-        modal = RewardModal("edit_cost", interaction.guild.id)
-        await interaction.response.send_modal(modal)
-        await modal.wait()
-        if modal.pages is not None:
-            view = (
-                Panel(
-                    sort_default=self.sort_default,
-                    filter_default=self.filter_default,
-                    pages=modal.pages,
-                    initial_author=interaction.user,
-                )
-                if interaction.user.guild_permissions.administrator
-                else SortSelectionView(
-                    sort_default=self.sort_default,
-                    filter_default=self.filter_default,
-                    pages=modal.pages,
-                    initial_author=interaction.user,
-                )
-            )
-            view.page = 0
-            view.update_buttons()
-            await interaction.edit_original_response(embed=modal.pages[0], view=view)
-        await modal.on_submit_interaction.response.send_message(
-            embed=modal.update, ephemeral=True
-        )
+    async def edit_cost(self, interaction, button):
+        await self.edit(interaction, "edit_cost")
 
     @discord.ui.button(
         label="Edit Stock", style=discord.ButtonStyle.grey, custom_id="editstock", row=0
     )
-    async def edit_stock(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(
-                f"{NO_EMOTE} Missing Administrator permission.", ephemeral=True
-            )
-        modal = RewardModal("edit_stock", interaction.guild.id)
-        await interaction.response.send_modal(modal)
-        await modal.wait()
-        if modal.pages is not None:
-            view = (
-                Panel(
-                    sort_default=self.sort_default,
-                    filter_default=self.filter_default,
-                    pages=modal.pages,
-                    initial_author=interaction.user,
-                )
-                if interaction.user.guild_permissions.administrator
-                else SortSelectionView(
-                    sort_default=self.sort_default,
-                    filter_default=self.filter_default,
-                    pages=modal.pages,
-                    initial_author=interaction.user,
-                )
-            )
-            view.page = 0
-            view.update_buttons()
-            await interaction.edit_original_response(embed=modal.pages[0], view=view)
-        await modal.on_submit_interaction.response.send_message(
-            embed=modal.update, ephemeral=True
-        )
+    async def edit_stock(self, interaction, button):
+        await self.edit(interaction, "edit_stock")
+
+
+async def open_shop(interaction):
+    """Builds the shop for one member: their balance, background and locks."""
+    user, guild = interaction.user, interaction.guild
+    balance = u_balance(user.id).get() or {}
+    stations = {*ITEM_STATIONS.values(), "effects"}
+    effects = interaction.client.get_cog("CurrencySystem").effect_manager
+    waits = {
+        item: last["last_purchase"] + STORE_ITEMS[item]["cooldown"] - time.time()
+        for item, last in (u_shop_cooldowns(user.id).get() or {}).items()
+        if item in STORE_ITEMS
+    }
+    day = get_current_date_key()
+    drops = u_star_drops_purchases(user.id, day).get() or 0
+    boxes = u_mega_boxes_purchases(user.id, day).get() or 0
+    ultra = guild.get_role(ULTRA_TIER_ROLE_ID)
+    wallet = {
+        "background": background(user.id),
+        "beans": balance.get("Beans", 0),
+        "tokens": balance.get("Tokens", 0),
+        "locked": {
+            station
+            for station in stations
+            if not await unlocked(interaction.client, user.id, guild.id, station)
+        },
+        "owned": {role.id for role in user.roles},
+        "active": {
+            item: data.get("expires_at", 0)
+            for item, data in (await effects.get_user_active_effects(user.id)).items()
+        },
+        "waits": {item: left for item, left in waits.items() if left > 0},
+        "today": {
+            "star_drop": drops,
+            "star_drop_10": drops,
+            "mega_box": boxes,
+            "mega_box_10": boxes,
+        },
+        "limit": 20 if ultra and ultra in user.roles else 10,
+    }
+    kind = Panel if user.guild_permissions.administrator else ShopView
+    view = kind(user, guild, g_shops(guild.id).get() or [], wallet)
+    return view, await view.file()
 
 
 class RewardModal(discord.ui.Modal):
@@ -523,7 +302,7 @@ class RewardModal(discord.ui.Modal):
             description=message,
             color=discord.Color.red() if is_error else discord.Color.green(),
         )
-        self.pages = await get_shop_embeds(interaction, rewards, False)
+        self.pages = rewards
         self.on_submit_interaction = interaction
         self.stop()
 
@@ -663,198 +442,6 @@ class RewardModal(discord.ui.Modal):
         )
 
 
-async def get_shop_embeds(
-    interaction,
-    item_list,
-    empty_condition,
-    sort_by="cost",
-    reverse=True,
-    filter_type=None,
-):
-    def categorize_item(item, is_effect=False):
-        """Categorize item as 'beans', 'tokens', or 'effect'"""
-        if is_effect:
-            return "effect"
-        currency = item[3]
-        if currency.lower() == "tokens":
-            return "tokens"
-        return "beans"
-
-    effect_items = []
-    for item_id, item_data in STORE_ITEMS.items():
-        price_parts = item_data["price"].split()
-        cost = int(price_parts[0])
-        currency = "tokens" if "token" in price_parts[1].lower() else "beans"
-        if "star drop" in item_data["name"].lower():
-            emote = STAR_DROP_EMOTE
-        elif "mega box" in item_data["name"].lower():
-            emote = MEGA_BOX_EMOTE
-        else:
-            emote = EFFECT_EMOTE
-        effect_items.append(
-            [
-                item_data["name"],
-                item_data["description"],
-                cost,
-                currency,
-                True,  # Always allow multiple purchases for effect items
-                -1,  # Unlimited stock
-                item_id,  # Item ID (effect only)
-                f"{emote}",  # Emoji (effect only)
-                item_data.get("cooldown", 0),  # Cooldown in seconds (effect only)
-            ]
-        )
-
-    formatted_custom_items = []
-    for custom_item in item_list or []:
-        if custom_item is None:
-            continue
-        if len(custom_item) == 6:
-            formatted_custom_items.append(custom_item + [None, None, None])
-        else:
-            formatted_custom_items.append(custom_item)
-
-    combined_items = effect_items + formatted_custom_items
-
-    if filter_type:
-        filtered_items = []
-        for item in combined_items:
-            is_effect = len(item) >= 9 and item[6] is not None
-            if filter_type == "effect_items":
-                if is_effect:
-                    filtered_items.append(item)
-            elif filter_type == "beans":
-                if item[3].lower() == "beans":
-                    filtered_items.append(item)
-            elif filter_type == "tokens":
-                if item[3].lower() == "tokens":
-                    filtered_items.append(item)
-            elif filter_type == "supercell":
-                if "<:account:1486161374601154601>" in str(item[0]):
-                    filtered_items.append(item)
-        combined_items = filtered_items
-
-    if not combined_items:
-        return [
-            discord.Embed(
-                title="Shop is empty!",
-                description="This server has no purchasable items yet.",
-                color=discord.Color.red(),
-            )
-        ]
-
-    sort_index = {"cost": 2, "name": 0}
-
-    def key_func(x):
-        if sort_by == "cost":
-            cost = int(x[2])
-            currency = x[3]
-            return cost * 1000 if currency == "tokens" else cost
-        else:
-            if isinstance(x[0], int) or str(x[0]).isdigit():
-                role = interaction.guild.get_role(int(x[0]))
-                return role.name.lower() if role else ""
-            return str(x[0]).lower()
-
-    order_text = "Descending" if reverse else "Ascending"
-    sort_text = "Cost" if sort_by == "cost" else "Name"
-
-    filter_map = {
-        "beans": "Bean Items",
-        "tokens": "Token Items",
-        "effect_items": "Effect Items",
-        "supercell": "Supercell Items",
-    }
-    filter_text = (
-        filter_map.get(filter_type, "All Items") if filter_type else "All Items"
-    )
-
-    sorted_items = sorted(combined_items, key=key_func, reverse=reverse)
-    pages = []
-    embed = discord.Embed(
-        title=f"{interaction.guild.name} Server Store",
-        description=(
-            f"You can use {BEAN_EMOTE} `Starr Beans` or {TOKEN_EMOTE} `Starr Tokens` to purchase these items.\n"
-            f"-# <:reply:1036792837821435976> *Use </balance:1393376242501157005> to check your balance and </buy:1393376242501157010> to purchase an item.*\n"
-            f"-# <:reply:1036792837821435976> *🔄 indicates the item can be purchased multiple times.*\n"
-            f"-# <:reply:1036792837821435976> *{EFFECT_EMOTE} Effect items have cooldowns between purchases.*"
-        ),
-        color=discord.Color.gold(),
-    )
-
-    for i, item in enumerate(sorted_items):
-        count = i + 1
-        stock_count = (
-            f"\n> **Remaining:** {'<a:out_of_stock:1384990609584033812> ' if item[5] == 0 else ''}`{item[5]}`"
-            if len(item) > 5 and item[5] != -1
-            else ""
-        )
-
-        currency_type = item[3]
-        currency_emote = BEAN_EMOTE if currency_type.lower() == "beans" else TOKEN_EMOTE
-        is_effect_item = len(item) >= 9 and item[6] is not None
-
-        if isinstance(item[0], int) or str(item[0]).isdigit():
-            role = interaction.guild.get_role(int(item[0]))
-            name = role.name if role else "Unknown Role"
-            mention = role.mention if role else "N/A"
-            embed.add_field(
-                name=f"{count}  {currency_emote} {int(item[2]):,} {currency_type.title()} • {name} {'🔄' if (len(item) > 4 and item[4]) else ''}",
-                value=f"> **Role:** {mention}\n> **Description:** {item[1]}{stock_count}",
-                inline=False,
-            )
-        else:
-            if is_effect_item:
-                item_name = item[0]
-                emoji = item[7] if len(item) > 7 else EFFECT_EMOTE
-                cooldown_seconds = item[8] if len(item) > 8 else 0
-                if cooldown_seconds == 0:
-                    cooldown_text = "No cooldown"
-                else:
-                    days = cooldown_seconds // (24 * 3600)
-                    hours = (cooldown_seconds % (24 * 3600)) // 3600
-                    if days > 0:
-                        if hours > 0:
-                            cooldown_text = f"{days} day{'s' if days != 1 else ''}, {hours} hour{'s' if hours != 1 else ''}"
-                        else:
-                            cooldown_text = f"{days} day{'s' if days != 1 else ''}"
-                    elif hours > 0:
-                        cooldown_text = f"{hours} hour{'s' if hours != 1 else ''}"
-                    else:
-                        minutes = cooldown_seconds // 60
-                        cooldown_text = f"{minutes} minute{'s' if minutes != 1 else ''}"
-
-                embed.add_field(
-                    name=f"{count}  {currency_emote} {int(item[2]):,} {currency_type.title()} • {item_name} {emoji} {'🔄' if (len(item) > 4 and item[4]) else ''}",
-                    value=f"> **Description:** {item[1]}{stock_count}\n> **Purchase Cooldown:** {cooldown_text}",
-                    inline=False,
-                )
-            else:
-                embed.add_field(
-                    name=f"{count}  {currency_emote} {int(item[2]):,} {currency_type.title()} • {item[0]} {'🔄' if (len(item) > 4 and item[4]) else ''}",
-                    value=f"> **Description:** {item[1]}{stock_count}",
-                    inline=False,
-                )
-
-        if (count) % 5 == 0 or count == len(sorted_items):
-            embed.set_footer(
-                text=f"Showing {filter_text} • Sorted by {sort_text} in {order_text} order • Page {len(pages) + 1} of {((len(sorted_items) - 1) // 5) + 1}"
-            )
-            pages.append(embed)
-            embed = discord.Embed(
-                title=f"{interaction.guild.name} Server Currency Shop",
-                description=(
-                    f"You can use {BEAN_EMOTE} **Starr Beans** or {TOKEN_EMOTE} **Starr Tokens** to purchase these items.\n"
-                    f"-# <:reply:1036792837821435976> *Use </balance:1393376242501157005> to check your balance and </buy:1393376242501157010> to purchase an item.*\n"
-                    f"-# <:reply:1036792837821435976> *🔄 indicates the item can be purchased multiple times.*\n"
-                    f"-# <:reply:1036792837821435976> *{EFFECT_EMOTE} Effect items have cooldowns between purchases.*"
-                ),
-                color=discord.Color.gold(),
-            )
-
-    return pages
-
-
 global_purchase_queue = asyncio.Queue()
 processing_global_queue = False
 
@@ -905,6 +492,8 @@ class Shop(commands.Cog):
                 f"{NO_EMOTE} You do not have permission to use this command.",
                 ephemeral=True,
             )
+        if await locked(interaction, "style"):
+            return
 
         user_id = interaction.user.id
 
@@ -1023,33 +612,11 @@ class Shop(commands.Cog):
                 f"{NO_EMOTE} You do not have permission to use this command.",
                 ephemeral=True,
             )
+        if await locked(interaction, "shop"):
+            return
         await interaction.response.defer(thinking=True)
-        ref = g_shops(interaction.guild.id)
-        shop_data = ref.get() or []
-
-        pages = await get_shop_embeds(interaction, shop_data, empty_condition=False)
-
-        if interaction.user.guild_permissions.administrator:
-            view = Panel(
-                sort_default="sort by cost (high to low)",
-                filter_default=None,
-                pages=pages,
-                initial_author=interaction.user,
-            )
-        else:
-            view = SortSelectionView(
-                sort_default="sort by cost (high to low)",
-                filter_default=None,
-                pages=pages,
-                initial_author=interaction.user,
-            )
-
-        view.message = await interaction.followup.send(embed=pages[0], view=view)
-
-        if hasattr(self.economy, "tutorial_manager"):
-            asyncio.create_task(
-                self.economy.tutorial_manager.on_shop_viewed(interaction.user.id)
-            )
+        view, file = await open_shop(interaction)
+        view.message = await interaction.followup.send(file=file, view=view)
 
     @shop.error
     async def shop_error(self, interaction: discord.Interaction, error: Exception):
@@ -1081,6 +648,8 @@ class Shop(commands.Cog):
                 f"{NO_EMOTE} You do not have permission to use this command.",
                 ephemeral=True,
             )
+        if await locked(interaction, "shop"):
+            return
         request = PurchaseRequest(interaction, item)
         await global_purchase_queue.put(request)
 
@@ -1177,10 +746,7 @@ class Shop(commands.Cog):
         if stock > 0:
             await self.update_shop_stock(guild_id, name, stock - 1)
 
-        await update_quest(user_id, guild_id, {"shop_purchases": 1}, self.bot)
-        stamp_cog = self.bot.get_cog("StampCard")
-        if stamp_cog:
-            await stamp_cog.update_progress(user_id, "shop_purchases", 1)
+        order = await update_quest(user_id, guild_id, {"shop_purchases": 1}, self.bot)
 
         display_name = name
         if name.isdigit():
@@ -1198,22 +764,36 @@ class Shop(commands.Cog):
                         content=f"{NO_EMOTE} Error assigning role: {e}",
                     )
 
-        reply_message = (
-            f"\n{REPLY_EMOTE} *Redeem your reward by creating a ticket in <#1390908939767648328>!*\n"
-            if not name.isdigit()
-            else ""
-        )
+        sale = {
+            "background": background(user_id),
+            "icon": reward_icon(name, SUPERCELL in name),
+            "name": plain(role.name if name.isdigit() and role else display_name),
+            "next": ROLE if name.isdigit() else CLAIM,
+            "cost": cost,
+            "currency": currency_type.lower(),
+            "beans": new_beans,
+            "tokens": new_tokens,
+        }
         await interaction.edit_original_response(
-            content=None,
-            embed=discord.Embed(
-                description=f"{YES_EMOTE} Successfully purchased {display_name} for {currency_emote} `{cost}`!{reply_message}\n-# **Your new balance:** {BEAN_EMOTE} `{new_beans}` Beans, {TOKEN_EMOTE} `{new_tokens}` Tokens.",
-                color=discord.Color.green(),
+            content=(
+                None
+                if name.isdigit()
+                else "Open a ticket in <#1390908939767648328> to claim your reward."
             ),
+            attachments=[await render(draw_purchase, sale, name="purchase")],
         )
+        await report(interaction, order)
 
     async def _process_effect_purchase(self, interaction, user_id: int, item_id: str):
         """Process purchase of effect items"""
         item_data = STORE_ITEMS[item_id]
+        station = ITEM_STATIONS.get(item_id, "effects")
+        guild_id = interaction.guild.id
+        if not await unlocked(self.bot, user_id, guild_id, station):
+            level = await level_of(self.bot, user_id, guild_id)
+            return await interaction.edit_original_response(
+                content=lock_line(station, level)
+            )
 
         if item_id == "star_drop" or item_id == "star_drop_10":
             date_key = get_current_date_key()
@@ -1303,12 +883,9 @@ class Shop(commands.Cog):
             new_tokens = tokens - cost
             await self.economy.update_balance(user_id, tokens=new_tokens)
 
-        await update_quest(
+        order = await update_quest(
             user_id, interaction.guild.id, {"shop_purchases": 1}, self.bot
         )
-        stamp_cog = self.bot.get_cog("StampCard")
-        if stamp_cog:
-            await stamp_cog.update_progress(user_id, "shop_purchases", 1)
 
         if item_id == "reset_chat_cap":
             earnings_data = self.economy.chat_system.earnings_cache.get(
@@ -1317,9 +894,7 @@ class Shop(commands.Cog):
             earnings_data["earnings"] = 0
             self.economy.chat_system.earnings_cache[user_id] = earnings_data
             u_daily_chat_earnings(user_id).update({"earnings": 0, "reset_time": 0})
-            effect_msg = (
-                f"\n🔄 **Chat cap reset!** You can now earn chat beans again today."
-            )
+            effect_msg = "You can earn chat Beans again today."
 
         elif item_id == "thermometer_boost":
             current_heat = self.economy.thermometer_heat
@@ -1327,7 +902,7 @@ class Shop(commands.Cog):
             new_heat = min(130, current_heat + boost_amount)
             self.economy.thermometer_heat = new_heat
             g_thermometer(interaction.guild.id).update({"heat": new_heat})
-            effect_msg = f"\n🔥 **Thermometer boosted!** Heat increased by {boost_amount} points (now at {new_heat})."
+            effect_msg = f"The thermometer is now at {new_heat}."
 
         elif item_id == "instant_brew":
             active_brew = await self.economy.get_active_brew(user_id)
@@ -1363,10 +938,7 @@ class Shop(commands.Cog):
                     tokens_earned += random.randint(3, 8)
 
             await self.economy.add_tokens(user_id, tokens_earned)
-            stamp_cog = self.bot.get_cog("StampCard")
-            if stamp_cog:
-                await stamp_cog.update_progress(user_id, "brew_sells", 1)
-            await update_quest(
+            order += await update_quest(
                 user_id, interaction.guild.id, {"brew_sells": 1}, self.bot
             )
             await self.economy.remove_active_brew(user_id)
@@ -1382,7 +954,7 @@ class Shop(commands.Cog):
             if sync_sell_alarm(user_id, "get"):
                 sync_sell_alarm(user_id, "delete", guild_id=interaction.guild.id)
 
-            effect_msg = f"\n🚀 **Instant completion!** Earned {TOKEN_EMOTE} `{tokens_earned}` tokens{'✨ **Perfect brew!**' if is_perfect else ''}."
+            effect_msg = f"Your brew sold for {tokens_earned} Tokens.{' It was a perfect brew.' if is_perfect else ''}"
 
         elif item_id == "star_drop" or item_id == "star_drop_10":
             amount_to_buy = 10 if item_id == "star_drop_10" else 1
@@ -1395,7 +967,9 @@ class Shop(commands.Cog):
             current_count = inventory_ref.get() or 0
             inventory_ref.set(current_count + amount_to_buy)
 
-            effect_msg = f"\n{STAR_DROP_EMOTE} You now have {current_count + amount_to_buy} unopened drops. Use </stardrop:1447676573020065996> to open them!"
+            effect_msg = (
+                f"You have {current_count + amount_to_buy} to open with /stardrop."
+            )
 
         elif item_id == "mega_box" or item_id == "mega_box_10":
             amount_to_buy = 10 if item_id == "mega_box_10" else 1
@@ -1407,21 +981,23 @@ class Shop(commands.Cog):
             inventory_ref = u_mega_boxes(user_id)
             current_count = inventory_ref.get() or 0
             inventory_ref.set(current_count + amount_to_buy)
-            effect_msg = f"\n{MEGA_BOX_EMOTE} You now have {current_count + amount_to_buy} unopened Mega Boxes. Use </megabox:1486191980349358224> to open them!"
+            effect_msg = (
+                f"You have {current_count + amount_to_buy} to open with /megabox."
+            )
 
         elif item_id == "message_pin":
             await item_data["effect"](user_id)
             pin_ref = u_pin_message(user_id)
             pin_data = pin_ref.get() or {"count": 0}
             pin_count = pin_data.get("count", 0)
-            effect_msg = f"\n📌 **Message Pin added!** You now have `{pin_count}` pin{'s' if pin_count != 1 else ''} available. Use </pin:1427543833792610344> to pin messages!"
+            effect_msg = f"You have {pin_count} to use with /pin."
 
         elif item_id == "custom_credit":
             await item_data["effect"](user_id)
             ref = u_customization(user_id)
             data = ref.get() or {"credits": 0}
             credits = data.get("credits", 0)
-            effect_msg = f"\n🎨 **Customization Credit added!** You now have `{credits}` credit{'s' if credits != 1 else ''}. Use </customize:1486174479489957908> to design your background!"
+            effect_msg = f"You have {credits} to use with /customize."
 
         else:
             await item_data["effect"](user_id)
@@ -1441,11 +1017,6 @@ class Shop(commands.Cog):
                         interaction.guild.id,
                     )
 
-                if hasattr(self.economy, "tutorial_manager"):
-                    asyncio.create_task(
-                        self.economy.tutorial_manager.on_item_bought(user_id, item_id)
-                    )
-
             elif item_id == "freeze_thermometer":
                 freeze_data = await self.economy.effect_manager.get_user_active_effects(
                     user_id
@@ -1459,19 +1030,25 @@ class Shop(commands.Cog):
                         interaction.guild.id,
                     )
 
-            effect_msg = (
-                f"\n{EFFECT_EMOTE} **{item_data['name']}** effect is now active!"
-            )
+            effect_msg = after(item_id)
 
         await self.economy.effect_manager.set_user_cooldown(user_id, item_id)
 
+        sale = {
+            "background": background(user_id),
+            "icon": item_icon(item_id),
+            "name": item_data["name"],
+            "next": effect_msg,
+            "cost": cost,
+            "currency": currency,
+            "beans": new_beans,
+            "tokens": new_tokens,
+        }
         await interaction.edit_original_response(
             content=None,
-            embed=discord.Embed(
-                description=f"{YES_EMOTE} Successfully purchased **{item_data['name']}** for {currency_emote} `{cost}` {currency.title()}!{effect_msg}\n-# **Your new balance:** {BEAN_EMOTE} `{new_beans}` Beans, {TOKEN_EMOTE} `{new_tokens}` Tokens.",
-                color=discord.Color.green(),
-            ),
+            attachments=[await render(draw_purchase, sale, name="purchase")],
         )
+        await report(interaction, order)
 
     @buy.autocomplete("item")
     async def item_autocomplete(self, interaction: discord.Interaction, current: str):

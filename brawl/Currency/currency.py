@@ -6,17 +6,22 @@ from datetime import datetime, timedelta, timezone
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import View
 
-from brawl.Currency.boss import BossInspectionView
+from brawl.Currency import heat, wallet
+from brawl.Currency.boss import start_inspection
+from brawl.Currency.card import render, roster
 from brawl.Currency.chat import ChatRewardSystem
+from brawl.Currency.config import (
+    REFERRAL_BRIDGE_BEANS,
+    REFERRAL_MASTER_SELLS,
+    REFERRAL_TRAINEE_BEANS,
+)
 from brawl.Currency.db import (
     g_boss_inspection,
     g_invites_member_data,
     g_member_history,
     g_referral_milestones,
     g_sell_alarm,
-    g_shop_effects,
     g_thermometer,
     sync_sell_alarm,
     sync_shop_effects,
@@ -24,14 +29,10 @@ from brawl.Currency.db import (
     u_brews,
     u_mega_boxes,
     u_star_drops,
-    u_thermometer_cooldown,
 )
 from brawl.Currency.effects import EffectManager
 from brawl.Currency.helper import (
     BEAN_EMOTE,
-    BOSS_EMBED,
-    BOSS_INSPECTION_ACTIONS,
-    BOSS_INSPECTION_ROLE_ID,
     BOT_COMMANDS,
     BRIDGE_ROLE_ID,
     INVITE_LOG,
@@ -44,21 +45,9 @@ from brawl.Currency.helper import (
     TRAINEE_ROLE_ID,
     get_current_month_key,
 )
+from brawl.Currency.home import background
+from brawl.Currency.stationcard import draw_thermometer
 from brawl.Currency.tutorial import TutorialManager
-
-
-class ThermometerView(View):
-    def __init__(self, cog, initial_embed, full_embed):
-        super().__init__(timeout=None)
-        self.cog = cog
-        self.initial_embed = initial_embed
-        self.full_embed = full_embed
-
-    @discord.ui.button(label="Reward Breakdown", style=discord.ButtonStyle.grey)
-    async def show_breakdown(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        await interaction.response.send_message(embed=self.full_embed, ephemeral=True)
 
 
 class CurrencySystem(commands.Cog):
@@ -81,31 +70,6 @@ class CurrencySystem(commands.Cog):
         self.boss_inspection_task = self.bot.loop.create_task(
             self.boss_inspection_loop()
         )
-
-    async def check_and_update_token_reward_limit(self, user_id: int):
-        """Check if user can receive token rewards today and update count"""
-        ref = u_thermometer_cooldown(user_id)
-        data = ref.get() or {}
-        current_time = time.time()
-
-        if (
-            "first_reward_time" in data
-            and current_time - data["first_reward_time"] >= 86400
-        ):
-            data = {"count": 0, "first_reward_time": current_time}
-
-        if "count" not in data:
-            data["count"] = 0
-        if "first_reward_time" not in data:
-            data["first_reward_time"] = current_time
-
-        if data["count"] >= 3:
-            return False, data["count"], data["first_reward_time"] + 86400
-
-        data["count"] += 1
-        ref.set(data)
-
-        return True, data["count"], data["first_reward_time"] + 86400
 
     async def thermo_bean_update_loop(self):
         """Process cached thermo beans every minute to reduce database writes"""
@@ -136,30 +100,16 @@ class CurrencySystem(commands.Cog):
         while not self.bot.is_closed():
             await asyncio.sleep(60)
 
-            freeze_ref = g_shop_effects(MAIN_GUILD_ID)
-            all_effects = freeze_ref.get() or {}
-            current_time = time.time()
-            current_time = time.time()
-
-            frozen = False
-            for user_id, user_effects in all_effects.items():
-                freeze_data = user_effects.get("freeze_thermometer", {})
-                if freeze_data.get("active", False) and current_time < freeze_data.get(
-                    "expires_at", 0
-                ):
-                    frozen = True
-                    if freeze_data.get("frozen_heat") is None:
-                        freeze_data["frozen_heat"] = self.thermometer_heat
-                        sync_shop_effects(
-                            int(user_id),
-                            "freeze_thermometer",
-                            "update",
-                            {"frozen_heat": self.thermometer_heat},
-                            MAIN_GUILD_ID,
-                        )
-                    break
-
+            frozen = heat.freeze(MAIN_GUILD_ID)
             if frozen:
+                if frozen[1].get("frozen_heat") is None:
+                    sync_shop_effects(
+                        frozen[0],
+                        "freeze_thermometer",
+                        "update",
+                        {"frozen_heat": self.thermometer_heat},
+                        MAIN_GUILD_ID,
+                    )
                 continue
 
             current_heat = self.thermometer_heat
@@ -366,16 +316,7 @@ class CurrencySystem(commands.Cog):
                     await asyncio.sleep(3600)
                     continue
 
-                all_action_keys = list(BOSS_INSPECTION_ACTIONS.keys())
-                selected_action_keys = random.sample(all_action_keys, 3)
-
-                view = BossInspectionView(self, selected_action_keys)
-                message = await channel.send(
-                    content=f"<@&{BOSS_INSPECTION_ROLE_ID}> The boss has arrived for a surprise inspection! 😰",
-                    embed=BOSS_EMBED,
-                    view=view,
-                )
-                view.message = message
+                await start_inspection(self, channel)
 
                 inspection_data["completed_drops"] += 1
                 inspection_data["last_drop_time"] = time.time()
@@ -391,14 +332,13 @@ class CurrencySystem(commands.Cog):
         return u_balance(user_id)
 
     async def add_beans(
-        self, user_id: int, amount: int, skip_quest_check: bool = False
+        self,
+        user_id: int,
+        amount: int,
+        skip_quest_check: bool = False,
+        reason: str = "other",
     ):
-        """Add Beans to user balance."""
-        ref = self._get_balance_ref(user_id)
-        data = ref.get() or {}
-        beans = data.get("Beans", 0)
-        new_beans = beans + amount
-        ref.update({"Beans": new_beans})
+        new_beans, _ = await wallet.change(user_id, beans=amount, reason=reason)
 
         if skip_quest_check:
             return new_beans
@@ -430,23 +370,12 @@ class CurrencySystem(commands.Cog):
                     print(f"Error checking quest: {e}")
         return new_beans
 
-    async def add_tokens(self, user_id: int, amount: int):
-        """Add Tokens to user balance."""
-        ref = self._get_balance_ref(user_id)
-        data = ref.get() or {}
-        tokens = data.get("Tokens", 0)
-        new_tokens = tokens + amount
-        ref.update({"Tokens": new_tokens})
-
+    async def add_tokens(self, user_id: int, amount: int, reason: str = "other"):
+        _, new_tokens = await wallet.change(user_id, tokens=amount, reason=reason)
         return new_tokens
 
     async def get_balance(self, user_id: int):
-        """Get user's current Beans and Tokens balance."""
-        ref = self._get_balance_ref(user_id)
-        data = ref.get() or {}
-        beans = data.get("Beans", 0)
-        tokens = data.get("Tokens", 0)
-        return beans, tokens
+        return wallet.balance(user_id)
 
     async def update_balance(self, user_id: int, beans: int = None, tokens: int = None):
         """Update user's Beans and/or Tokens balance."""
@@ -667,7 +596,7 @@ class CurrencySystem(commands.Cog):
             milestone["trainee_done"] = True
             mapping["brew_done"] = True
             role_granted = TRAINEE_ROLE_ID
-            await self.add_beans(inviter_id, 300)
+            await self.add_beans(inviter_id, REFERRAL_TRAINEE_BEANS)
             reward_message = f"🎉 Your invitee {invitee.mention} brewed their first coffee! You **earned {BEAN_EMOTE} `300` Beans** and unlocked the `Trainee Barista` role!"
             log_entry = f"🎯 **Milestone Reached:** <@&{TRAINEE_ROLE_ID}>\n🎁 **Reward:** `+300` Beans to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
 
@@ -679,13 +608,16 @@ class CurrencySystem(commands.Cog):
             milestone["bridge_done"] = True
             mapping["sell_done"] = True
             role_granted = BRIDGE_ROLE_ID
-            await self.add_beans(inviter_id, 3000)
+            await self.add_beans(inviter_id, REFERRAL_BRIDGE_BEANS)
             reward_message = f"🎉 Your invitee {invitee.mention} sold their first coffee! You **earned {BEAN_EMOTE} `3,000` Beans** and unlocked the `Bridge Barista` role!"
             log_entry = f"🎯 **Milestone Reached:** <@&{BRIDGE_ROLE_ID}>\n🎁 **Reward:** `+3000` Beans to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
 
         elif milestone_type == "sell":
             milestone["sells"] = milestone.get("sells", 0) + 1
-            if milestone["sells"] >= 3 and not milestone["master_done"]:
+            if (
+                milestone["sells"] >= REFERRAL_MASTER_SELLS
+                and not milestone["master_done"]
+            ):
                 milestone["master_done"] = True
                 role_granted = MASTER_ROLE_ID
                 reward_message = f"🏆 Your invitee(s) have successfully sold a total of 3 coffees! You unlocked the `Master Barista` role and will now **earn {TOKEN_EMOTE} `+50%` Tokens per non-burnt brew** until the end of this month."
@@ -726,86 +658,23 @@ class CurrencySystem(commands.Cog):
             await channel.send(embed=embed)
 
     @app_commands.command(
-        name="thermometer", description="Check the current Cup Thermometer status"
+        name="thermometer",
+        description="See how hot the chat is and what each message earns",
     )
     async def thermometer(self, interaction: discord.Interaction):
-        heat = self.thermometer_heat
-
-        freeze_ref = g_shop_effects(interaction.guild.id)
-        all_effects = freeze_ref.get() or {}
-        current_time = time.time()
-
-        frozen = False
-        freeze_user = None
-        for user_id_check, user_effects in all_effects.items():
-            freeze_data = user_effects.get("freeze_thermometer", {})
-            if freeze_data.get("active", False) and current_time < freeze_data.get(
-                "expires_at", 0
-            ):
-                frozen = True
-                freeze_user = await interaction.guild.fetch_member(int(user_id_check))
-                break
-
-        if heat >= 100:
-            level = "Boiling 🔥"
-            color = 0xFF0000
-            description = f"{BEAN_EMOTE} `3` Beans per effortful message + `1%` chance for {TOKEN_EMOTE} `1` Tokens\n-# <:reply:1036792837821435976> *Plus a special `0.1%` jackpot chance for {TOKEN_EMOTE} `3` Tokens!*"
-        elif heat >= 75:
-            level = "Hot 🌡️"
-            color = 0xFFA500
-            description = f"{BEAN_EMOTE} `2` Beans per effortful message + `0.5%` chance for {TOKEN_EMOTE} `1` Token"
-        elif heat >= 50:
-            level = "Warm ☕"
-            color = 0xFFFF00
-            description = f"{BEAN_EMOTE} `1` Bean per effortful message"
-        else:
-            level = "Cold ❄️"
-            color = 0xADD8E6
-            description = f"No active bonuses - keep chatting to heat it up!"
-
+        cup = {
+            "background": background(interaction.user.id),
+            "heat": self.thermometer_heat,
+            "drops": heat.drops_today(interaction.user.id),
+        }
+        frozen = heat.freeze(interaction.guild.id)
         if frozen:
-            if level == "Cold ❄️":
-                description = "No active bonuses!"
-            freeze_expires = min(
-                [
-                    freeze_data.get("expires_at", 0)
-                    for user_effects in all_effects.values()
-                    for freeze_data in [user_effects.get("freeze_thermometer", {})]
-                    if freeze_data.get("active", False)
-                ]
-            )
-            description += f"\n<:reply:1036792837821435976> *Thermometer frozen by {freeze_user.mention if freeze_user else 'Unknown'} until <t:{int(freeze_expires)}:t>*"
-
-        initial_embed = discord.Embed(
-            title=f"Cup Thermometer: {level}", description=description, color=color
+            member = (await roster(interaction.guild, [frozen[0]]))[0]
+            minutes = max(1, round((frozen[1]["expires_at"] - time.time()) / 60))
+            cup["frozen"] = (member.display_name if member else "someone", minutes)
+        await interaction.response.send_message(
+            file=await render(draw_thermometer, cup, name="thermometer")
         )
-
-        bar_length = 20
-        filled = min(int(heat / 100 * bar_length), bar_length)
-        bar = "█" * filled + "░" * (bar_length - filled)
-
-        initial_embed.add_field(
-            name=f"Heat Level: {min(heat, 100)}%", value=f"`{bar}`", inline=False
-        )
-
-        initial_embed.set_footer(
-            text="Heat decays gradually per minute. Chat in any of the three main channels to heat it up!"
-        )
-        full_embed = discord.Embed(color=discord.Color.blurple()).add_field(
-            name="List of Rewards",
-            value=(
-                f"<a:warning:1391215594430402742> **Thermometer rewards are granted on every effortful message!**\n"
-                f"> - **Cold** `(0-49%)`: No bonuses\n"
-                f"> - **Warm** `(50-74%)`: {BEAN_EMOTE} `1` Bean\n"
-                f"> - **Hot** `(75-99%)`: {BEAN_EMOTE} `2` Beans + `0.5%` chance for {TOKEN_EMOTE} `1` Token\n"
-                f"> - **Boiling** `(100%)`: {BEAN_EMOTE} `3` Beans + `1%` chance for {TOKEN_EMOTE} `1` Token\n"
-                f"> -# <:reply:1036792837821435976> *Plus a special `0.1%` jackpot chance for {TOKEN_EMOTE} `3` Tokens when boiling!*"
-            ),
-            inline=False,
-        )
-
-        view = ThermometerView(self, initial_embed, full_embed)
-        await interaction.response.send_message(embed=initial_embed, view=view)
 
     @thermometer.error
     async def thermometer_error(

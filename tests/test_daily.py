@@ -26,7 +26,7 @@ def test_first_claim_pays_beans_and_starts_a_streak(cafe, monkeypatch):
 def test_second_claim_the_same_day_is_rejected(cafe, monkeypatch):
     claim(cafe, monkeypatch)
     interaction = claim(cafe, monkeypatch)
-    assert "already claimed" in interaction.response.send_message.call_args.args[0]
+    assert "already clocked in" in interaction.response.send_message.call_args.args[0]
     assert u_balance(USER).get()["Beans"] == 500
     assert u_daily_checkin_streaks(USER).get()["total_claims"] == 1
 
@@ -34,7 +34,7 @@ def test_second_claim_the_same_day_is_rejected(cafe, monkeypatch):
 def test_claim_the_next_day_extends_the_streak(cafe, monkeypatch):
     u_daily_checkin_streaks(USER).set(
         {
-            "last_claim": time.time() - 90000,
+            "last_claim": time.time() - 86400,
             "current_streak": 3,
             "all_time_high": 5,
             "total_claims": 9,
@@ -62,7 +62,7 @@ def test_claim_after_two_days_resets_the_streak(cafe, monkeypatch):
 def test_seventh_day_pays_four_times_the_beans_and_tokens(cafe, monkeypatch):
     u_daily_checkin_streaks(USER).set(
         {
-            "last_claim": time.time() - 90000,
+            "last_claim": time.time() - 86400,
             "current_streak": 6,
             "all_time_high": 6,
             "total_claims": 6,
@@ -72,3 +72,22 @@ def test_seventh_day_pays_four_times_the_beans_and_tokens(cafe, monkeypatch):
     balance = u_balance(USER).get()
     assert balance["Beans"] == 2000
     assert 2 <= balance["Tokens"] <= 5
+
+
+def test_only_admins_post_the_store_panel(cafe):
+    from unittest.mock import AsyncMock, MagicMock
+
+    def typed(admin):
+        message = MagicMock(content="-dailypanel")
+        message.author.bot = False
+        message.author.guild_permissions.administrator = admin
+        message.guild.id = 0
+        message.channel.send = AsyncMock()
+        message.delete = AsyncMock()
+        asyncio.run(cafe.cogs["Daily"].on_message(message))
+        return message.channel.send
+
+    assert not typed(False).called
+    panel = typed(True)
+    text = panel.call_args.kwargs["embed"].description
+    assert "Clock In" in text and len(text) < 4096

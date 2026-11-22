@@ -13,6 +13,7 @@ from firebase_admin import credentials, db
 
 load_dotenv()
 
+from brawl.Currency.daily import ClockInView
 from brawl.Currency.levels import LevelRewardInfoView
 from brawl.Currency.staff import AcceptRejectView, StaffInfoView
 from brawl.Partnership.partnershipSystem import RequestView as PartnerRequestView
@@ -92,6 +93,7 @@ class BrawlProfile(commands.Bot):
             StaffInfoView,
             AcceptRejectView,
             LevelRewardInfoView,
+            ClockInView,
             ticket.CloseTicketButton,
             ticket.TicketAdminButtons,
             ticket.ConfirmCloseTicketButtons,
@@ -149,4 +151,5 @@ class BrawlProfile(commands.Bot):
 
 brawl = BrawlProfile()
 
-brawl.run(os.environ.get("BOT_TOKEN"))
+if __name__ == "__main__":
+    brawl.run(os.environ.get("BOT_TOKEN"))

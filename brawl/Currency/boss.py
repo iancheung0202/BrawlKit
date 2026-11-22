@@ -4,192 +4,123 @@ import time
 import discord
 from discord.ui import View
 
-from brawl.Currency.db import (
-    u_mega_boxes,
-    u_star_drops,
+from brawl.Currency.card import render
+from brawl.Currency.config import BOSS_ODDS, BOSS_SECONDS
+from brawl.Currency.db import u_mega_boxes, u_star_drops
+from brawl.Currency.helper import BOSS_INSPECTION_ACTIONS, BOSS_INSPECTION_ROLE_ID
+from brawl.Currency.home import background
+from brawl.Currency.ladder import locked
+from brawl.Currency.quests import report, wildcard
+from brawl.Currency.stationcard import (
+    draw_boss,
+    draw_boss_result,
+    draw_boss_results,
 )
-from brawl.Currency.helper import (
-    BOSS_INSPECTION_ACTIONS,
-    MEGA_BOX_EMOTE,
-    NO_EMOTE,
-    STAR_DROP_EMOTE,
-    YES_EMOTE,
-)
+
+# Each outcome: where the reward is kept, the line of the action to show,
+# and how to use the reward.
+OUTCOMES = {
+    "mega_box": (
+        u_mega_boxes,
+        "success",
+        "Open it with </megabox:1486191980349358224>.",
+    ),
+    "star_drop": (
+        u_star_drops,
+        "nothing",
+        "Open it with </stardrop:1447676573020065996>.",
+    ),
+    "nothing": (None, "fail", None),
+}
+
+
+def roll():
+    outcomes, odds = zip(*BOSS_ODDS)
+    return random.choices(outcomes, odds)[0]
+
+
+async def start_inspection(cog, channel):
+    """The boss walks into a channel with three things members can do."""
+    view = BossInspectionView(cog, random.sample(list(BOSS_INSPECTION_ACTIONS), 3))
+    view.message = await channel.send(
+        f"<@&{BOSS_INSPECTION_ROLE_ID}> The boss is here for a surprise inspection.",
+        file=await render(draw_boss, background(None), name="boss"),
+        view=view,
+    )
+    return view
 
 
 class BossInspectionView(View):
     def __init__(self, cog, action_keys):
-        super().__init__(timeout=120)
+        super().__init__(timeout=BOSS_SECONDS)
         self.cog = cog
-        self.action_keys = action_keys
         self.participants = {}
         self.message = None
         self.start_time = time.time()
         self.ended = False
-
-        for i, action_key in enumerate(action_keys):
-            action_data = BOSS_INSPECTION_ACTIONS[action_key]
+        for spot, key in enumerate(action_keys):
             button = discord.ui.Button(
-                label=action_data["label"],
+                label=BOSS_INSPECTION_ACTIONS[key]["label"],
                 style=discord.ButtonStyle.primary,
-                custom_id=f"boss_action_{i}",
-                row=0,
+                custom_id=f"boss_action_{spot}",
             )
-            button.callback = self.create_action_callback(action_key)
+            button.callback = self.action(key)
             self.add_item(button)
 
-    def create_action_callback(self, action_key):
-        async def action_callback(interaction: discord.Interaction):
-            if self.ended:
+    def action(self, key):
+        async def callback(interaction: discord.Interaction):
+            if self.ended or time.time() - self.start_time >= BOSS_SECONDS:
+                await interaction.response.send_message(
+                    "The boss has already left.", ephemeral=True
+                )
+                return await self.end_inspection()
+            if await locked(interaction, "boss"):
+                return
+            user = interaction.user
+            if user.id in self.participants:
                 return await interaction.response.send_message(
-                    "⏰ This inspection has already ended!", ephemeral=True
+                    "You already made your move this inspection.", ephemeral=True
                 )
-
-            elapsed_time = time.time() - self.start_time
-            if elapsed_time >= 120:
-                self.ended = True
-                await self.end_inspection()
-                return await interaction.response.send_message(
-                    "⏰ Time's up! The inspection has already ended before you acted.",
-                    ephemeral=True,
-                )
-
-            user_id = interaction.user.id
-            if user_id in self.participants:
-                return await interaction.response.send_message(
-                    "You've already attempted to impress the boss! Chill out... 😰",
-                    ephemeral=True,
-                )
-
-            action_data = BOSS_INSPECTION_ACTIONS[action_key]
-            roll = random.random()
-
-            if roll < 0.50:
-                result = {
-                    "outcome": "success",
-                    "beans": 0,
-                    "tokens": 0,
-                    "message": action_data["success"],
-                }
-
-                ref = u_mega_boxes(user_id)
-                current = ref.get() or 0
-                ref.set(current + 1)
-
-                title = f"{YES_EMOTE} Boss Impressed!"
-                description = f"{action_data['success']}\n\n-# You earned {MEGA_BOX_EMOTE} **1 Mega Box**! Use </megabox:1486191980349358224> to open it."
-                color = discord.Color.green()
-
-            elif roll < 0.75:
-                result = {
-                    "outcome": "nothing",
-                    "beans": 0,
-                    "tokens": 0,
-                    "message": action_data["nothing"],
-                }
-
-                ref = u_star_drops(user_id)
-                current = ref.get() or 0
-                ref.set(current + 1)
-
-                title = "😐 Boss Neutral"
-                description = f"{action_data['nothing']}\n\n-# You only got {STAR_DROP_EMOTE} **1 Star Drop**! Use </stardrop:1447676573020065996> to open it."
-                color = discord.Color.yellow()
-
-            else:
-                result = {
-                    "outcome": "penalty",
-                    "beans": 0,
-                    "tokens": 0,
-                    "message": action_data["fail"],
-                }
-
-                title = f"{NO_EMOTE} Boss Unimpressed!"
-                description = f"{action_data['fail']}\n\n-# You gasped for air as you almost lost your job, but at least you got the air you deserved. You're welcome."
-                color = discord.Color.red()
-
-            self.participants[user_id] = {"action_key": action_key, "result": result}
-
-            stamp_cog = interaction.client.get_cog("StampCard")
-            if stamp_cog:
-                await stamp_cog.update_progress(
-                    interaction.user.id, "boss_inspections", 1
-                )
-
+            outcome = roll()
+            self.participants[user.id] = (user.display_name, outcome)
+            ref, line, how = OUTCOMES[outcome]
+            if ref:
+                ref(user.id).set((ref(user.id).get() or 0) + 1)
+            result = {
+                "background": background(user.id),
+                "outcome": outcome,
+                "line": BOSS_INSPECTION_ACTIONS[key][line],
+            }
             await interaction.response.send_message(
-                embed=discord.Embed(title=title, description=description, color=color),
+                how,
+                file=await render(draw_boss_result, result, name="boss"),
                 ephemeral=True,
             )
+            await report(
+                interaction,
+                await wildcard(user.id, interaction.guild.id, interaction.client),
+            )
 
-        return action_callback
+        return callback
 
     async def end_inspection(self):
-        """End the inspection and show results"""
+        """Swap the card for the results, once."""
         if not self.message or self.ended:
             return
-
         self.ended = True
-
-        embed = discord.Embed(
-            title="⏰ Boss Inspection Complete!",
-            description="The boss has finished and left the café. Here are the results:",
-            color=0xE67E22,
-        )
-
-        if not self.participants:
-            embed.add_field(
-                name="No Participants",
-                value="Nobody tried to impress the boss... 😔",
-                inline=False,
-            )
-        else:
-            # Sort participants by outcome
-            success_list = []
-            nothing_list = []
-            penalty_list = []
-
-            for user_id, data in self.participants.items():
-                user = self.message.guild.get_member(user_id)
-                username = user.mention if user else f"<@{user_id}>"
-                action_key = data["action_key"]
-                action_label = BOSS_INSPECTION_ACTIONS[action_key]["label"]
-                result = data["result"]
-
-                if result["outcome"] == "success":
-                    reward_text = f"{MEGA_BOX_EMOTE} 1 Mega Box"
-                    success_list.append(f"{username}: *{action_label}* → {reward_text}")
-                elif result["outcome"] == "nothing":
-                    nothing_list.append(
-                        f"{username}: *{action_label}* → {STAR_DROP_EMOTE} 1 Star Drop"
-                    )
-                else:
-                    penalty_list.append(f"{username}: *{action_label}* → Nothing")
-
-            if success_list:
-                embed.add_field(
-                    name=f"{YES_EMOTE} Boss Impressed",
-                    value="\n".join(success_list),
-                    inline=False,
-                )
-
-            if nothing_list:
-                embed.add_field(
-                    name="😐 Boss Neutral", value="\n".join(nothing_list), inline=False
-                )
-
-            if penalty_list:
-                embed.add_field(
-                    name=f"{NO_EMOTE} Boss Unimpressed",
-                    value="\n".join(penalty_list),
-                    inline=False,
-                )
-
-        embed.set_footer(text="Better luck next time, employees! 👔")
-
-        self.clear_items()
+        self.stop()
+        results = {
+            "background": background(None),
+            "people": list(self.participants.values()),
+        }
         try:
-            await self.message.edit(embed=embed, view=self)
-        except:
+            await self.message.edit(
+                content=None,
+                attachments=[await render(draw_boss_results, results, name="boss")],
+                embed=None,
+                view=None,
+            )
+        except discord.HTTPException:
             pass
 
     async def on_timeout(self):

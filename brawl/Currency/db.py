@@ -302,3 +302,11 @@ def staff_app_cooldown():
 
 async def setup(bot):
     pass
+
+
+def u_background(user_id: int):
+    return db.reference(f"{U_ROOT}/{user_id}/settings/background")
+
+
+def u_veteran(user_id: int):
+    return db.reference(f"{U_ROOT}/{user_id}/progress/veteran")

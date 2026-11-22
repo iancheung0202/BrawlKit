@@ -55,6 +55,17 @@ def test_insurance_button_charges_and_marks_the_batch(cafe):
     assert user(cafe, "inventory/brews/active_brew/insured").get() is True
 
 
+def test_insurance_button_ignores_an_older_brew(cafe):
+    user(cafe, "balance").set({"Beans": 5000})
+    sent = brew(cafe).followup.send.call_args.kwargs
+    user(cafe, "inventory/brews/active_brew/batch_id").set("OTHER")
+    press = cafe.interaction(USER)
+    press.message.embeds = [sent["embed"]]
+    asyncio.run(sent["view"].children[0].callback(press))
+    assert user(cafe, "balance/Beans").get() == 5000 - ROAST_TYPES["light"]["cost"]
+    assert user(cafe, "inventory/brews/active_brew/insured").get() is False
+
+
 def test_sell_waits_until_the_batch_is_ready(cafe):
     user(cafe, "balance").set({"Beans": 5000})
     brew(cafe)
@@ -79,7 +90,7 @@ def test_first_brew_completes_the_daily_brew_quest(cafe, monkeypatch):
     monkeypatch.setattr(
         quests,
         "generate_quests",
-        lambda duration: {"brew_start": {"current": 0, "goal": 1}},
+        lambda duration, level=0: {"brew_start": {"current": 0, "goal": 1}},
     )
     user(cafe, "balance").set({"Beans": 5000})
     brew(cafe)

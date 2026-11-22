@@ -2,13 +2,13 @@ import asyncio
 import json
 import os
 import time
-from datetime import datetime, timezone
 
 import discord
 from discord import app_commands
 from discord.ext import commands
-from firebase_admin import db
 
+from brawl.Currency.card import render
+from brawl.Currency.config import TUTORIAL_BEANS
 from brawl.Currency.db import (
     g_invites_member_data,
     g_invites_monthly,
@@ -26,6 +26,7 @@ from brawl.Currency.helper import (
     YES_EMOTE,
     get_current_month_key,
 )
+from brawl.Currency.invitecard import draw_invitees, invited_by, invitees, month_name
 from brawl.Currency.tutorial import TutorialManager
 
 
@@ -35,6 +36,17 @@ class WelcomeView(discord.ui.View):
         self.member = member
         self.bot = bot
         self.welcomed_by = set()
+
+    @discord.ui.button(
+        label="Clock In",
+        style=discord.ButtonStyle.blurple,
+        emoji="🗓️",
+        custom_id="clock_in",
+    )
+    async def clock_in(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await self.bot.get_cog("Daily").process_daily(interaction)
 
     @discord.ui.button(
         label="Welcome!",
@@ -110,7 +122,7 @@ class WelcomeView(discord.ui.View):
 
     async def on_timeout(self):
         for item in self.children:
-            if isinstance(item, discord.ui.Button):
+            if item.custom_id != "clock_in":
                 item.disabled = True
                 if len(self.welcomed_by) > 0:
                     item.label = f"Welcomed by {len(self.welcomed_by)} member{'s' if len(self.welcomed_by) != 1 else ''}"
@@ -228,7 +240,7 @@ class InviteTracker(commands.Cog):
         if is_new:
             self.member_history.add(member.id)
             self.save_member_history()
-            await TutorialManager(self.bot).start(member)
+            guide = await TutorialManager(self.bot).start(member)
 
         if used_invite and used_invite.inviter:
             inviter_id = str(used_invite.inviter.id)
@@ -277,20 +289,14 @@ class InviteTracker(commands.Cog):
         welcome_channel = self.bot.get_channel(GENERAL_CHAT)
         if welcome_channel:
             if is_new:
-                msg = (
-                    f"Welcome to the server, {member.mention}! 🎉\n"
-                    f"You've just received {BEAN_EMOTE} **500** as a welcome bonus to get started!\n\n"
-                    f"**Step 1:** Go to <#1391361575641677956> and claim your extra daily {BEAN_EMOTE} `500`.\n"
-                    f"Once you have {BEAN_EMOTE} `1000`, I'll guide you to the next step!"
+                guide.description = (
+                    f"Welcome, {member.mention}! Here are {BEAN_EMOTE} **{TUTORIAL_BEANS}** to start.\n\n"
+                    + guide.description
                 )
                 await welcome_channel.send(
                     f"### {member.mention} just joined <:pandaHappy:855019705836240916> ~ please give them a warm welcome! <:PumpkinLove:1391457782061990099>",
                     view=WelcomeView(member, self.bot),
-                    embed=discord.Embed(
-                        title="Let me guide you through the server!",
-                        description=msg,
-                        color=discord.Color.purple(),
-                    ),
+                    embed=guide,
                 )
             else:
                 await welcome_channel.send(
@@ -366,92 +372,34 @@ class MonthSelect(discord.ui.Select):
     def __init__(self, inviter, months):
         self.inviter = inviter
         options = [
-            discord.SelectOption(
-                label=f"{self._month_name(int(m.split('-')[1]))} {m.split('-')[0]}",
-                value=m,
-            )
-            for m in months
+            discord.SelectOption(label=month_name(month), value=month)
+            for month in months
         ]
-        super().__init__(placeholder="Select month to view invitees", options=options)
-
-    def _month_name(self, month_num):
-        months = [
-            "January",
-            "February",
-            "March",
-            "April",
-            "May",
-            "June",
-            "July",
-            "August",
-            "September",
-            "October",
-            "November",
-            "December",
-        ]
-        return months[month_num - 1] if 1 <= month_num <= 12 else f"Month {month_num}"
+        super().__init__(placeholder="See who you invited", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.inviter:
             return await interaction.response.send_message(
-                "<:No:855023143743651860> You are not the author of the command.",
-                ephemeral=True,
+                "This is not your command.", ephemeral=True
             )
-        selected_month = self.values[0]
-        year, month_num = selected_month.split("-")
-        month_display = f"{self._month_name(int(month_num))} {year}"
-        currency_cog = interaction.client.get_cog("CurrencySystem")
-        if not currency_cog:
+        economy = interaction.client.get_cog("CurrencySystem")
+        if not economy:
             return await interaction.response.send_message(
-                "Currency system not available!", ephemeral=True
+                "The Cafe is closed right now. Try again in a minute.", ephemeral=True
             )
         await interaction.response.defer(ephemeral=True)
-        ref = g_invites_member_data(interaction.guild.id)
-        all_data = ref.get() or {}
-        invitees = [
-            m
-            for m, d in all_data.items()
-            if d.get("inviter") == str(self.inviter.id)
-            and d.get("join_month") == selected_month
-        ]
-        if not invitees:
+        month = self.values[0]
+        people = invited_by(interaction.guild.id, self.inviter.id).get(month)
+        if not people:
             return await interaction.followup.send(
-                f"No invitees found for {month_display}", ephemeral=True
+                f"You invited no one in {month_name(month)}.", ephemeral=True
             )
-        embed = discord.Embed(
-            title=f"{self.inviter.display_name}'s Past Invites ({month_display})",
-            description=f"Showing `{len(invitees)}` valid invitees. If the member has the emojis ⚠️ (account age < 14 days) or 🔁 (rejoins) next to their name, they are ineligible for referral milestones.\n\n",
-            color=discord.Color.purple(),
+        card = await invitees(
+            economy, interaction.guild, self.inviter.id, month, people
         )
-
-        for member_id in invitees:
-            try:
-                member = await interaction.guild.fetch_member(int(member_id))
-            except Exception:
-                member = None
-            display = member.mention if member else f"<@{member_id}> (Left)"
-            if member and (datetime.now(timezone.utc) - member.created_at).days < 14:
-                display += " ⚠️"
-            if not (
-                g_invites_member_data(interaction.guild.id, member_id).get() or {}
-            ).get("is_new"):
-                display += " 🔁"
-            beans, tokens = await currency_cog.get_balance(int(member_id))
-            active_brew = await currency_cog.get_active_brew(int(member_id))
-            if active_brew:
-                current_time = time.time()
-                roast_name = active_brew["roast_type"].capitalize()
-                insured_status = "🛡️ " if active_brew.get("insured", False) else ""
-                brew_status = (
-                    f"{insured_status}`{roast_name}` (Ready <t:{int(active_brew['end_time'])}:R>)"
-                    if current_time < active_brew["end_time"]
-                    else f"{insured_status}`{roast_name}` (Ready to sell! <a:tick:817884554361569280>)"
-                )
-            else:
-                brew_status = " No active brew"
-            embed.description += f"- {display}\n> <:StarrBean:1393442086279315456> `{beans}` Beans\n> <:StarrToken:1393442089894940846> `{tokens}` Tokens\n> ☕ {brew_status}\n"
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(
+            file=await render(draw_invitees, card, name="invites"), ephemeral=True
+        )
 
 
 async def setup(bot):

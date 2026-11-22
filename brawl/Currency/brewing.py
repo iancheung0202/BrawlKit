@@ -1,4 +1,3 @@
-import asyncio
 import random
 import secrets
 import time
@@ -8,10 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View
 
-from brawl.Currency.db import (
-    g_invites_member_data,
-    sync_sell_alarm,
-)
+from brawl.Currency.db import g_invites_member_data, sync_sell_alarm
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     BRIDGE_ROLE_ID,
@@ -28,7 +24,9 @@ from brawl.Currency.helper import (
     UNLOCK_REQ,
     YES_EMOTE,
 )
-from brawl.Currency.quests import update_quest
+from brawl.Currency.ladder import locked
+from brawl.Currency.panel import COLORS, NEXT, STATIONS, panel
+from brawl.Currency.quests import report, update_quest
 
 
 class Brewing(commands.Cog):
@@ -68,9 +66,6 @@ class Brewing(commands.Cog):
             data["active_brew"]["insured"] = True
             data["active_brew"]["free_insurance"] = free_insurance
             ref.set(data)
-
-            if hasattr(self.economy, "tutorial_manager"):
-                asyncio.create_task(self.economy.tutorial_manager.on_insured(user_id))
 
             return True
         return False
@@ -125,14 +120,16 @@ class Brewing(commands.Cog):
                 return await interaction.response.send_message(
                     f"{NO_EMOTE} This is not your brew!", ephemeral=True
                 )
-            self.roast_type = interaction.message.embeds[0].title.split(" ")[1].lower()
-            try:
-                self.insurance_cost = int(
-                    interaction.message.embeds[0].description.split("`")[1]
+            active = await self.cog.economy.get_active_brew(user_id)
+            shown = [field.value for field in interaction.message.embeds[0].fields]
+            if (
+                not active
+                or active.get("insured")
+                or f"`{active['batch_id']}`" not in shown
+            ):
+                return await interaction.response.send_message(
+                    f"{NO_EMOTE} This brew can no longer be insured.", ephemeral=True
                 )
-            except (ValueError, IndexError):
-                self.insurance_cost = 0
-            self.batch_id = interaction.message.embeds[0].fields[2].value.split("`")[1]
 
             active_effects = (
                 await self.cog.economy.effect_manager.get_user_active_effects(user_id)
@@ -146,7 +143,7 @@ class Brewing(commands.Cog):
                 if member and ultra_role and ultra_role in member.roles:
                     free_insurance = True
 
-            success = await self.cog.insure_brew(user_id, self.roast_type)
+            success = await self.cog.insure_brew(user_id, active["roast_type"])
             if success:
                 for child in self.children:
                     child.disabled = True
@@ -220,17 +217,18 @@ class Brewing(commands.Cog):
                 f"{NO_EMOTE} You do not have permission to use this command.",
                 ephemeral=True,
             )
+        if await locked(interaction, "brewing"):
+            return
         if roast_type is None:
             embed = discord.Embed(
-                title="☕ Coffee Machine Vault - Brewing Guide",
+                title="Roast Guide",
                 description=(
-                    "- Convert your Beans into delicious coffee and **sell it for Tokens**!\n"
-                    "- Each roast type has different costs, brewing times, and reward chances.\n"
-                    f"- **Use </brew:1396588612790784070> to start and </sell:1396588612790784071> when ready.** Check with </balance:1393376242501157005>!\n"
-                    f"- You can only have **one active brew at a time**\n"
-                    f"- 🛡️ **Brew Insurance** protects against burns for a small fee"
+                    f"Brewing turns {BEAN_EMOTE} Beans into {TOKEN_EMOTE} Tokens. "
+                    "One brew at a time.\n"
+                    "-# 🛡️ Insurance turns a burnt brew into the lowest payout.\n"
+                    f"-# **Next:** {NEXT['brew']}"
                 ),
-                color=0x6F4E37,
+                color=COLORS["info"],
             )
 
             for key, data in ROAST_TYPES.items():
@@ -274,7 +272,7 @@ class Brewing(commands.Cog):
 
                 embed.add_field(name=name, value=value, inline=True)
 
-            embed.set_footer(text="Brew wisely! Higher roasts = better rewards!")
+            embed.set_footer(text="Higher roasts cost more Beans and pay more Tokens.")
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         user_id = interaction.user.id
@@ -335,12 +333,11 @@ class Brewing(commands.Cog):
 
         await self.economy.set_active_brew(user_id, brew_data)
         await self.economy.update_brew_stats_on_brew(user_id, roast)
-        await update_quest(user_id, interaction.guild.id, {"brew_start": 1}, self.bot)
+        order = await update_quest(
+            user_id, interaction.guild.id, {"brew_start": 1}, self.bot
+        )
 
-        if hasattr(self.economy, "tutorial_manager"):
-            asyncio.create_task(
-                self.economy.tutorial_manager.on_brew_started(user_id, roast)
-            )
+        guide = await self.economy.tutorial_manager.advance(user_id, "brew")
 
         if "sell_alarm" in active_effects:
             sync_sell_alarm(
@@ -355,10 +352,10 @@ class Brewing(commands.Cog):
                 interaction.guild.id,
             )
 
-        embed = discord.Embed(
-            title=f"☕ {ROAST_TYPES[roast]['name']} Started!",
-            description=f"{interaction.user.mention}, your coffee is now brewing. Ready to </sell:1396588612790784071> <t:{int(brew_data['end_time'])}:R>.",
-            color=0x6F4E37,
+        embed = panel(
+            "brew",
+            f"{ROAST_TYPES[roast]['name']} started",
+            f"{interaction.user.mention}, your coffee is brewing. Ready <t:{int(brew_data['end_time'])}:R>.",
         )
 
         if "half_brew_time" in active_effects:
@@ -390,6 +387,7 @@ class Brewing(commands.Cog):
             await view.update_button_for_user(user_id)
         else:
             view = None
+        embed.description += f"\n-# **Next:** {NEXT['sell']}"
 
         ref_mapping = g_invites_member_data(interaction.guild.id, interaction.user.id)
         mapping = ref_mapping.get() or {}
@@ -430,6 +428,7 @@ class Brewing(commands.Cog):
             await interaction.followup.send(embed=embed, view=view)
         else:
             await interaction.followup.send(embed=embed)
+        await report(interaction, order, guide)
 
     @brew.error
     async def brew_error(self, interaction: discord.Interaction, error: Exception):
@@ -507,7 +506,9 @@ class Brewing(commands.Cog):
             tokens += master_bonus
 
         new_tokens = await self.economy.add_tokens(user_id, tokens)
-        await update_quest(user_id, interaction.guild.id, {"brew_sells": 1}, self.bot)
+        order = await update_quest(
+            user_id, interaction.guild.id, {"brew_sells": 1}, self.bot
+        )
 
         await self.economy.update_brew_stats_on_sell(
             user_id, tokens, roast_type, perfect, insured, saved_burn
@@ -529,9 +530,10 @@ class Brewing(commands.Cog):
         if sync_sell_alarm(user_id, "get"):
             sync_sell_alarm(user_id, "delete", guild_id=interaction.guild.id)
 
-        embed = discord.Embed(
-            title=f"☕ Sold {ROAST_TYPES[roast_type]['name']}!",
-            color=0xD4AF37 if perfect else 0x6F4E37,
+        embed = panel(
+            "brew",
+            f"{ROAST_TYPES[roast_type]['name']} sold",
+            tone="gold" if perfect else "good" if tokens else "bad",
         )
 
         if tokens == 0:
@@ -557,10 +559,7 @@ class Brewing(commands.Cog):
                     f"\n☕ **Master Barista Bonus!** ({master_bonus} extra Tokens)"
                 )
 
-            stamp_cog = self.bot.get_cog("StampCard")
-            if stamp_cog:
-                await stamp_cog.update_progress(user_id, "brew_sells", 1)
-
+        embed.description += f"\n-# **Next:** {NEXT['brew']}"
         embed.add_field(
             name="New Token Balance",
             value=f"{TOKEN_EMOTE} `{new_tokens}` Tokens",
@@ -650,6 +649,11 @@ class Brewing(commands.Cog):
                 embed.description += f"\n{extra_newline}{welcome_bonus_msg}"
 
         await interaction.followup.send(embed=embed)
+        await report(
+            interaction,
+            order,
+            await self.economy.tutorial_manager.advance(user_id, "sell"),
+        )
 
     @sell.error
     async def sell_error(self, interaction: discord.Interaction, error: Exception):

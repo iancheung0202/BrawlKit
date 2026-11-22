@@ -4,6 +4,17 @@ from datetime import datetime, timedelta, timezone
 import discord
 from firebase_admin import db
 
+from brawl.Currency.config import (
+    DAILY_GAMBLING_LIMITS,
+    MAX_BUTTON_WELCOMES,
+    PERFECT_BREW_CHANCE,
+    ROAST_TYPES,
+    STAMP_PRICE_RANGES,
+    STAR_DROP_RATES,
+    TABLE_QUEST_TYPES,
+    UNLOCK_REQ,
+    WELCOME_BUTTON_REWARD,
+)
 from brawl.Currency.db import U_ROOT, u_shop_effects
 from brawl.Utility.style import NO, YES
 
@@ -28,69 +39,25 @@ YES_EMOTE = YES
 BEAN_EMOTE = "<:StarrBean:1393442086279315456>"
 TOKEN_EMOTE = "<:StarrToken:1393442089894940846>"
 REPLY_EMOTE = "<:reply:1036792837821435976>"
-EFFECT_EMOTE = "<a:effect:1486137045188477119>"
+EFFECT_EMOTE = "<:Cafe_effect:1573874237687726140>"
 LB_EMOTE = "<:leaderboard:1486161551953231882>"
-STAR_DROP_EMOTE = "<a:stardrop:1419569487899918419>"
-MEGA_BOX_EMOTE = "<:megabox:1486193111422992514>"
+STAR_DROP_EMOTE = "<:Cafe_stardrop:1573874239335829564>"
+MEGA_BOX_EMOTE = "<:Cafe_megabox:1573874236064268468>"
+STAMP_EMOTE = "<:Cafe_stamp:1573874241294569532>"
+INVITES_EMOTE = "<:Cafe_invites:1573888554474406011>"
+TABLE_EMOTE = "<:Cafe_table:1573888556752179240>"
+QUEST_EMOTE = "<:Cafe_quest:1573888558513520672>"
+SHOP_EMOTE = "<:Cafe_shop:1573888560606744597>"
+PASS_EMOTE = "<:Cafe_brawlpass:1573874242934800465>"
+PASS_PLUS_EMOTE = "<:Cafe_brawlpassplus:1573874244650270750>"
 
 # Coffee Brew
-ROAST_TYPES = {
-    "light": {
-        "name": "Light Roast",
-        "cost": 1000,
-        "time": 12 * 3600,  # 12 hours
-        "payout": [0, 1, 2],
-        "weights": [5, 90, 5],
-        "insurance_cost": 150,
-    },
-    "medium": {
-        "name": "Medium Roast",
-        "cost": 5000,
-        "time": 24 * 3600,  # 24 hours
-        "payout": [0, 5, 6, 7],
-        "weights": [5, 80, 10, 5],
-        "insurance_cost": 750,
-    },
-    "dark": {
-        "name": "Dark Roast",
-        "cost": 10000,
-        "time": 40 * 3600,  # 40 hours
-        "payout": [0, 10, 11, 12, 14],
-        "weights": [3, 50, 30, 10, 7],
-        "insurance_cost": 1500,
-    },
-    "golden": {
-        "name": "Golden Roast",
-        "cost": 25000,
-        "time": 72 * 3600,  # 72 hours
-        "payout": [25, 28, 32, 35],
-        "weights": [40, 30, 20, 10],
-        "insurance_cost": 0,  # No insurance for golden roast
-    },
-}
 
-PERFECT_BREW_CHANCE = 2  # percent
-UNLOCK_REQ = 20  # for golden roast
 EMOJIS = {"light": "🌱", "medium": "☕", "dark": "🌳", "golden": "🌟"}
 
 # Boss Inspection
 BOSS_INSPECTION_ROLE_ID = 1406764597855256679
 MAIN_CHAT_CHANNELS = [1391326358466199584, 1391326881097322596, 1409210492785791069]
-BOSS_EMBED = discord.Embed(
-    description=(
-        "Quick! **Choose one action** to try and impress the boss and earn your paycheck! "
-        f"You have **2 minutes** to act before the boss leaves!\n\n"
-        "-# **Possible Outcomes:**\n"
-        f"-# - {YES_EMOTE} `50%`: Earn {MEGA_BOX_EMOTE} **1x Mega Box**!\n"
-        f"-# - 😐 `25%`: Earn {STAR_DROP_EMOTE} **1x Star Drop**!\n"
-        f"-# - {NO_EMOTE} `25%`: Gain air"
-    ),
-    color=0x27F5B0,
-)
-BOSS_EMBED.set_footer(text="Choose wisely, employee! The boss is watching... 👀")
-BOSS_EMBED.set_thumbnail(
-    url="https://images.emojiterra.com/twitter/v14.0/512px/1f454.png"
-)
 BOSS_INSPECTION_ACTIONS = {
     "brew_coffee": {
         "label": "Brew the boss their favorite coffee",
@@ -215,39 +182,6 @@ BOSS_INSPECTION_ACTIONS = {
 }
 
 # Star Drops
-STAR_DROP_RATES = {
-    "rarity_rates": {
-        "rare": 0.50,
-        "super_rare": 0.25,
-        "epic": 0.17,
-        "mythic": 0.05,
-        "legendary": 0.025,
-        "ultra": 0.005,
-    },
-    "drops": {
-        "rare": [{"type": "beans", "range": [200, 300], "weight": 1}],
-        "super_rare": [{"type": "beans", "range": [350, 450], "weight": 1}],
-        "epic": [
-            {"type": "beans", "range": [600, 700], "weight": 50},
-            {"type": "beans", "range": [700, 800], "weight": 25},
-            {"type": "tokens", "amount": 1, "weight": 20},
-            {"type": "tokens", "amount": 2, "weight": 5},
-        ],
-        "mythic": [
-            {"type": "beans", "range": [1000, 1200], "weight": 40},
-            {"type": "beans", "amount": 2000, "weight": 35},
-            {"type": "tokens", "amount": 2, "weight": 25},
-        ],
-        "legendary": [
-            {"type": "tokens", "amount": 3, "weight": 50},
-            {"type": "tokens", "amount": 4, "weight": 50},
-        ],
-        "ultra": [
-            {"type": "tokens", "amount": 5, "weight": 50},
-            {"type": "tokens", "amount": 6, "weight": 50},
-        ],
-    },
-}
 
 COLORS = {
     "rare": 0x49D532,
@@ -290,8 +224,6 @@ def get_next_day_timestamp():
 
 
 # Welcome
-WELCOME_BUTTON_REWARD = 250
-MAX_BUTTON_WELCOMES = 10
 
 # Autoresponse
 AUTORESPONSE_MAP = {
@@ -304,46 +236,11 @@ AUTORESPONSE_MAP = {
 }
 
 # Gambling Limits
-DAILY_GAMBLING_LIMITS = {
-    "coinflip": 50,
-    "blackjack": 50,
-}
 
 # Stamp Card Objectives
-STAMP_OBJECTIVES = {
-    "brawl_pass": {  # standard tier
-        "daily_checkins": 30,
-        "brew_sells": 30,
-        "quests_completed": 30,
-        "shop_purchases": 10,
-        "boss_inspections": 10,
-        "thermometer_bonuses": 10,
-    },
-    "brawl_pass_plus": {  # harder tier
-        "daily_checkins": 45,
-        "brew_sells": 45,
-        "quests_completed": 45,
-        "shop_purchases": 15,
-        "boss_inspections": 15,
-        "thermometer_bonuses": 15,
-    },
-}
 
-STAMP_PRICE_RANGES = {
-    "brawl_pass": (200, 400),  # min, max tokens based on streak
-    "brawl_pass_plus": (300, 500),
-}
 
 # Table Quest Types
-TABLE_QUEST_TYPES = {
-    "bean_collector": {
-        "name": "🫘 Bean Collector",
-        "description": "Collectively earn {target:,} beans this week",
-        "targets": [10000, 20000, 30000, 40000, 50000],
-        "rewards": [200, 400, 600, 800, 1000],  # Per member
-        "duration": 7,  # days
-    }
-}
 
 
 # Shop Effect Functions
@@ -494,7 +391,7 @@ STORE_ITEMS = {
     "double_daily": {
         "name": "Daily Doubler",
         "price": "7 tokens",
-        "description": "Double your daily check-in rewards for 7 days",
+        "description": "Doubles your Clock In rewards for 7 days.",
         "effect": apply_double_daily,
         "cooldown": 1209600,  # 14 days
         "duration": 604800,  # 7 days
@@ -502,7 +399,7 @@ STORE_ITEMS = {
     "chat_boost": {
         "name": "Espresso Shot",
         "price": "3 tokens",
-        "description": "Triple your chat earnings and daily cap for 1 hour",
+        "description": "Triples your chat Beans and daily cap for 1 hour.",
         "effect": apply_chat_boost,
         "cooldown": 604800,  # 7 days
         "duration": 3600,  # 1 hour
@@ -510,7 +407,7 @@ STORE_ITEMS = {
     "free_insurance": {
         "name": "Barista's Protection",
         "price": "2 tokens",
-        "description": "Get free brew insurance for 7 days",
+        "description": "Insures every brew for free for 7 days.",
         "effect": apply_free_insurance,
         "cooldown": 604800,  # 7 days
         "duration": 604800,  # 7 days
@@ -518,7 +415,7 @@ STORE_ITEMS = {
     "perfect_brew_boost": {
         "name": "Expert Barista",
         "price": "10 tokens",
-        "description": "Increase perfect brew chance from 2% to 25% for 3 days",
+        "description": "Raises your perfect brew chance from 2% to 25% for 3 days.",
         "effect": apply_perfect_brew_boost,
         "cooldown": 864000,  # 10 days
         "duration": 259200,  # 3 days
@@ -526,7 +423,7 @@ STORE_ITEMS = {
     "instant_brew": {
         "name": "Express Order",
         "price": "5000 beans",
-        "description": "Instantly complete your current brewing process",
+        "description": "Finishes your current brew right away.",
         "effect": apply_empty,
         "cooldown": 432000,  # 5 days
         "duration": 0,  # Instant effect
@@ -534,7 +431,7 @@ STORE_ITEMS = {
     "half_brew_time": {
         "name": "Turbo Brewing",
         "price": "12 tokens",
-        "description": "Reduce all brewing times by 50% for 7 days",
+        "description": "Halves every brew time for 7 days.",
         "effect": apply_half_brew_time,
         "cooldown": 864000,  # 10 days
         "duration": 604800,  # 7 days
@@ -542,7 +439,7 @@ STORE_ITEMS = {
     "freeze_thermometer": {
         "name": "Thermometer Freezer",
         "price": "10 tokens",
-        "description": "Freeze thermometer at current level for 1 hour",
+        "description": "Holds the thermometer where it is for 1 hour.",
         "effect": apply_freeze_thermometer,
         "cooldown": 172800,  # 48 hours
         "duration": 3600,  # 1 hour
@@ -550,7 +447,7 @@ STORE_ITEMS = {
     "burnt_to_perfect": {
         "name": "Resurrection",
         "price": "4000 beans",
-        "description": "Burnt brews automatically become perfect brews for 7 days",
+        "description": "Turns your burnt brews into perfect brews for 7 days.",
         "effect": apply_burnt_to_perfect,
         "cooldown": 864000,  # 10 days
         "duration": 604800,  # 7 days
@@ -558,7 +455,7 @@ STORE_ITEMS = {
     "reset_chat_cap": {
         "name": "Chat Cap Reset",
         "price": "3 tokens",
-        "description": "Instantly reset your daily chat earnings cap",
+        "description": "Resets your chat Bean cap for today.",
         "effect": apply_empty,
         "cooldown": 432000,  # 5 days
         "duration": 0,  # Instant effect
@@ -566,7 +463,7 @@ STORE_ITEMS = {
     "chat_bean_boost": {
         "name": "Chat Bean Boost",
         "price": "500 beans",
-        "description": "Increase minimum chat beans from 100 to 150 for 24 hours",
+        "description": "Raises each chat reward from 100–200 to 150–300 Beans for 24 hours.",
         "effect": apply_chat_bean_boost,
         "cooldown": 172800,  # 48 hours
         "duration": 86400,  # 24 hours
@@ -574,7 +471,7 @@ STORE_ITEMS = {
     "streak_insurance": {
         "name": "Streak Shield",
         "price": "6 tokens",
-        "description": "Protect your daily streak from breaking once (active for 30 days) if you miss any days (also restores previous streak)",
+        "description": "Saves and restores your streak once if you miss a day. Lasts 30 days.",
         "effect": apply_streak_insurance,
         "cooldown": 2592000,  # 30 days
         "duration": 2592000,  # 30 days
@@ -582,7 +479,7 @@ STORE_ITEMS = {
     "thermometer_boost": {
         "name": "Fuel Injection",
         "price": "3 tokens",
-        "description": "Instantly heat the thermometer by 50 percent points",
+        "description": "Heats the thermometer by 30 points right away.",
         "effect": apply_empty,
         "cooldown": 86400,  # 24 hours
         "duration": 0,  # Instant
@@ -590,7 +487,7 @@ STORE_ITEMS = {
     "sell_alarm": {
         "name": "Sell Alarm",
         "price": "3 tokens",
-        "description": "Get DM reminders when your brews are ready to sell (active for 30 days)",
+        "description": "Sends you a DM when a brew is ready to sell. Lasts 30 days.",
         "effect": apply_sell_alarm,
         "cooldown": 2592000,  # 30 days
         "duration": 2592000,  # 30 days
@@ -598,7 +495,7 @@ STORE_ITEMS = {
     "message_pin": {
         "name": "1 Message Pin",
         "price": "10 tokens",
-        "description": "Pin any message in the server (stackable, use `/pin` command)",
+        "description": "Pins any one message in the server. Use it with /pin.",
         "effect": apply_message_pin,
         "cooldown": 172800,  # 2 days
         "duration": 0,  # No expiration (stackable item)
@@ -606,7 +503,7 @@ STORE_ITEMS = {
     "custom_credit": {
         "name": "1 Customization Credit",
         "price": "5000 beans",
-        "description": "Customize your `/balance` rank card background (use `/customize`)",
+        "description": "Picks a new background for your Home card. Use it with /customize.",
         "effect": apply_custom_credit,
         "cooldown": 0,
         "duration": 0,
@@ -614,7 +511,7 @@ STORE_ITEMS = {
     "star_drop": {
         "name": "Star Drop",
         "price": "500 beans",
-        "description": "A mysterious drop containing random rewards! (Max 10 per day)",
+        "description": "Holds one random reward.",
         "effect": apply_empty,
         "cooldown": 0,
         "duration": 0,
@@ -622,7 +519,7 @@ STORE_ITEMS = {
     "star_drop_10": {
         "name": "10 Star Drops",
         "price": "4500 beans",
-        "description": "A bundle of 10 Star Drops at a discounted price! (Counts towards daily limit)",
+        "description": "Ten Star Drops for the price of nine.",
         "effect": apply_empty,
         "cooldown": 0,
         "duration": 0,
@@ -630,7 +527,7 @@ STORE_ITEMS = {
     "mega_box": {
         "name": "Mega Box",
         "price": "3 tokens",
-        "description": "Open a Mega Box for potentially massive rewards!",
+        "description": "Holds 5 to 10 rewards.",
         "effect": apply_empty,
         "cooldown": 0,
         "duration": 0,
@@ -638,7 +535,7 @@ STORE_ITEMS = {
     "mega_box_10": {
         "name": "10 Mega Boxes",
         "price": "27 tokens",
-        "description": "A bundle of 10 Mega Boxes at a discounted price! (Counts towards daily limit)",
+        "description": "Ten Mega Boxes for the price of nine.",
         "effect": apply_empty,
         "cooldown": 0,
         "duration": 0,

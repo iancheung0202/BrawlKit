@@ -14,6 +14,8 @@ from discord.ext import commands, tasks
 from firebase_admin import db
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from brawl.Currency.ladder import lessons
+
 
 class LevelRewardInfoView(discord.ui.View):
     def __init__(self):
@@ -106,6 +108,17 @@ class Leveling(commands.Cog):
             self.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"])
         except Exception as e:
             print(f"Failed to create DB pool: {e}")
+
+    async def level_of(self, user_id: int, guild_id: int) -> int:
+        if not self.pool:
+            return 0
+        async with self.pool.acquire() as conn:
+            level = await conn.fetchval(
+                "SELECT level FROM levels WHERE id = $1 AND guild = $2",
+                str(user_id),
+                str(guild_id),
+            )
+        return level or 0
 
     async def add_xp(
         self,
@@ -207,6 +220,8 @@ class Leveling(commands.Cog):
                         emoji = "<a:SpikeWin:1391625613273727137>"
 
                     final_msg = f"{emoji} {msg_content} \n{REPLY_EMOTE} You also earned {BEAN_EMOTE} `{beans_earned}`{' and ' + TOKEN_EMOTE + f' `{tokens_earned}`' if tokens_earned > 0 else ''}!"
+                    for lesson in lessons(current_level, new_level):
+                        final_msg += f"\n\n{lesson}"
 
                     try:
                         await message.channel.send(

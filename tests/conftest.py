@@ -64,6 +64,8 @@ COGS = {
     "daily": "Daily",
     "quests": "QuestAdmin",
     "stampcard": "StampCard",
+    "gacha": "Gacha",
+    "factions": "TableSystem",
 }
 
 
@@ -79,6 +81,8 @@ class Cafe:
         for module, name in COGS.items():
             cog = getattr(importlib.import_module(f"brawl.Currency.{module}"), name)
             self.cogs[name] = cog(self.bot)
+        self.cogs["Leveling"] = MagicMock(level_of=AsyncMock(return_value=99))
+        self.cogs["Leveling"].pool = None
 
     def ref(self, path):
         return Ref(self.tree, path)
@@ -100,7 +104,7 @@ class Cafe:
         return interaction
 
 
-def chat_quests(duration):
+def chat_quests(duration, level=0):
     return {"chat_earnings": {"current": 0, "goal": 100000}}
 
 
@@ -108,7 +112,20 @@ def chat_quests(duration):
 def cafe():
     tree = {}
     with (
-        patch("firebase_admin.db.reference", lambda path: Ref(tree, path)),
+        patch("firebase_admin.db.reference", lambda path="": Ref(tree, path)),
         patch("brawl.Currency.quests.generate_quests", chat_quests),
     ):
         yield Cafe(tree)
+
+
+@pytest.fixture(autouse=True)
+def clocked_in(request, monkeypatch):
+    """Most tests start after clock in; mark a test `before_clock_in` to start earlier."""
+    if not request.node.get_closest_marker("before_clock_in"):
+        from brawl.Currency import quests
+
+        monkeypatch.setattr(quests, "clocked_in", lambda user_id: True)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "before_clock_in: the member has not clocked in")
