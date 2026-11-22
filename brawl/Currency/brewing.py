@@ -94,8 +94,10 @@ class Brewing(commands.Cog):
                 member and role and role in member.roles
             )
 
-        async def update_button_for_user(self, user_id):
+        async def update_button_for_user(self, user_id, roast):
             self.free = await self.free_for(user_id)
+            cost = ROAST_TYPES[roast]["insurance_cost"]
+            self.insure_button.label = f"Insure for {cost:,} Beans"
             if self.free:
                 self.insure_button.label = "Insure for free"
                 self.insure_button.emoji = EFFECT_EMOTE
@@ -307,13 +309,7 @@ class Brewing(commands.Cog):
                 interaction.guild.id,
             )
 
-        lines = [
-            (
-                "Your first brew is on the house and ready now."
-                if first
-                else f"Your coffee will be ready <t:{int(brew_data['end_time'])}:R>."
-            )
-        ]
+        lines = []
         insurance = "safe"
         view = None
         if first:
@@ -321,15 +317,7 @@ class Brewing(commands.Cog):
         elif roast != "golden" and ROAST_TYPES[roast]["insurance_cost"] > 0:
             insurance = "open"
             view = self.InsuranceView(self)
-            await view.update_button_for_user(user_id)
-            if view.free:
-                lines.append(
-                    f"{EFFECT_EMOTE} Insurance is free for this brew. Press the button to use it."
-                )
-            else:
-                lines.append(
-                    f"Insure it for {BEAN_EMOTE} `{ROAST_TYPES[roast]['insurance_cost']:,}` so it can't burn."
-                )
+            await view.update_button_for_user(user_id, roast)
         if "half_brew_time" in active_effects and not first:
             lines.append(
                 f"{EFFECT_EMOTE} Turbo Brewing Kit made this brew twice as fast."
@@ -363,7 +351,7 @@ class Brewing(commands.Cog):
             if guide
             else (f"{ROAST_TYPES[roast]['name']} brewing", NEXT["sell"])
         )
-        lines.append("\n" + step)
+        lines.append(("\n" if lines else "") + step)
 
         started = {
             "roast": roast,
@@ -592,7 +580,7 @@ class Brewing(commands.Cog):
                 NEXT["brew"],
             )
         )
-        lines.append("\n" + step)
+        lines.append(("\n" if lines else "") + step)
         sale = {
             "roast": roast_type,
             "tokens": tokens,

@@ -75,9 +75,7 @@ def test_veterans_keep_every_station(cafe):
 
 
 def test_level_up_teaches_only_the_new_stations():
-    assert ladder.lessons(0, 1) == [
-        f"🔓 **You unlocked Brewing**\n{LADDER['brewing'][2]}"
-    ]
+    assert ladder.lessons(0, 1) == [f"Brewing: {LADDER['brewing'][2]}"]
     assert len(ladder.lessons(1, 4)) == 2
     assert ladder.lessons(5, 6) == []
 

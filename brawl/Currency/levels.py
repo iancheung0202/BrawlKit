@@ -217,11 +217,7 @@ class Leveling(commands.Cog):
                     else:
                         emoji = "<a:SpikeWin:1391625613273727137>"
 
-                    final_msg = (
-                        f"{emoji} {message.author.mention} reached Level {new_level}."
-                    )
-                    for lesson in lessons(current_level, new_level):
-                        final_msg += f"\n\n{lesson}"
+                    final_msg = "\n\n".join(lessons(current_level, new_level))
 
                     try:
                         avatar = await message.author.display_avatar.replace(
@@ -247,7 +243,7 @@ class Leveling(commands.Cog):
                         await message.channel.send(
                             **framed(
                                 await render(draw_level_up, leveled, name="level_up"),
-                                "Level up",
+                                f"{emoji} Level up",
                                 final_msg,
                                 tone="gold",
                             ),

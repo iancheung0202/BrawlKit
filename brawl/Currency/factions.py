@@ -211,7 +211,6 @@ class TableSystem(commands.GroupCog, name="table"):
                                             name="table",
                                         ),
                                         "Table quest step reached",
-                                        f"{table_data['emoji']} {table_data['name']} reached a step of the weekly table quest.",
                                         tone="gold",
                                     ),
                                 )
@@ -318,7 +317,6 @@ class TableSystem(commands.GroupCog, name="table"):
                                                     name="table",
                                                 ),
                                                 "Top table this week",
-                                                f"{top_table_data['emoji']} {top_table_data['name']} was the top table this week.",
                                                 tone="gold",
                                             ),
                                         )
