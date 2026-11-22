@@ -157,15 +157,15 @@ def right(card, y, rewards, size):
 
 def draw_paid(order):
     """A strip for an order that finished with no other card to carry it."""
-    card = Card.strip()
+    card = Card.strip(small=True)
     card.tag(32, 12, "TODAY'S ORDER")
-    card.avatar(order["avatar"], 34, 44, 76)
+    card.avatar(order["avatar"], 34, 40, 52)
+    card.text(100, 40, card.fit(order["name"], 16, 260), 16, MUTED, "la", 2)
     done = order["stamp"]
     card.text(
-        122, 44, "Order complete" if done else "Task done", 26, GREEN if done else WHITE
+        100, 62, "Order complete" if done else "Task done", 26, GREEN if done else WHITE
     )
-    card.text(122, 82, card.fit(order["name"], 16, 260), 16, MUTED, "la", 2)
-    card.text(604, 46, "You earned", 13, MUTED, "ra", 2)
+    card.text(604, 42, "You earned", 13, MUTED, "ra", 2)
     right(card, 62, earned(order), 22)
     return card.jpg()
 
@@ -173,27 +173,27 @@ def draw_paid(order):
 def draw_chat(reward):
     """A strip posted when chatting pays Beans: the gain and today's limit."""
     order = reward.get("order")
-    card = Card.strip(foot=bool(order))
+    card = Card.strip(foot=bool(order), small=True)
     card.tag(32, 12, "CHAT BEANS", GOLD)
-    card.avatar(reward["avatar"], 34, 44, 76)
+    card.avatar(reward["avatar"], 34, 40, 52)
+    card.text(100, 40, card.fit(reward["name"], 16, 180), 16, MUTED, "la", 2)
     gain = f"+{reward['beans']:,}"
-    card.icon("kit/bean", 122, 46, 30)
-    card.text(158, 44, gain, 26, GOLD)
+    card.icon("kit/bean", 98, 62, 30)
+    card.text(134, 62, gain, 26, GOLD)
     if reward["boosted"]:
-        card.icon("items/effect", 166 + card.measure(gain, 26), 46, 28)
-    card.text(122, 82, card.fit(reward["name"], 16, 190), 16, MUTED, "la", 2)
+        card.icon("items/effect", 142 + card.measure(gain, 26), 64, 26)
     done = reward["today"] >= reward["limit"]
     color = GREEN if done else GOLD
     left = max(0, int(reward["reset"] - time.time())) // 60
-    card.icon("kit/icon_clock", 330, 48, 15)
-    card.text(352, 46, f"{left // 60}h {left % 60}m", 13, MUTED, "la", 2)
+    card.icon("kit/icon_clock", 300, 44, 15)
+    card.text(322, 42, f"{left // 60}h {left % 60}m", 13, MUTED, "la", 2)
     count = f"{reward['today']:,} / {reward['limit']:,}"
-    card.text(604, 44, count, 17, color, "ra", 2)
-    card.bar(330, 72, 274, 22, reward["today"] / reward["limit"], color)
+    card.text(604, 40, count, 17, color, "ra", 2)
+    card.bar(300, 66, 304, 20, reward["today"] / reward["limit"], color)
     if order:
         label = "Order complete" if order["stamp"] else "Order task done"
-        card.text(36, 138, label, 15, GREEN if order["stamp"] else GOLD, "la", 2)
-        right(card, 136, earned(order), 15)
+        card.text(36, card.foot, label, 15, GREEN if order["stamp"] else GOLD, "la", 2)
+        right(card, card.foot - 2, earned(order), 15)
     return card.jpg()
 
 
@@ -258,15 +258,15 @@ def draw_redeemed(sale):
 def draw_ready(brew):
     """The Sell Alarm strip sent when a brew finishes."""
     roast = ROAST_TYPES.get(brew["roast"], ROAST_TYPES["light"])
-    card = Card.strip(brew.get("next"))
+    card = Card.strip(brew.get("next"), small=True)
     card.tag(32, 12, "BREW READY", GREEN)
-    card.icon("ready", 34, 44, 76)
-    card.text(122, 44, roast["name"], 26)
-    card.text(122, 82, "From your Sell Alarm", 17, MUTED, "la", 2)
+    card.icon("ready", 34, 40, 52)
+    card.text(100, 40, "From your Sell Alarm", 16, MUTED, "la", 2)
+    card.text(100, 62, roast["name"], 26)
     best = max(roast["payout"])
-    card.text(604, 46, "Pays up to", 13, MUTED, "ra", 2)
-    card.text(604, 62, f"{best}", 26, GOLD, "ra")
-    card.icon("kit/token", 570 - card.measure(f"{best}", 26), 64, 28)
+    card.text(604, 42, "Pays up to", 13, MUTED, "ra", 2)
+    card.text(604, 62, f"{best}", 22, GOLD, "ra")
+    card.icon("kit/token", 572 - card.measure(f"{best}", 22), 62, 26)
     return card.jpg()
 
 
