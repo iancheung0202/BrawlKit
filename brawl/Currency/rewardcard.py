@@ -1,4 +1,6 @@
-from brawl.Currency.card import BLUE, GOLD, GREEN, MUTED, SCALE, WHITE, Card, box
+import time
+
+from brawl.Currency.card import BLUE, GOLD, GREEN, GREY, MUTED, SCALE, WHITE, Card, box
 from brawl.Currency.config import (
     DAILY_BEANS,
     ROAST_TYPES,
@@ -136,6 +138,30 @@ def draw_shift(shift):
         GREEN if done else MUTED,
         "ma",
         2,
+    )
+    return card.jpg()
+
+
+def draw_chat(reward):
+    """A short strip posted when chatting pays Beans: the gain and today's limit."""
+    card = Card(640, 122)
+    card.panel(16, 24, 608, 82)
+    card.tag(32, 12, "CHAT BEANS", GOLD)
+    card.avatar(reward["avatar"], 34, 40, 52)
+    card.text(100, 40, card.fit(reward["name"], 16, 180), 16, MUTED, "la", 2)
+    gain = f"+{reward['beans']:,}"
+    card.icon("kit/bean", 98, 62, 30)
+    card.text(134, 62, gain, 26, GOLD)
+    if reward["boosted"]:
+        card.icon("items/effect", 142 + card.measure(gain, 26), 64, 26)
+    left = max(0, int(reward["reset"] - time.time())) // 60
+    card.icon("kit/icon_clock", 300, 44, 15)
+    card.text(322, 42, f"{left // 60}h {left % 60}m", 14, GREY, "la", 2)
+    done = reward["today"] >= reward["limit"]
+    count = f"{reward['today']:,} / {reward['limit']:,}"
+    card.text(604, 40, count, 17, GREEN if done else GOLD, "ra", 2)
+    card.bar(
+        300, 66, 304, 20, reward["today"] / reward["limit"], GREEN if done else GOLD
     )
     return card.jpg()
 

@@ -20,8 +20,6 @@ from brawl.Currency.config import (
 )
 from brawl.Currency.db import g_thermometer, u_daily_chat_earnings
 from brawl.Currency.helper import (
-    BEAN_EMOTE,
-    EFFECT_EMOTE,
     MAIN_CHAT_CHANNELS,
     NO_EMOTE,
     ULTRA_TIER_ROLE_ID,
@@ -31,6 +29,7 @@ from brawl.Currency.home import background
 from brawl.Currency.ladder import unlocked
 from brawl.Currency.panel import notice
 from brawl.Currency.quests import get_next_daily_reset, update_quest
+from brawl.Currency.rewardcard import draw_chat
 from brawl.Currency.stationcard import draw_token_drop
 
 
@@ -249,23 +248,29 @@ class ChatRewardSystem:
 
         try:
             if reward_triggered:
-                emoji = "<:Like:793027164731605033>"
-                table_cog = self.bot.get_cog("table")
-                if table_cog:
-                    table_data = await table_cog.get_user_table(
-                        user_id, message.guild.id
-                    )
-                    if table_data and table_data.get("formalized", False):
-                        emoji = table_data["emoji"]
-                earned = notice(
-                    f"{emoji} {message.author.mention} earned {BEAN_EMOTE} `{beans_earned}` Beans "
-                    f"for chatting {EFFECT_EMOTE if chat_boost_active else ''}\n"
-                    f"Today: `{new_earnings}/{MAX_DAILY_CHAT_BEAN_LIMIT}`, resets <t:{int(reset_time)}:R>"
-                    + "".join(f"\n{line}" for line in order)
+                try:
+                    avatar = await message.author.display_avatar.replace(
+                        size=128
+                    ).read()
+                except Exception:
+                    avatar = None
+                strip = await render(
+                    draw_chat,
+                    {
+                        "name": message.author.display_name,
+                        "avatar": avatar,
+                        "beans": beans_earned,
+                        "boosted": chat_boost_active,
+                        "today": new_earnings,
+                        "limit": MAX_DAILY_CHAT_BEAN_LIMIT,
+                        "reset": reset_time,
+                    },
+                    name="chat",
                 )
-                if drop:
-                    earned.set_image(url=f"attachment://{drop.filename}")
-                await message.channel.send(embed=earned, file=drop)
+                await message.channel.send(
+                    embed=notice("\n".join(order)) if order else None,
+                    files=[strip, drop] if drop else [strip],
+                )
             elif drop:
                 await message.channel.send(message.author.mention, file=drop)
         except Exception as e:

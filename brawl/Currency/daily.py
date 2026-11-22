@@ -340,6 +340,20 @@ class Daily(commands.Cog):
                 file=file, view=view, ephemeral=True
             )
 
+        @discord.ui.button(
+            label="How does this work",
+            style=discord.ButtonStyle.grey,
+            custom_id="daily_how",
+        )
+        async def how(
+            self, interaction: discord.Interaction, button: discord.ui.Button
+        ):
+            from brawl.Currency.how import HowView, page_file
+
+            await interaction.response.send_message(
+                file=await page_file("start"), view=HowView("start"), ephemeral=True
+            )
+
     class InformationView(View):
         def __init__(self, cog: "Daily"):
             super().__init__(timeout=None)

@@ -1,6 +1,6 @@
 import asyncio
 import io
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from PIL import Image
@@ -73,3 +73,47 @@ def test_the_menu_only_works_for_the_member_who_asked(cafe):
     sent = asyncio.run(pick())
     sent.response.edit_message.assert_not_called()
     assert sent.response.send_message.call_args.kwargs["ephemeral"] is True
+
+
+def test_the_level_up_info_button_opens_the_levels_page():
+    from brawl.Currency.levels import LevelRewardInfoView
+
+    async def press():
+        interaction = MagicMock()
+        interaction.response.send_message = AsyncMock()
+        view = LevelRewardInfoView()
+        await view.level_info.callback(interaction)
+        return interaction.response.send_message.call_args.kwargs
+
+    sent = asyncio.run(press())
+    assert sent["file"].filename == "levels.jpg" and sent["ephemeral"]
+
+
+def test_the_chat_strip_draws_plain_boosted_and_full():
+    from brawl.Currency.rewardcard import draw_chat
+
+    for beans, today, boosted in ((123, 123, False), (603, 6000, True)):
+        reward = {
+            "name": "A member with a very long display name",
+            "avatar": None,
+            "beans": beans,
+            "boosted": boosted,
+            "today": today,
+            "limit": 6000,
+            "reset": 0,
+        }
+        assert draw_chat(reward).getvalue().startswith(b"\x89PNG")
+
+
+def test_the_daily_panel_button_opens_how_privately():
+    from brawl.Currency.daily import Daily
+
+    async def press():
+        interaction = MagicMock()
+        interaction.response.send_message = AsyncMock()
+        view = Daily.DailyPanelView(MagicMock())
+        await view.how.callback(interaction)
+        return interaction.response.send_message.call_args.kwargs
+
+    sent = asyncio.run(press())
+    assert sent["file"].filename == "start.jpg" and sent["ephemeral"]

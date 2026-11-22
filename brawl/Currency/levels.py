@@ -40,29 +40,11 @@ class LevelRewardInfoView(discord.ui.View):
     async def level_info(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        embed = discord.Embed(
-            title="<:information:855023058255478794> Level Rewards Information",
-            description="Level Rewards are special rewards you earn as you level up in the server. Each level milestone grants you unique rewards such as beans, tokens, and exclusive roles.",
-            color=0x3498DB,
-        )
-        from brawl.Currency.helper import BEAN_EMOTE, TOKEN_EMOTE
+        from brawl.Currency.how import HowView, page_file
 
-        embed.add_field(
-            name="Level Roles",
-            value="**5.** <@&866947914286759957>\n**10.** <@&866947962273267712>\n**20.** <@&866948001057865759>\n**35.** <@&866948039973404692>\n**50.** <@&866948080618962954>\n**69.** <@&866948113906663424>\n**90.** <@&1335747405571948635>",
-            inline=False,
+        await interaction.response.send_message(
+            file=await page_file("levels"), view=HowView("levels"), ephemeral=True
         )
-        embed.add_field(
-            name="Beans",
-            value=f"You earn some {BEAN_EMOTE} beans every time you level up. Lower levels give the best-value beans, and higher levels give more beans.",
-            inline=False,
-        )
-        embed.add_field(
-            name="Tokens",
-            value=f"You also earn {TOKEN_EMOTE} tokens when you reach every 10 levels. Tokens can be used our server shop to purchase exclusive items and perks.",
-            inline=False,
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(
         style=discord.ButtonStyle.grey,
