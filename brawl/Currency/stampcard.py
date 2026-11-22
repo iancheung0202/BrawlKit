@@ -29,7 +29,11 @@ TIERS = {"brawl_pass": "Brawl Pass", "brawl_pass_plus": "Brawl Pass Plus"}
 
 
 def stamps(user_id):
-    card = u_stamp_card(user_id).get() or {}
+    return count(u_stamp_card(user_id).get() or {})
+
+
+def count(card):
+    """The Stamps on a card, new or converted from the old six objectives."""
     if "count" in card:
         return card["count"]
     old = card.get("stamps", {})

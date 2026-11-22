@@ -122,3 +122,13 @@ def test_board_loads_the_member_list_once_when_it_is_missing(cafe):
     cog = cafe.cogs["Leaderboard"]
     asyncio.run(cog.leaderboard.callback(cog, interaction, "Beans"))
     interaction.guild.chunk.assert_awaited_once()
+
+
+def test_stamps_board_counts_new_and_converted_cards(cafe):
+    from brawl.Currency.db import u_stamp_card
+
+    u_stamp_card(1).set({"count": 4})
+    u_stamp_card(2).set({"stamps": {"daily_checkins": 30, "brew_sells": 30}})
+    u_stamp_card(3).set({"stamps": {"boss_inspections": 1}})
+    view = board(cafe, "Stamps").kwargs["view"]
+    assert [entry[:3] for entry in view.entries] == [(2, None, "10"), (1, None, "4")]

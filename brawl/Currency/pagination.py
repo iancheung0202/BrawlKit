@@ -11,6 +11,7 @@ from brawl.Currency.db import U_ROOT, g_invites_monthly, g_tables, g_user_tables
 from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE, get_current_month_key
 from brawl.Currency.home import background
 from brawl.Currency.panel import notice
+from brawl.Currency.stampcard import count as stamp_count
 
 # Leaderboard: (title, icon, what one row is)
 # title, icon, what is counted, icon before the value, icon before the note
@@ -34,6 +35,13 @@ BOARDS = {
     ),
     "Brews": ("Most brews", "brewing", "member", "brewing", None),
     "Levels": ("Highest levels", "kit/icon_xp", "member", None, "kit/icon_xp"),
+    "Stamps": (
+        "Most Stamps",
+        "kit/icon_ranked_round_token",
+        "member",
+        "kit/icon_ranked_round_token",
+        None,
+    ),
 }
 
 
@@ -300,7 +308,7 @@ class Leaderboard(commands.Cog):
 
     @app_commands.command(
         name="leaderboard",
-        description="See who is on top: Beans, Tokens, levels, tables and more",
+        description="See who is on top: Beans, Tokens, Stamps, levels, tables and more",
     )
     @app_commands.choices(
         currency=[
@@ -311,6 +319,7 @@ class Leaderboard(commands.Cog):
             app_commands.Choice(name="Daily streaks", value="Streaks"),
             app_commands.Choice(name="Brews", value="Brews"),
             app_commands.Choice(name="Levels", value="Levels"),
+            app_commands.Choice(name="Stamps", value="Stamps"),
         ]
     )
     @app_commands.checks.cooldown(rate=1, per=10.0)
@@ -330,7 +339,7 @@ class Leaderboard(commands.Cog):
             int(user_id): user
             for user_id, user in (
                 (db.reference(U_ROOT).get() or {})
-                if currency in ("Beans", "Tokens", "Streaks", "Brews")
+                if currency in ("Beans", "Tokens", "Streaks", "Brews", "Stamps")
                 else {}
             ).items()
             if user_id.isdigit()
@@ -408,6 +417,13 @@ class Leaderboard(commands.Cog):
                     lambda user: user.get("progress", {})
                     .get("daily_checkin_streaks", {})
                     .get("current_streak", 0)
+                )
+            ]
+        elif currency == "Stamps":
+            entries = [
+                (user_id, None, f"{stamps:,}", None)
+                for user_id, stamps in ranked(
+                    lambda user: stamp_count(user.get("stamp_card") or {})
                 )
             ]
         elif currency == "Brews":
