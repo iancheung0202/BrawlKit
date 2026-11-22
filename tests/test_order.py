@@ -176,10 +176,23 @@ def test_the_order_waits_for_clock_in(cafe, monkeypatch):
     assert quests.order_tasks(77) == []
     u_daily_checkin_streaks(77).set({"last_claim": quests.time.time()})
     tasks = {task: data["current"] for task, _, data, _ in quests.order_tasks(77)}
-    assert tasks["chat_earnings"] == 0
+    assert tasks["chat_earnings"] == 200
     asyncio.run(quests.update_quest(77, 1, {"chat_earnings": 200}, cafe.bot))
     tasks = {task: data["current"] for task, _, data, _ in quests.order_tasks(77)}
-    assert tasks["chat_earnings"] == 200
+    assert tasks["chat_earnings"] == 400
+
+
+@pytest.mark.before_clock_in
+def test_a_brew_before_clock_in_is_ticked_and_paid_on_clock_in(order):
+    from brawl.Currency.db import u_daily_checkin_streaks
+
+    level(order, 1)
+    assert do(order, brew_start=1) == []
+    assert not u_balance(USER).get()
+    u_daily_checkin_streaks(USER).set({"last_claim": quests.time.time()})
+    done = do(order, daily_checkins=1)
+    assert any("Start a brew" in line for line in done)
+    assert u_balance(USER).get()["Beans"] == QUEST_BEAN_REWARDS["daily"]
 
 
 def chat(cafe, earned, limit):

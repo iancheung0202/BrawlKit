@@ -119,16 +119,26 @@ async def update_quest(
             "completed": {},
         }
         ref.set(data)
-    if refresh_only or not clocked_in(user_id):
+    if refresh_only:
         return []
 
     quests = data.get("quests", {})
     completed = data.get("completed", {})
+    if not clocked_in(user_id):
+        # Work done before clocking in is kept, and paid when the member clocks in.
+        for quest, amount in quest_dict.items():
+            if quest in quests and quest not in completed:
+                quests[quest]["current"] = min(
+                    quests[quest]["current"] + amount, quests[quest]["goal"]
+                )
+        if quest_dict:
+            ref.child("quests").set(quests)
+        return []
     each, bonus = QUEST_BEAN_REWARDS["daily"], QUEST_BONUS_BEANS["daily"]
     beans = 0
     messages = Progress()
     updated = False
-    moves = dict(quest_dict)
+    moves = {quest: 0 for quest in quests} | dict(quest_dict)
     if chat and "chat_earnings" in quests and "chat_earnings" not in completed:
         earned, limit = chat
         quests["chat_earnings"] = {"current": min(earned, limit), "goal": limit}
@@ -137,9 +147,10 @@ async def update_quest(
         if quest not in quests or quest in completed:
             continue
         quests[quest]["current"] += amount
-        updated = True
         if quests[quest]["current"] < quests[quest]["goal"]:
+            updated = updated or bool(amount) or quest == "chat_earnings"
             continue
+        updated = True
         completed[quest] = True
         beans += each
         messages.append(
