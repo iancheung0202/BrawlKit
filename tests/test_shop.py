@@ -134,3 +134,78 @@ def test_buying_an_effect_item_shows_a_card_with_what_to_do_next(cafe):
     assert reply["attachments"][0].filename == "purchase.png"
     assert after("double_daily") == "Active for 7 days."
     assert after("instant_brew") == "It took effect right away."
+
+
+def options(view):
+    return [option.label for option in view.buy.options]
+
+
+def test_buy_menu_lists_only_what_the_member_can_buy_on_the_page(cafe):
+    rows = [
+        ["Cheap", "x", 100, "Beans", True, -1],
+        ["Dear", "x", 9000, "Beans", True, -1],
+        ["Gone", "x", 1, "Beans", True, 0],
+    ]
+    sent, _ = open_shop(cafe, rows)
+    view = sent["view"]
+    assert view.buy.row == 0 and not view.buy.disabled
+    page = {item["name"] for item in view.pages[0]}
+    assert "Cheap" in options(view) and set(options(view)) <= page
+    assert not {"Dear", "Gone"} & set(options(view))
+    assert all(
+        view.wallet[item["currency"]] >= item["cost"]
+        for item in view.pages[0]
+        if item["name"] in options(view)
+    )
+
+
+def test_buy_menu_is_off_when_nothing_on_the_page_can_be_bought(cafe):
+    sent, _ = open_shop(cafe, [], level=50)
+    view = sent["view"]
+    view.wallet["beans"] = view.wallet["tokens"] = 0
+    view.lay_out()
+    assert view.buy.disabled and view.buy.placeholder == "Nothing to buy on this page"
+
+
+def test_admin_rows_sit_under_the_buy_menu(cafe):
+    sent, shop = open_shop(cafe, [], admin=True)
+    rows = {child.custom_id: child.row for child in sent["view"].children}
+    assert rows["buyselection"] == 0 and rows["addreward"] == 1
+    assert rows["next_page"] == 2 and rows["filterselection"] == 4
+    member, _ = open_shop(cafe, [])
+    rows = {child.custom_id: child.row for child in member["view"].children}
+    assert rows["buyselection"] == 0 and rows["next_page"] == 1
+    assert rows["filterselection"] == 3
+
+
+def test_picking_from_the_menu_buys_like_the_buy_command(cafe):
+    sent, shop = open_shop(cafe, [["Cheap", "x", 100, "Beans", True, 3]])
+    view = sent["view"]
+    press = cafe.interaction(USER)
+
+    async def pick():
+        view.buy._values = ["Cheap"]
+        await view.buy.callback(press)
+
+    asyncio.run(pick())
+    assert "Processing" in text(press.response.send_message.call_args)
+    assert press.edit_original_response.call_args.kwargs["attachments"][0].filename == (
+        "purchase.png"
+    )
+    assert u_balance(USER).get()["Beans"] == 600
+    assert g_shops(MAIN_GUILD_ID).get()[0][5] == 2
+    assert view.wallet["beans"] == 600
+    assert view.origin.edit_original_response.call_args.kwargs["view"] is view
+
+
+def test_an_item_in_the_bag_is_marked_and_left_off_the_buy_menu(cafe):
+    from brawl.Currency import bag
+
+    bag.keep(USER, "sell_alarm")
+    sent, _ = open_shop(cafe, [])
+    view = sent["view"]
+    assert view.wallet["held"] == {"sell_alarm"}
+    for view.page in range(len(view.pages)):
+        view.lay_out()
+        assert "Sell Alarm" not in options(view)
+    assert [component["type"] for component in view.to_components()] == [1, 1, 1, 1]

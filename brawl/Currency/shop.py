@@ -47,11 +47,14 @@ from brawl.Currency.shopcard import (
     SORTS,
     SUPERCELL,
     after,
+    buyable,
     draw_purchase,
     draw_shop,
     listing,
     reward_icon,
 )
+
+LOADING = "<a:loading_circle:1393439258886537352>"
 
 
 class ShopSelect(discord.ui.Select):
@@ -75,21 +78,70 @@ class ShopSelect(discord.ui.Select):
         await self.view.turn(interaction)
 
 
+class BuySelect(discord.ui.Select):
+    """The items on this page the member can buy now. Picking one buys it, as /buy does."""
+
+    def __init__(self):
+        super().__init__(custom_id="buyselection", row=0)
+
+    def stock(self, items):
+        self.disabled = not items
+        self.placeholder = "Buy an item" if items else "Nothing to buy on this page"
+        self.options = [
+            discord.SelectOption(
+                label=item["name"][:100],
+                value=item["buy"][:100],
+                description=f"{item['cost']:,} {item['currency'].title()}",
+                emoji=discord.PartialEmoji.from_str(
+                    TOKEN_EMOTE if item["currency"] == "tokens" else BEAN_EMOTE
+                ),
+            )
+            for item in {item["buy"]: item for item in items}.values()
+        ] or [discord.SelectOption(label="Nothing to buy", value="none")]
+
+    async def callback(self, interaction: discord.Interaction):
+        request = await order(interaction, self.values[0])
+        await request.done.wait()
+        await self.view.restock(interaction)
+
+
 class ShopView(BasePaginationView):
-    """The shop card with its page, sort and filter controls."""
+    """The shop card with its buy menu and its page, sort and filter controls."""
+
+    ROW = 1
 
     def __init__(self, member, guild, rows, wallet):
         super().__init__(initial_author=member, timeout=300)
         self.guild, self.rows, self.wallet = guild, rows, wallet
         self.sort, self.filter = "Price: low to high", "All items"
-        self.add_item(ShopSelect("sort", SORTS, self.sort, 2))
-        self.add_item(ShopSelect("filter", FILTERS, self.filter, 3))
+        self.origin = None
+        buttons = list(self.children)
+        self.clear_items()
+        for button in buttons:
+            button.row = self.ROW if button.custom_id.endswith("_page") else 1
+            self.add_item(button)
+        self.buy = BuySelect()
+        self.add_item(self.buy)
+        self.add_item(ShopSelect("sort", SORTS, self.sort, self.ROW + 1))
+        self.add_item(ShopSelect("filter", FILTERS, self.filter, self.ROW + 2))
         self.lay_out()
 
     def lay_out(self):
         self.pages = listing(self.guild, self.rows, self.sort, self.filter) or [[]]
         self.page = min(self.page, len(self.pages) - 1)
+        self.buy.stock(buyable(self.pages[self.page], self.wallet))
         self.update_buttons()
+
+    async def restock(self, interaction):
+        """Redraws the shop after a purchase: new balance, waits and stock."""
+        self.wallet = await wallet_of(interaction)
+        self.rows = g_shops(interaction.guild.id).get() or []
+        try:
+            await self.origin.edit_original_response(
+                attachments=[await self.file()], view=self
+            )
+        except (discord.HTTPException, AttributeError):
+            pass
 
     async def file(self):
         self.lay_out()
@@ -109,7 +161,9 @@ class ShopView(BasePaginationView):
 
 
 class Panel(ShopView):
-    """The shop with the admin row for editing custom rewards."""
+    """The shop with the admin row for editing custom rewards, under the buy menu."""
+
+    ROW = 2
 
     async def edit(self, interaction, operation):
         if not interaction.user.guild_permissions.administrator:
@@ -161,8 +215,8 @@ class Panel(ShopView):
         await self.edit(interaction, "edit_stock")
 
 
-async def open_shop(interaction):
-    """Builds the shop for one member: their balance, background and locks."""
+async def wallet_of(interaction):
+    """What the shop needs to know about one member: balance, background and locks."""
     user, guild = interaction.user, interaction.guild
     balance = u_balance(user.id).get() or {}
     stations = {*ITEM_STATIONS.values(), "effects"}
@@ -176,7 +230,7 @@ async def open_shop(interaction):
     drops = u_star_drops_purchases(user.id, day).get() or 0
     boxes = u_mega_boxes_purchases(user.id, day).get() or 0
     ultra = guild.get_role(ULTRA_TIER_ROLE_ID)
-    wallet = {
+    return {
         "background": background(user.id),
         "beans": balance.get("Beans", 0),
         "tokens": balance.get("Tokens", 0),
@@ -186,6 +240,7 @@ async def open_shop(interaction):
             if not await unlocked(interaction.client, user.id, guild.id, station)
         },
         "owned": {role.id for role in user.roles},
+        "held": set(held(user.id)),
         "active": {
             item: data.get("expires_at", 0)
             for item, data in (await effects.get_user_active_effects(user.id)).items()
@@ -199,8 +254,16 @@ async def open_shop(interaction):
         },
         "limit": 20 if ultra and ultra in user.roles else 10,
     }
+
+
+async def open_shop(interaction):
+    """Builds the shop for one member."""
+    user, guild = interaction.user, interaction.guild
     kind = Panel if user.guild_permissions.administrator else ShopView
-    view = kind(user, guild, g_shops(guild.id).get() or [], wallet)
+    view = kind(
+        user, guild, g_shops(guild.id).get() or [], await wallet_of(interaction)
+    )
+    view.origin = interaction
     return view, await view.file()
 
 
@@ -449,12 +512,30 @@ processing_global_queue = False
 
 
 class PurchaseRequest:
-    __slots__ = ("interaction", "item", "timestamp")
+    __slots__ = ("interaction", "item", "timestamp", "done")
 
     def __init__(self, interaction, item):
         self.interaction = interaction
         self.item = item
         self.timestamp = time.time()
+        self.done = asyncio.Event()
+
+
+async def order(interaction, item):
+    """Queues a purchase and answers with a waiting note. /buy and the shop menu both use it."""
+    request = PurchaseRequest(interaction, item)
+    await global_purchase_queue.put(request)
+    place = global_purchase_queue.qsize()
+    await interaction.response.send_message(
+        embed=notice(
+            f"{LOADING} Your purchase is in queue. Position: {place}. Please wait..."
+            if place > 1
+            else f"{LOADING} Processing your purchase..."
+        ),
+    )
+    if not processing_global_queue:
+        asyncio.create_task(process_global_queue())
+    return request
 
 
 async def process_global_queue():
@@ -470,6 +551,7 @@ async def process_global_queue():
             except Exception as e:
                 print(f"Error processing purchase: {e}")
             finally:
+                request.done.set()
                 global_purchase_queue.task_done()
     finally:
         processing_global_queue = False
@@ -688,25 +770,7 @@ class Shop(commands.Cog):
             )
         if await locked(interaction, "shop"):
             return
-        request = PurchaseRequest(interaction, item)
-        await global_purchase_queue.put(request)
-
-        queue_size = global_purchase_queue.qsize()
-        if queue_size > 1:
-            await interaction.response.send_message(
-                embed=notice(
-                    f"<a:loading_circle:1393439258886537352> Your purchase is in queue. Position: {queue_size}. Please wait..."
-                ),
-            )
-        else:
-            await interaction.response.send_message(
-                embed=notice(
-                    "<a:loading_circle:1393439258886537352> Processing your purchase..."
-                ),
-            )
-
-        if not processing_global_queue:
-            asyncio.create_task(process_global_queue())
+        await order(interaction, item)
 
     @buy.error
     async def buy_error(self, interaction: discord.Interaction, error: Exception):

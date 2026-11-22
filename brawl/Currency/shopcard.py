@@ -46,6 +46,7 @@ def built_in():
         cost, currency = data["price"].split()[:2]
         yield {
             "name": data["name"],
+            "buy": data["name"],
             "description": data["description"],
             "cost": int(cost),
             "currency": "tokens" if "token" in currency.lower() else "beans",
@@ -100,6 +101,7 @@ def custom(guild, rows):
         supercell = SUPERCELL in str(row[0])
         yield {
             "name": plain(name),
+            "buy": str(row[0]),
             "description": words(guild, row[1]),
             "cost": int(row[2]),
             "currency": str(row[3]).lower(),
@@ -144,6 +146,8 @@ def status(item, shop):
         return ("OWNED", GREEN, BLACK), "", False
     if item["stock"] == 0:
         return ("SOLD OUT", RED, WHITE), "", False
+    if key in shop.get("held", ()):
+        return ("IN BAG", GOLD, BLACK), "Start it with /use", False
     if key in shop["active"]:
         ends = f"Ends in {span(shop['active'][key] - time.time())}"
         return ("ACTIVE", GREEN, BLACK), ends, not shop["waits"].get(key)
@@ -157,12 +161,21 @@ def status(item, shop):
     return None, every(item["cooldown"]) if item["cooldown"] else "", True
 
 
+def buyable(items, shop):
+    """The items the member can pay for and buy right now."""
+    return [
+        item
+        for item in items
+        if status(item, shop)[2] and shop[item["currency"]] >= item["cost"]
+    ]
+
+
 def draw_shop(shop):
     """Two columns of tiles: icon, name, what it does, a price button, one note."""
     items = shop["items"]
     rows = max(-(-len(items) // 2), 1)
     card = Card(900, 222 + rows * 132, shop["background"])
-    card.title("SHOP", "Pay with Beans or Tokens. Buy an item with /buy.")
+    card.title("SHOP", "Pay with Beans or Tokens. Buy from the menu below.")
     beans, tokens = f"{shop['beans']:,}", f"{shop['tokens']:,}"
     left = card.width - 122 - card.measure(beans, 24) - card.measure(tokens, 24)
     card.pill(card.pill(left - 62, 38, "kit/bean", beans), 38, "kit/token", tokens)
