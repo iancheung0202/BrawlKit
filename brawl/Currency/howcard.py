@@ -47,6 +47,8 @@ from brawl.Currency.config import (
     REFERRAL_BRIDGE_BEANS,
     REFERRAL_MASTER_SELLS,
     REFERRAL_TRAINEE_BEANS,
+    REP_BEANS,
+    REP_PAID_DAILY,
     ROAST_TYPES,
     STAMP_GOALS,
     STAMP_MONTHLY_LIMIT,
@@ -64,6 +66,7 @@ from brawl.Currency.config import (
     THERMOMETER_LEVELS,
     THERMOMETER_MAX,
     THERMOMETER_MESSAGE_HEAT,
+    TOPIC_BEANS,
     ULTRA_DAILY_BONUS,
     UNLOCK_REQ,
     WELCOME_BUTTON_REWARD,
@@ -1140,6 +1143,65 @@ def games_page():
     return card.jpg().getvalue()
 
 
+@lru_cache
+def teams_page():
+    """The team finder, what rep pays, and what adding a topic costs."""
+    card = page("TEAM FINDER AND TOPICS", "Find teammates. Start a conversation.", 640)
+    section(card, 124, 176, "TEAM FINDER")
+    steps = (
+        ("kit/icon_event", "Request", "Pick a region and what you play"),
+        ("game/3v3", "Team up", "Teammates press Claim"),
+        ("kit/icon_like", "Close", "Select who played with you"),
+    )
+    flow(card, 150, steps, 64)
+
+    top = 332
+    section(card, top, 146, "REP", BLUE, WHITE)
+    rows = (
+        ("kit/icon_like", "Play with a host who selects you", "+1 rep"),
+        (
+            "kit/bean",
+            f"Every rep also pays Beans, up to {REP_PAID_DAILY} reps a day",
+            f"+{REP_BEANS} each",
+        ),
+    )
+    for row, (picture, name, value) in enumerate(rows):
+        y = top + 28 + row * 40
+        if row:
+            rule(card, y - 6)
+        fitted(card, picture, 46, y, 28)
+        card.text(86, y + 4, name, 18, WHITE, "la", 2)
+        card.text(854, y + 1, value, 22, GOLD, "ra")
+    card.text(
+        46,
+        top + 112,
+        "One rep per host a day. Rep shows on /balance and /leaderboard, and earns roles.",
+        15,
+        MUTED,
+        "la",
+        2,
+    )
+
+    top = 510
+    section(card, top, 104, "TOPICS", GREEN)
+    fitted(card, "kit/icon_chat", 46, top + 28, 28)
+    card.text(86, top + 32, "/topic gives the chat a question", 18, WHITE, "la", 2)
+    card.text(854, top + 29, "Free", 22, GOLD, "ra")
+    rule(card, top + 62)
+    fitted(card, "kit/bean", 46, top + 68, 28)
+    card.text(
+        86,
+        top + 72,
+        "Get your own topic approved by staff",
+        18,
+        WHITE,
+        "la",
+        2,
+    )
+    card.text(854, top + 69, f"+{TOPIC_BEANS}", 22, GOLD, "ra")
+    return card.jpg().getvalue()
+
+
 def rates_page():
     return rates_image(BACKGROUND)
 
@@ -1155,6 +1217,7 @@ PAGES = {
     "stations": ("Thermometer and Boss", stations_page),
     "social": ("Tables and Invites", social_page),
     "games": ("Games", games_page),
+    "teams": ("Team Finder and Topics", teams_page),
 }
 
 

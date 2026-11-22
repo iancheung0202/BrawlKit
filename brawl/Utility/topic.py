@@ -3,6 +3,17 @@ import random
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import Button, Modal, TextInput, View
+from firebase_admin import db
+
+from brawl.Currency import wallet
+from brawl.Currency.config import TOPIC_BEANS
+from brawl.Currency.helper import BEAN_EMOTE, MAIN_GUILD_ID, TOPIC_REVIEW
+from brawl.Currency.panel import notice
+from brawl.Utility.style import BLUE, GOLD, GREEN, NO, RED, YES
+
+PENDING = "/Topics/Pending"
+APPROVED = "/Topics/Approved"
 
 ICEBREAKERS = [
     "What's your favorite Brawl Stars brawler and why?",
@@ -122,19 +133,137 @@ ICEBREAKERS = [
 ]
 
 
+def draw():
+    """A random topic and the member who sent it in, if a member did."""
+    sent = list((db.reference(APPROVED).get() or {}).values())
+    spot = random.randrange(len(ICEBREAKERS) + len(sent))
+    if spot < len(ICEBREAKERS):
+        return ICEBREAKERS[spot], None
+    topic = sent[spot - len(ICEBREAKERS)]
+    return topic["text"], topic["user"]
+
+
+def topic_embed():
+    text, user_id = draw()
+    embed = discord.Embed(title=text, color=GOLD)
+    if user_id:
+        embed.description = f"-# Asked by <@{user_id}>"
+    return embed
+
+
+class AddModal(Modal, title="Suggest a topic"):
+    text = TextInput(
+        label=f"Your question ({TOPIC_BEANS} Beans if approved)",
+        placeholder="Which brawler would run the best cafe?",
+        min_length=10,
+        max_length=150,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        waiting = (db.reference(PENDING).get() or {}).values()
+        if any(topic["user"] == interaction.user.id for topic in waiting):
+            await interaction.response.send_message(
+                embed=notice(
+                    f"{NO} Staff are still looking at your last topic. "
+                    "Suggest another once they are done.",
+                    "bad",
+                ),
+                ephemeral=True,
+            )
+            return
+        text = self.text.value.strip()
+        review = discord.Embed(title=text, color=BLUE)
+        review.description = f"Topic suggested by {interaction.user.mention}"
+        sent = await interaction.guild.get_channel(TOPIC_REVIEW).send(
+            embed=review, view=ReviewView()
+        )
+        db.reference(PENDING).child(str(sent.id)).set(
+            {"user": interaction.user.id, "text": text}
+        )
+        await interaction.response.send_message(
+            embed=notice(
+                f"{YES} Sent to staff. If they approve it, it joins `/topic` with "
+                f"your name and you get {BEAN_EMOTE} `{TOPIC_BEANS}`.",
+                "good",
+            ),
+            ephemeral=True,
+        )
+
+
+class ReviewView(View):
+    """Staff approve a member's topic, which pays the member, or turn it down."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def settle(self, interaction: discord.Interaction, approved: bool):
+        ref = db.reference(PENDING).child(str(interaction.message.id))
+        topic = ref.get()
+        if not topic:
+            await interaction.response.edit_message(view=None)
+            return
+        ref.delete()
+        embed = interaction.message.embeds[0]
+        embed.color = GREEN if approved else RED
+        if approved:
+            db.reference(APPROVED).push().set(topic)
+            await wallet.change(topic["user"], beans=TOPIC_BEANS, reason="topic")
+            embed.description += (
+                f"\n{YES} Approved by {interaction.user.mention}, "
+                f"paid {BEAN_EMOTE} `{TOPIC_BEANS}`"
+            )
+        else:
+            embed.description += f"\n{NO} Turned down by {interaction.user.mention}"
+        await interaction.response.edit_message(embed=embed, view=None)
+
+    @discord.ui.button(
+        label="Approve", style=discord.ButtonStyle.green, custom_id="topic_approve"
+    )
+    async def approve(self, interaction: discord.Interaction, button: Button):
+        await self.settle(interaction, True)
+
+    @discord.ui.button(
+        label="Turn down", style=discord.ButtonStyle.red, custom_id="topic_reject"
+    )
+    async def reject(self, interaction: discord.Interaction, button: Button):
+        await self.settle(interaction, False)
+
+
+class TopicView(View):
+    def __init__(self, cafe: bool):
+        super().__init__(timeout=600)
+        self.message = None
+        if not cafe:
+            self.remove_item(self.add)
+
+    async def on_timeout(self):
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+    @discord.ui.button(label="Another topic", style=discord.ButtonStyle.blurple)
+    async def another(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.edit_message(embed=topic_embed())
+
+    @discord.ui.button(label="Suggest a topic", style=discord.ButtonStyle.grey)
+    async def add(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(AddModal())
+
+
 class Topic(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(
-        name="topic", description="Get a random conversation topic to break the ice"
-    )
+    @app_commands.command(name="topic", description="Get something to talk about")
+    @app_commands.guild_only()
     async def topic(self, interaction: discord.Interaction) -> None:
-        random_topic = random.choice(ICEBREAKERS)
-        embed = discord.Embed(title=random_topic, color=discord.Color.random())
-        embed.set_footer(text="Use /topic to get another one!")
-        await interaction.response.send_message(embed=embed)
+        view = TopicView(interaction.guild.id == MAIN_GUILD_ID)
+        await interaction.response.send_message(embed=topic_embed(), view=view)
+        view.message = await interaction.original_response()
 
 
 async def setup(bot: commands.Bot) -> None:
+    bot.add_view(ReviewView())
     await bot.add_cog(Topic(bot))

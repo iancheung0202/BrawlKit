@@ -18,6 +18,19 @@ BRAWLERS = 112
 BRAWLERS_FOR = 6 * 3600
 IMAGES = {}
 released = {"count": BRAWLERS, "at": 0}
+# Game modes by their id, used until today's events have been read once.
+MODES = {
+    48000000: "Gem Grab",
+    48000005: "Brawl Ball",
+    48000002: "Heist",
+    48000003: "Bounty",
+    48000017: "Hot Zone",
+    48000020: "Knockout",
+    48000006: "Solo Showdown",
+    48000009: "Duo Showdown",
+}
+MODES_FOR = 3600
+playable = {"modes": MODES, "at": 0}
 
 
 async def fetch(url: str, headers: dict):
@@ -61,6 +74,21 @@ async def brawler_count() -> int:
         if data and data.get("data"):
             released["count"] = len(data["data"])
     return released["count"]
+
+
+async def modes() -> dict:
+    """The game modes in today's events, by id, read from the live list hourly."""
+    if time.time() - playable["at"] > MODES_FOR:
+        playable["at"] = time.time()
+        data = await fetch(f"{BRAWLTOOLS}/events", BRAWL_TOOLS_HEADERS)
+        found = {
+            mode["scId"]: mode["name"]
+            for event in ((data or {}).get("data") or {}).get("activeEvents", [])
+            for mode in event.get("gameMode") or []
+        }
+        if found:
+            playable["modes"] = dict(list(found.items())[:25])
+    return playable["modes"]
 
 
 async def image(path: str) -> bytes:

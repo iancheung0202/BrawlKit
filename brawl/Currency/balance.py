@@ -37,6 +37,7 @@ from brawl.Currency.panel import notice
 from brawl.Currency.quests import order_tasks, update_quest
 from brawl.Currency.shopcard import clean
 from brawl.Currency.stampcard import stamps
+from brawl.TeamFinder.reputationSystem import rep_of
 
 HOME_STATIONS = {"table_info": "tables"}
 PAGES = ("overview", "stampcard", "effect_info", "balance_invites", "table_info")
@@ -379,6 +380,7 @@ class Balance(commands.Cog):
             "brew": await self.economy.get_active_brew(user.id),
             "brewing": await unlocked(self.bot, user.id, guild.id, "brewing"),
             "stamps": stamps(user.id),
+            "rep": rep_of(user.id),
             "streak": (u_daily_checkin_streaks(user.id).get() or {}).get(
                 "current_streak", 0
             ),

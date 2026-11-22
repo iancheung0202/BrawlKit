@@ -387,5 +387,38 @@ def draw_milestones(sheet):
     return card.jpg()
 
 
+def draw_request(sheet):
+    """A team request: who is asking, what for, and the seats on the team."""
+    card = Card(640, 328, sheet["background"])
+    head(card, sheet["player"], sheet["label"])
+    tile(card, 36, 140, 182, sheet["mode_art"], sheet["mode"], sheet["kind"])
+    tile(card, 229, 140, 182, "game/trophies", f"{sheet['trophies']:,}", "Trophies")
+    rank = sheet["ranked"]
+    tile(card, 422, 140, 182, sheet["league_art"], f"{rank[1]:,}", league(rank[0]))
+    card.slot(36, 222, 568, 74)
+    for seat in range(sheet["seats"] + 1):
+        x = 50 + seat * 56
+        if seat < len(sheet["faces"]):
+            portrait(
+                card, sheet["faces"][seat], x, 235, 48, GOLD if not seat else BLACK
+            )
+        else:
+            card.draw.rounded_rectangle(
+                box(x, 235, 48, 48),
+                8 * SCALE,
+                fill=EMPTY,
+                outline=BLACK,
+                width=2 * SCALE,
+            )
+    free = sheet["seats"] + 1 - len(sheet["faces"])
+    if not sheet["open"]:
+        card.text(590, 246, "Closed", 20, GREY, "ra")
+    elif free:
+        card.text(590, 246, f"{free} open", 20, GOLD, "ra")
+    else:
+        card.text(590, 246, "Full", 20, GREEN, "ra")
+    return card.jpg()
+
+
 async def setup(bot):
     pass

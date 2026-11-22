@@ -201,6 +201,11 @@ ITEM_STATIONS = {
 }
 
 DAILY_BEANS = 500
+# Team finder: Beans for a rep from a host, and how many reps a day pay
+REP_BEANS = 150
+REP_PAID_DAILY = 3
+# Beans a member gets when staff approve the /topic question they suggested
+TOPIC_BEANS = 500
 BOOSTER_DAILY_BEANS = 700
 ULTRA_DAILY_BONUS = 1500
 LUCKY_DAILY_CHANCE = 0.1

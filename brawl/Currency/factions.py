@@ -21,6 +21,7 @@ from brawl.Currency.helper import (
     BEAN_EMOTE,
     MAIN_GUILD_ID,
     NO_EMOTE,
+    STAFF_CHAT,
     TABLE_QUEST_TYPES,
     TOKEN_EMOTE,
     YES_EMOTE,
@@ -325,7 +326,7 @@ class TableSystem(commands.GroupCog, name="table"):
                         except Exception as e:
                             print(f"Error rewarding user {member_id}: {e}")
 
-                    channel = self.bot.get_channel(1400797909976612884)
+                    channel = self.bot.get_channel(STAFF_CHAT)
                     if channel:
                         log_embed = discord.Embed(
                             title="<a:tada:1227425729654820885> Weekly Top Table Rewards Distributed",
@@ -344,7 +345,7 @@ class TableSystem(commands.GroupCog, name="table"):
             table_ref.update({"weekly_beans": 0, "user_contributions": {}})
             self.initialize_table_quest(table_ref)
 
-        channel = self.bot.get_channel(1400797909976612884)
+        channel = self.bot.get_channel(STAFF_CHAT)
         if channel:
             await channel.send(
                 embed=discord.Embed(

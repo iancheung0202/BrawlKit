@@ -119,6 +119,10 @@ def draw_home(member):
         member["beans"],
         member["tokens"],
     )
+    if member.get("rep"):
+        x = 130 + card.measure(card.fit(member["name"], 32, 380), 32)
+        card.icon("kit/icon_like", x, 27, 26)
+        card.text(x + 32, 27, f"{member['rep']:,}", 20, WHITE, "la", 2)
     draw_order(card, member["tasks"], member.get("store", "the store"))
     draw_brew(card, member["brew"], member["brewing"])
     draw_stamps(card, member["stamps"], member["level"], member["streak"])

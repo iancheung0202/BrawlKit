@@ -1,33 +1,53 @@
-import datetime
 import re
+import time
 
 import discord
 from discord import app_commands
-from discord.ext import commands
-from discord.ui import Button, Modal, TextInput, View
+from discord.ext import commands, tasks
+from discord.ui import Button, Modal, Select, TextInput, View
 from firebase_admin import db
 
-from brawl.TeamFinder.reputationSystem import ReputationView, status_embed
-from brawl.Utility.api import clean_tag, get_stats
-from brawl.Utility.profile import get_ranked_tier
+from brawl.Currency.card import faces, render, roster
+from brawl.Currency.config import REP_BEANS
+from brawl.Currency.helper import BEAN_EMOTE, MAIN_GUILD_ID
+from brawl.Currency.home import background
+from brawl.Currency.panel import notice
+from brawl.Milestone.milestone import in_cafe
+from brawl.TeamFinder.reputationSystem import (
+    LIKE,
+    ReputationView,
+    add_rep,
+    get_totals,
+    status_embed,
+    thank,
+)
+from brawl.Utility import api
+from brawl.Utility.playercard import draw_request, face, league_art
+from brawl.Utility.profile import linked, show_profile
 from brawl.Utility.style import NO, YES
 
-CONFIGS = "/Team Find"
+CONFIG = f"/Team Find/{MAIN_GUILD_ID}"
 PANELS = "/Team Find Sticky Panel"
 TAGS = "/Team Find Player Tag"
+REQUESTS = "/Team Find Requests"
 REGIONS = {
-    "NA": ("North America", 0x6161F9),
-    "EU": ("Europe", 0x50C450),
-    "Asia": ("Asia", 0xF96262),
-    "SA": ("South America", 0xF7D31A),
-    "AU": ("Australia", 0x9B59B6),
+    "NA": "North America",
+    "EU": "Europe",
+    "Asia": "Asia",
+    "SA": "South America",
+    "AU": "Australia",
 }
+KINDS = ("Trophies", "Ranked", "Event")
+# What the first tile of a card shows when no game mode was picked
+KIND_ART = {"Ranked": "game/ranked", "Event": "kit/icon_event"}
+# The stats a request card draws, kept with the request so a claim needs no lookup
+KEPT = ("name", "nameColor", "icon", "club", "trophies", "ranked", "rankedPoints")
+OPEN_FOR = 24 * 3600
 TOOLS = "<a:tools:1390756351952687154>"
 SETUP = "</teamfind setup:1390732384294408208>"
 PANEL = "</teamfind panel:1390732384294408208>"
-DISABLE = "</teamfind disable:1390732384294408208>"
 INVITE = "https://link.brawlstars.com/invite/gameroom/en/?tag={}"
-CLAIMED = "Claimed By"
+OLD = f"{NO} This request is too old to join. Start a new one from the panel."
 
 
 def find(path: str, field: str, value: int):
@@ -37,8 +57,12 @@ def find(path: str, field: str, value: int):
     return None, None
 
 
-def now():
-    return datetime.datetime.now(datetime.timezone.utc)
+def get_config() -> dict:
+    return db.reference(CONFIG).get() or {}
+
+
+def get_request(message_id: int):
+    return db.reference(REQUESTS).child(str(message_id)).get()
 
 
 def get_requester(message: discord.Message):
@@ -46,22 +70,46 @@ def get_requester(message: discord.Message):
     return int(match.group(1)) if match else None
 
 
-def get_field(embed: discord.Embed, name: str):
-    for index, field in enumerate(embed.fields):
-        if field.name.startswith(name):
-            return index, field.value
-    return None, ""
+def left(request: dict) -> int:
+    return request["seats"] - len(request.get("claims", []))
 
 
-def get_remaining(embed: discord.Embed) -> int:
-    match = re.search(r"\((\d+) More Player", embed.description)
-    return int(match.group(1)) if match else 0
+def closed_text(host_id: int) -> str:
+    return f"<@{host_id}> no longer needs teammates. {YES}"
 
 
-def needed(count: int) -> str:
-    if count == 0:
-        return "(Team Full!)"
-    return f"({count} More Player{'s' if count != 1 else ''} Needed)"
+async def request_card(guild: discord.Guild, request: dict) -> discord.File:
+    """Draws a request with its host first, then everyone who claimed a seat."""
+    stats = request["stats"]
+    rank = stats.get("ranked", 0)
+    mode = f"/game-modes/regular/{request.get('mode_id')}.png"
+    members = await roster(guild, [request["host"], *request.get("claims", [])])
+    art = await api.images([league_art(rank), *([mode] if "mode" in request else [])])
+    sheet = {
+        "player": await face(request["tag"], stats),
+        "label": f"{request['region'].upper()} TEAM",
+        "background": background(request["host"]),
+        "mode": request.get("mode", request["kind"]),
+        "mode_art": art.get(mode) or KIND_ART[request["kind"]],
+        "kind": request["kind"] if "mode" in request else "Any mode",
+        "trophies": stats.get("trophies", 0),
+        "ranked": (rank, stats.get("rankedPoints", 0)),
+        "league_art": art[league_art(rank)],
+        "seats": request["seats"],
+        "faces": await faces(members),
+        "open": request["open"],
+    }
+    return await render(draw_request, sheet, name="team")
+
+
+async def close_request(message: discord.Message, request: dict):
+    """Redraws a request as closed and forgets it."""
+    request["open"] = False
+    card = await request_card(message.guild, request)
+    await message.edit(
+        content=closed_text(request["host"]), attachments=[card], view=ClosedView()
+    )
+    db.reference(REQUESTS).child(str(message.id)).delete()
 
 
 async def move_panel(channel: discord.TextChannel):
@@ -81,175 +129,298 @@ async def move_panel(channel: discord.TextChannel):
     ref.update({"Message ID": new.id})
 
 
-class RequestModal(Modal):
-    tag = TextInput(label="Your Player Tag", placeholder="#9L00JQRGR", max_length=15)
-    category = TextInput(
-        label="Category",
-        placeholder="e.g. Trophies, Ranked, Challenge, etc.",
-        max_length=20,
+def start_embed(region: str) -> discord.Embed:
+    embed = notice(
+        "1. Pick what you are playing for.\n"
+        "2. For Trophies, pick the game mode.\n"
+        "3. Press **Continue** and enter your team code.\n"
+        f"-# When you close the request, select who played. Each gets {LIKE} `1` rep "
+        f"and {BEAN_EMOTE} `{REP_BEANS}`."
     )
-    mode = TextInput(
-        label="Game Mode",
-        placeholder="e.g. Showdown, Brawl Ball, Hot Zone, etc.",
-        max_length=20,
-    )
-    code = TextInput(
-        label="Team Code", placeholder="Enter team join code", max_length=10
-    )
-    players = TextInput(
-        label="Players Needed",
-        placeholder="Default: 2",
-        required=False,
-        default="2",
-        max_length=1,
-    )
+    embed.title = f"Find teammates in {REGIONS[region]}"
+    return embed
 
-    def __init__(self, region: str, tag: str):
-        super().__init__(title=f"Find Teammates - {region}")
-        self.region = region
-        self.tag.default = tag
+
+class RequestModal(Modal):
+    def __init__(self, region: str, pick: dict, tag: str, saved: str):
+        super().__init__(title=f"Find teammates in {region}")
+        self.region, self.pick, self.linked = region, pick, tag
+        self.code = TextInput(
+            label="Team code", placeholder="The join code of your team", max_length=10
+        )
+        self.add_item(self.code)
+        self.tag = TextInput(
+            label="Your player tag",
+            placeholder="#9L00JQRGR",
+            default=saved,
+            max_length=15,
+        )
+        if not tag:
+            self.add_item(self.tag)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        tag = clean_tag(self.tag.value)
-        stats = await get_stats(tag)
+        tag = self.linked or api.clean_tag(self.tag.value)
+        stats = await api.get_stats(tag)
         if not stats:
             await interaction.followup.send(
-                f"{NO} Failed to fetch profile for player tag {tag}. Please check the tag and try again."
+                embed=notice(
+                    f"{NO} No player found for `{tag}`. Check the tag and try again.",
+                    "bad",
+                )
             )
             return
-        db.reference(TAGS).child(str(interaction.user.id)).update(
-            {"Player Tag": tag[1:]}
-        )
-        _, config = find(CONFIGS, "Server ID", interaction.guild.id)
-        channel = interaction.guild.get_channel(config["Channel ID"])
+        if not self.linked:
+            db.reference(TAGS).child(str(interaction.user.id)).update(
+                {"Player Tag": tag[1:]}
+            )
+        config = get_config()
+        channel = interaction.guild.get_channel(config.get("Channel ID", 0))
         if not channel:
             await interaction.followup.send(
-                f"{NO} The team finder channel for this server (<#{config['Channel ID']}>) could not be found. It may have been deleted or the bot cannot see it. Please use `/teamfind setup` to set a new one if needed."
+                embed=notice(
+                    f"{NO} The team finder channel is missing. Ask staff to run {SETUP}.",
+                    "bad",
+                )
             )
             return
-        name, color = REGIONS[self.region]
-        players = max(int(self.players.value), 1) if self.players.value.isdigit() else 2
-        category, mode = self.category.value, self.mode.value
-        embed = discord.Embed(
-            description=f"### {name} Team Request {needed(players)}\n-# - Coordinate with each other in the **thread** below\n-# - Click on **`Claim`** if you're 100% joining the team. \n-# - If you are the requester and **no longer need teammates**, press **`Close`**.",
-            color=color,
-            timestamp=now(),
+        request = {
+            "host": interaction.user.id,
+            "tag": tag,
+            "region": self.region,
+            "code": self.code.value.strip(),
+            "stats": {key: stats[key] for key in KEPT if stats.get(key) is not None},
+            "open": True,
+            "at": int(time.time()),
+            **self.pick,
+        }
+        role = interaction.guild.get_role(
+            config.get(f"{self.region} Helper Role ID", 0)
         )
-        embed.add_field(
-            name="Player Tag",
-            value=f"> [{tag}](https://brawlify.com/stats/profile/{tag[1:]})",
-        )
-        if "ranked" in f"{category} {mode}".lower():
-            embed.add_field(
-                name="Ranked",
-                value=f"> {get_ranked_tier(stats.get('rankedPoints', 0))}",
-            )
-        else:
-            embed.add_field(
-                name="Trophies",
-                value=f"> <:trophies:1341985600567251015> `{stats.get('trophies', 'N/A')}`",
-            )
-        embed.add_field(
-            name="Brawlers Unlocked",
-            value=f"> <a:unlocked:1390755948926079037> `{len(stats.get('brawlers', []))}`",
-        )
-        embed.add_field(name="Category", value=f"> {category}")
-        embed.add_field(name="Game Mode", value=f"> {mode}")
-        embed.add_field(name="Team Code", value=f"> {self.code.value.strip()}")
-        icon = interaction.guild.icon
-        embed.set_footer(
-            text=interaction.guild.name, icon_url=icon.url if icon else None
-        )
-        role = interaction.guild.get_role(config[f"{self.region} Helper Role ID"])
         message = await channel.send(
-            f"**{TOOLS} {interaction.user.mention} is requesting for teammates** - {role.mention if role else self.region}",
-            embed=embed,
-            view=RequestView(),
+            f"**{TOOLS} {interaction.user.mention} is looking for teammates** "
+            f"{role.mention if role else self.region}",
+            file=await request_card(interaction.guild, request),
+            view=RequestView(request["code"]),
         )
+        db.reference(REQUESTS).child(str(message.id)).set(request)
         await message.create_thread(
-            name=f"{interaction.user.name} - {name} Team Request",
+            name=f"{interaction.user.name} - {REGIONS[self.region]}",
             auto_archive_duration=1440,
         )
-        await move_panel(interaction.channel)
+        await move_panel(channel)
         await interaction.followup.send(
-            f"{YES} [Team Request Sent]({message.jump_url})"
+            embed=notice(f"{YES} [Your request is up]({message.jump_url}).", "good")
         )
+
+
+class StartView(View):
+    """What a request is for, picked from menus before the team code is asked."""
+
+    def __init__(self, region: str, modes: dict, tag: str, saved: str):
+        super().__init__(timeout=300)
+        self.region, self.modes, self.tag, self.saved = region, modes, tag, saved
+        self.mode, self.kind, self.seats = None, "Trophies", 2
+        self.mode_menu.options = [
+            discord.SelectOption(label=name, value=str(mode_id))
+            for mode_id, name in modes.items()
+        ]
+        self.refresh()
+
+    def refresh(self):
+        """The game mode is only asked for Trophies; Ranked and Events pick their own."""
+        self.kind_menu.options = [
+            discord.SelectOption(label=kind, default=kind == self.kind)
+            for kind in KINDS
+        ]
+        self.seats_menu.options = [
+            discord.SelectOption(
+                label=f"{seats} teammate{'s' * (seats != 1)} needed",
+                value=str(seats),
+                default=seats == self.seats,
+            )
+            for seats in range(1, 5)
+        ]
+        for option in self.mode_menu.options:
+            option.default = option.value == str(self.mode)
+        self.clear_items()
+        self.add_item(self.kind_menu)
+        if self.kind == "Trophies":
+            self.add_item(self.mode_menu)
+        self.add_item(self.seats_menu)
+        self.add_item(self.go)
+
+    @discord.ui.select(placeholder="Playing for")
+    async def kind_menu(self, interaction: discord.Interaction, select: Select):
+        self.kind = select.values[0]
+        self.refresh()
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.select(placeholder="Game mode")
+    async def mode_menu(self, interaction: discord.Interaction, select: Select):
+        self.mode = int(select.values[0])
+        await interaction.response.defer()
+
+    @discord.ui.select(placeholder="Teammates needed")
+    async def seats_menu(self, interaction: discord.Interaction, select: Select):
+        self.seats = int(select.values[0])
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Continue", style=discord.ButtonStyle.green)
+    async def go(self, interaction: discord.Interaction, button: Button):
+        pick = {"kind": self.kind, "seats": self.seats}
+        if self.kind == "Trophies":
+            if not self.mode:
+                await interaction.response.send_message(
+                    embed=notice(f"{NO} Pick a game mode first.", "bad"),
+                    ephemeral=True,
+                )
+                return
+            pick.update(mode_id=self.mode, mode=self.modes[self.mode])
+        await interaction.response.send_modal(
+            RequestModal(self.region, pick, self.tag, self.saved)
+        )
+
+
+class TeammatesView(View):
+    """The host selects who really played, and each of them gets a rep."""
+
+    def __init__(self, message: discord.Message, request: dict, members: list):
+        super().__init__(timeout=300)
+        self.message, self.request, self.played = message, request, []
+        self.menu.options = [
+            discord.SelectOption(label=member.display_name[:100], value=str(member.id))
+            for member in members
+        ]
+        self.menu.max_values = len(members)
+
+    @discord.ui.select(placeholder="Who played with you?", min_values=0)
+    async def menu(self, interaction: discord.Interaction, select: Select):
+        self.played = [int(value) for value in select.values]
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Close request", style=discord.ButtonStyle.red)
+    async def close(self, interaction: discord.Interaction, button: Button):
+        if not get_request(self.message.id):
+            await interaction.response.edit_message(
+                embed=notice(f"{NO} This request is already closed.", "bad"), view=None
+            )
+            return
+        await interaction.response.edit_message(
+            embed=notice(f"{YES} Request closed.", "good"), view=None
+        )
+        await close_request(self.message, self.request)
+        lines = []
+        for member in await roster(interaction.guild, self.played):
+            result = await thank(member, self.request["host"]) if member else None
+            if not result:
+                continue
+            beans, roles = result
+            line = f"{member.mention} earned {LIKE} `1` rep"
+            line += f" and {BEAN_EMOTE} `{beans}`" if beans else ""
+            line += "".join(f", and the {role.mention} role" for role in roles)
+            lines.append(line)
+        if lines:
+            thread = await interaction.guild.fetch_channel(self.message.id)
+            await thread.send(
+                "\n".join(lines), allowed_mentions=discord.AllowedMentions(roles=False)
+            )
 
 
 class RequestView(View):
-    def __init__(self):
+    def __init__(self, code: str = None):
         super().__init__(timeout=None)
-
-    @discord.ui.button(
-        label="Claim", style=discord.ButtonStyle.green, custom_id="claim_team"
-    )
-    async def claim(self, interaction: discord.Interaction, button: discord.ui.Button):
-        message = interaction.message
-        embed = message.embeds[0]
-        index, value = get_field(embed, CLAIMED)
-        claims = [int(id) for id in re.findall(r"<@(\d+)>", value)]
-        remaining = get_remaining(embed)
-        if interaction.user.id == get_requester(message):
-            error = "You want to help yourself? :joy:"
-        elif interaction.user.id in claims:
-            error = f"{NO} You've already joined this team."
-        elif remaining == 0:
-            error = f"{NO} The team is full!"
-        else:
-            error = None
-        if error:
-            await interaction.response.send_message(error, ephemeral=True)
-            return
-        claims.append(interaction.user.id)
-        remaining -= 1
-        embed.description = re.sub(
-            r"\(.*?\)", needed(remaining), embed.description, count=1
-        )
-        if index is not None:
-            embed.remove_field(index)
-        embed.add_field(
-            name=f"{CLAIMED} `({len(claims)}/{len(claims) + remaining})`",
-            value="\n".join(f"- <@{id}>" for id in claims),
-            inline=False,
-        )
-        view = RequestView()
-        view.claim.disabled = remaining == 0
-        code = get_field(embed, "Team Code")[1].replace("> ", "").strip()
         if code:
-            view.add_item(
+            self.add_item(
                 Button(
                     label="Join Team",
                     style=discord.ButtonStyle.link,
                     url=INVITE.format(code),
                 )
             )
-        await interaction.response.edit_message(embed=embed, view=view)
-        thread = await interaction.guild.fetch_channel(message.id)
-        await thread.send(f"{interaction.user.mention} claimed the team request!")
-        await interaction.followup.send(
-            f"{YES} You have claimed the team request! Discuss in {thread.mention}",
-            ephemeral=True,
+
+    @discord.ui.button(
+        label="Claim", style=discord.ButtonStyle.green, custom_id="claim_team"
+    )
+    async def claim(self, interaction: discord.Interaction, button: Button):
+        message = interaction.message
+        request = get_request(message.id)
+        claims = (request or {}).get("claims", [])
+        if not request:
+            error = OLD
+        elif interaction.user.id == request["host"]:
+            error = f"{NO} This is your own request."
+        elif interaction.user.id in claims:
+            error = f"{NO} You already joined this team."
+        elif not left(request):
+            error = f"{NO} The team is full."
+        else:
+            error = None
+        if error:
+            await interaction.response.send_message(
+                embed=notice(error, "bad"), ephemeral=True
+            )
+            return
+        await interaction.response.defer()
+        request["claims"] = [*claims, interaction.user.id]
+        db.reference(REQUESTS).child(str(message.id)).update(
+            {"claims": request["claims"]}
         )
+        view = RequestView(request["code"])
+        view.claim.disabled = not left(request)
+        await interaction.edit_original_response(
+            attachments=[await request_card(interaction.guild, request)], view=view
+        )
+        thread = await interaction.guild.fetch_channel(message.id)
+        await thread.send(f"{interaction.user.mention} joined the team.")
+
+    @discord.ui.button(
+        label="Profile", style=discord.ButtonStyle.grey, custom_id="profile_team"
+    )
+    async def profile(self, interaction: discord.Interaction, button: Button):
+        request = get_request(interaction.message.id)
+        if not request:
+            await interaction.response.send_message(
+                embed=notice(OLD, "bad"), ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        await show_profile(interaction, request["tag"], ephemeral=True)
 
     @discord.ui.button(
         label="Close", style=discord.ButtonStyle.red, custom_id="close_team"
     )
-    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def close(self, interaction: discord.Interaction, button: Button):
         message = interaction.message
+        request = get_request(message.id)
+        host = request["host"] if request else get_requester(message)
         if (
-            interaction.user.id != get_requester(message)
+            interaction.user.id != host
             and not interaction.user.guild_permissions.administrator
         ):
             await interaction.response.send_message(
-                f"{NO} This is not your team request!", ephemeral=True
+                embed=notice(f"{NO} This is not your team request.", "bad"),
+                ephemeral=True,
             )
             return
-        content = re.sub(
-            r"is requesting for.*", f"no longer needs teammates. {YES}", message.content
-        )
-        await interaction.response.edit_message(
-            content=content.replace("**", "").replace(TOOLS, ""), view=ClosedView()
+        if not request:
+            await interaction.response.edit_message(
+                content=closed_text(host), view=ClosedView()
+            )
+            return
+        members = await roster(interaction.guild, request.get("claims", []))
+        members = [member for member in members if member]
+        if interaction.user.id != host or not members:
+            await interaction.response.defer()
+            await close_request(message, request)
+            return
+        await interaction.response.send_message(
+            embed=notice(
+                f"Select the teammates who played with you. Each gets {LIKE} `1` rep "
+                f"and {BEAN_EMOTE} `{REP_BEANS}`."
+            ),
+            view=TeammatesView(message, request, members),
+            ephemeral=True,
         )
 
 
@@ -276,21 +447,24 @@ class RegionButton(Button):
         self.region = region
 
     async def callback(self, interaction: discord.Interaction):
-        key, _ = find(CONFIGS, "Server ID", interaction.guild.id)
-        if not key:
+        if not await in_cafe(interaction):
+            return
+        if not get_config():
             await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="Team Finder not enabled!",
-                    description=f"This server doesn't have the team finder system enabled yet. Please ask the server admin to use {SETUP} to setup the system!",
-                    color=discord.Color.red(),
-                    timestamp=now(),
-                ),
+                embed=notice(f"{NO} The team finder is not set up yet.", "bad"),
                 ephemeral=True,
             )
             return
         saved = db.reference(TAGS).child(str(interaction.user.id)).get() or {}
-        await interaction.response.send_modal(
-            RequestModal(self.region, saved.get("Player Tag"))
+        await interaction.response.send_message(
+            embed=start_embed(self.region),
+            view=StartView(
+                self.region,
+                await api.modes(),
+                linked(interaction.user.id),
+                saved.get("Player Tag"),
+            ),
+            ephemeral=True,
         )
 
 
@@ -305,6 +479,13 @@ class PanelView(View):
 class TeamFind(commands.GroupCog, name="teamfind"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.expire.start()
+
+    async def cog_unload(self):
+        self.expire.cancel()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await in_cafe(interaction)
 
     async def cog_app_command_error(
         self, interaction: discord.Interaction, error: Exception
@@ -314,31 +495,30 @@ class TeamFind(commands.GroupCog, name="teamfind"):
         else:
             await interaction.response.send_message(f"```{error}```", ephemeral=True)
 
-    @app_commands.command(
-        name="disable", description="Disable team finder system in this server"
-    )
+    @tasks.loop(minutes=10)
+    async def expire(self):
+        """Closes requests left open for a day, so the channel shows live ones."""
+        channel = self.bot.get_channel(get_config().get("Channel ID", 0))
+        for message_id, request in (db.reference(REQUESTS).get() or {}).items():
+            if time.time() - request["at"] < OPEN_FOR:
+                continue
+            try:
+                await close_request(
+                    await channel.fetch_message(int(message_id)), request
+                )
+            except (AttributeError, discord.HTTPException):
+                db.reference(REQUESTS).child(message_id).delete()
+
+    @expire.before_loop
+    async def ready(self):
+        await self.bot.wait_until_ready()
+
+    @app_commands.command(name="disable", description="Turn the team finder off")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def disable(self, interaction: discord.Interaction):
-        key, _ = find(CONFIGS, "Server ID", interaction.guild.id)
-        if not key:
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="We could not find your server",
-                    description="Maybe you have already disabled the team finder in your server, or you have never enabled it.",
-                    color=discord.Color.red(),
-                    timestamp=now(),
-                ),
-                ephemeral=True,
-            )
-            return
-        db.reference(CONFIGS).child(key).delete()
+        db.reference(CONFIG).delete()
         await interaction.response.send_message(
-            embed=discord.Embed(
-                title="Team Finder system successfully disabled",
-                description=f"You can use {SETUP} at anytime to setup the system again.",
-                color=discord.Color.yellow(),
-                timestamp=now(),
-            )
+            embed=notice(f"{YES} Team finder is off. Use {SETUP} to turn it on again.")
         )
 
     @app_commands.command(
@@ -386,7 +566,7 @@ class TeamFind(commands.GroupCog, name="teamfind"):
             embed.set_image(url=image)
             embed.set_footer(text=footer, icon_url=icon.url if icon else None)
             if footer_time:
-                embed.timestamp = now()
+                embed.timestamp = discord.utils.utcnow()
         sent = await interaction.channel.send(message, embed=embed, view=PanelView())
         sticky = ""
         if is_sticky_panel:
@@ -401,18 +581,13 @@ class TeamFind(commands.GroupCog, name="teamfind"):
             db.reference(PANELS).push().set(
                 {"Channel ID": interaction.channel.id, "Message ID": sent.id}
             )
-            sticky = "This panel will now always be the last message in the channel."
+            sticky = " It will stay the last message in this channel."
         await interaction.response.send_message(
-            embed=discord.Embed(
-                description=f"**{YES} Custom Team Finder Panel Sent!** {sticky} \n\n*Sent in the wrong channel? Delete the panel and use {PANEL} in the correct channel!*",
-                color=discord.Color.green(),
-                timestamp=now(),
-            ),
-            ephemeral=True,
+            embed=notice(f"{YES} Panel sent.{sticky}", "good"), ephemeral=True
         )
 
     @app_commands.command(
-        name="setup", description="Setup team finder system in the server"
+        name="setup", description="Set the team finder channel and roles"
     )
     @app_commands.describe(
         channel="The channel for all team requests",
@@ -436,22 +611,8 @@ class TeamFind(commands.GroupCog, name="teamfind"):
         sa_helper_role: discord.Role,
         au_helper_role: discord.Role,
     ):
-        _, config = find(CONFIGS, "Server ID", interaction.guild.id)
-        if config:
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="Team Finder System already enabled!",
-                    description=f"Your team finder channel is already set as <#{config['Channel ID']}> `({config['Channel ID']})`\n\nPlease use {PANEL} to create your team finder panel.\n\nIf you wish to disable the system, please use {DISABLE}.",
-                    color=discord.Color.red(),
-                    timestamp=now(),
-                ),
-                ephemeral=True,
-            )
-            return
-        db.reference(CONFIGS).push().set(
+        db.reference(CONFIG).set(
             {
-                "Server Name": interaction.guild.name,
-                "Server ID": interaction.guild.id,
                 "Channel ID": channel.id,
                 "NA Helper Role ID": na_helper_role.id,
                 "EU Helper Role ID": eu_helper_role.id,
@@ -461,28 +622,38 @@ class TeamFind(commands.GroupCog, name="teamfind"):
             }
         )
         await interaction.response.send_message(
-            embed=discord.Embed(
-                title="Team Finder System Enabled Successfully!",
-                description=(
-                    f"- The team request channel has been set to {channel.mention} `({channel.id})`.\n"
-                    "- **By default, all administrators can close any team requests for moderation purposes.**\n"
-                    f"- To create your team finder panel, please use {PANEL}.\n"
-                    f"- **Tip:** Make sure members cannot type in {channel.mention}. The system works best if only the bot is able to send messages in that channel."
-                ),
-                color=discord.Color.green(),
-                timestamp=now(),
+            embed=notice(
+                f"{YES} Team requests now go to {channel.mention}. "
+                f"Use {PANEL} to post the panel.",
+                "good",
             )
         )
 
     @app_commands.command(
-        name="reputation",
-        description="Enable, manage, or disable reputation system in the server",
+        name="reputation", description="See and edit the roles that rep earns"
     )
     @app_commands.checks.has_permissions(manage_guild=True)
     async def reputation(self, interaction: discord.Interaction):
         await interaction.response.send_message(
-            embed=status_embed(interaction.guild.id),
-            view=ReputationView(),
+            embed=status_embed(), view=ReputationView(), ephemeral=True
+        )
+
+    @app_commands.command(name="giverep", description="Add or take rep from a member")
+    @app_commands.describe(
+        user="Whose rep to change", amount="Rep to add, or a negative number to take"
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def giverep(
+        self, interaction: discord.Interaction, user: discord.Member, amount: int
+    ):
+        roles = await add_rep(user, amount)
+        earned = "".join(f" They earned {role.mention}." for role in roles)
+        await interaction.response.send_message(
+            embed=notice(
+                f"{YES} {user.mention} now has {LIKE} "
+                f"`{get_totals().get(user.id, 0)}` rep.{earned}",
+                "good",
+            ),
             ephemeral=True,
         )
 

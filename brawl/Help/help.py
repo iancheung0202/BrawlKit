@@ -27,7 +27,6 @@ PAGES = {
                 "ping",
                 "server",
                 "user",
-                "color",
                 "topic",
                 "embed",
                 "editembed",

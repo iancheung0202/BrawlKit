@@ -230,6 +230,39 @@ class ProfileView(discord.ui.View):
         await self.show(interaction, "brawlers")
 
 
+async def show_profile(interaction, tag, owner=None, ephemeral=False):
+    """Sends a player's profile cards as the follow-up to a deferred interaction."""
+    stats, battles, total = await asyncio.gather(
+        api.get_stats(tag), api.get_battles(tag), api.brawler_count()
+    )
+    if not stats:
+        return await interaction.followup.send(
+            embed=notice(
+                f"{NO_EMOTE} No player found for `{api.clean_tag(tag)}`. "
+                "Check the tag and try again.",
+                "bad",
+            ),
+            ephemeral=ephemeral,
+        )
+    if owner:
+        keep_stats(owner.id, stats)
+    ranks = [stats.get("ranked", 0), stats.get("highestRanked", 0)]
+    player, art = await asyncio.gather(
+        face(tag, stats), api.images(league_art(rank) for rank in ranks)
+    )
+    profile = {
+        "stats": stats,
+        "art": art,
+        "player": player,
+        "brawlers": total,
+        "background": background(interaction.user.id),
+    }
+    view = ProfileView(interaction.user.id, profile, battles[:25])
+    view.message = await interaction.followup.send(
+        file=await view.file(), view=view, ephemeral=ephemeral
+    )
+
+
 class Profile(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -267,34 +300,7 @@ class Profile(commands.Cog):
                 f"{owner.mention} has not linked an account yet. Give a player tag."
             )
         await interaction.response.defer(thinking=True)
-        stats, battles, total = await asyncio.gather(
-            api.get_stats(tag), api.get_battles(tag), api.brawler_count()
-        )
-        if not stats:
-            return await interaction.followup.send(
-                embed=notice(
-                    f"{NO_EMOTE} No player found for `{api.clean_tag(tag)}`. "
-                    "Check the tag and try again.",
-                    "bad",
-                )
-            )
-        if owner:
-            keep_stats(owner.id, stats)
-        ranks = [stats.get("ranked", 0), stats.get("highestRanked", 0)]
-        player, art = await asyncio.gather(
-            face(tag, stats), api.images(league_art(rank) for rank in ranks)
-        )
-        profile = {
-            "stats": stats,
-            "art": art,
-            "player": player,
-            "brawlers": total,
-            "background": background(interaction.user.id),
-        }
-        view = ProfileView(interaction.user.id, profile, battles[:25])
-        view.message = await interaction.followup.send(
-            file=await view.file(), view=view
-        )
+        await show_profile(interaction, tag, owner)
 
 
 async def setup(bot):

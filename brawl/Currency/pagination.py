@@ -12,6 +12,7 @@ from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE, get_current_month_key
 from brawl.Currency.home import background
 from brawl.Currency.panel import notice
 from brawl.Currency.stampcard import count as stamp_count
+from brawl.TeamFinder.reputationSystem import get_totals
 
 # Leaderboard: (title, icon, what one row is)
 # title, icon, what is counted, icon before the value, icon before the note
@@ -42,6 +43,7 @@ BOARDS = {
         "kit/icon_ranked_round_token",
         None,
     ),
+    "Teammates": ("Best teammates", "kit/icon_like", "member", "kit/icon_like", None),
 }
 # In-game boards, for members who linked a Brawl Stars account: the stat ranked by
 GAME = {
@@ -335,6 +337,7 @@ class Leaderboard(commands.Cog):
             app_commands.Choice(name="Brews", value="Brews"),
             app_commands.Choice(name="Levels", value="Levels"),
             app_commands.Choice(name="Stamps", value="Stamps"),
+            app_commands.Choice(name="Teammates", value="Teammates"),
         ]
         + [app_commands.Choice(name=f"In-game {name}", value=name) for name in GAME]
     )
@@ -441,6 +444,11 @@ class Leaderboard(commands.Cog):
                 for user_id, stamps in ranked(
                     lambda user: stamp_count(user.get("stamp_card") or {})
                 )
+            ]
+        elif currency == "Teammates":
+            reps = sorted(get_totals().items(), key=lambda row: -row[1])
+            entries = [
+                (user_id, None, f"{rep:,}", None) for user_id, rep in reps if rep
             ]
         elif currency in GAME:
             stat = GAME[currency][2]
