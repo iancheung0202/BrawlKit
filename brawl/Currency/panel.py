@@ -7,7 +7,6 @@ STATIONS = {
     "brew": "Brew Station",
     "clock_in": "Clock In",
     "shop": "Shop",
-    "quests": "Quests",
     "stamps": "Stamp Card",
     "inventory": "Inventory",
     "invites": "Invites",

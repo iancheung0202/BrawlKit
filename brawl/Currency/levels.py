@@ -14,7 +14,11 @@ from discord.ext import commands, tasks
 from firebase_admin import db
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from brawl.Currency.card import plain, render
+from brawl.Currency.config import LADDER
+from brawl.Currency.home import background
 from brawl.Currency.ladder import lessons
+from brawl.Currency.rewardcard import draw_level_up
 
 
 class LevelRewardInfoView(discord.ui.View):
@@ -205,13 +209,6 @@ class Leveling(commands.Cog):
                         if tokens_earned > 0:
                             await currency_cog.add_tokens(str(user_id), tokens_earned)
 
-                    role_msg = ""
-                    if assigned_roles:
-                        role_names = [f"`{r.name}`" for r in assigned_roles]
-                        role_msg = f"\nYou earned the {', '.join(role_names)} role!"
-
-                    msg_content = f"Congratulations {message.author.mention}, you have reached level **{new_level}**!{role_msg}"
-
                     if booster:
                         emoji = "<a:serverboost:1457471812731404450>"
                     elif ultra:
@@ -219,19 +216,43 @@ class Leveling(commands.Cog):
                     else:
                         emoji = "<a:SpikeWin:1391625613273727137>"
 
-                    final_msg = f"{emoji} {msg_content} \n{REPLY_EMOTE} You also earned {BEAN_EMOTE} `{beans_earned}`{' and ' + TOKEN_EMOTE + f' `{tokens_earned}`' if tokens_earned > 0 else ''}!"
+                    final_msg = f"{emoji} {message.author.mention} reached level **{new_level}**!"
                     for lesson in lessons(current_level, new_level):
                         final_msg += f"\n\n{lesson}"
 
                     try:
+                        avatar = await message.author.display_avatar.replace(
+                            size=128
+                        ).read()
+                    except Exception:
+                        avatar = b""
+                    leveled = {
+                        "name": plain(message.author.display_name),
+                        "avatar": avatar,
+                        "level": new_level,
+                        "beans": beans_earned,
+                        "tokens": tokens_earned,
+                        "unlocks": [("New role", plain(r.name)) for r in assigned_roles]
+                        + [
+                            ("Unlocked", name)
+                            for need, name, _ in LADDER.values()
+                            if current_level < need <= new_level
+                        ],
+                        "background": background(user_id),
+                    }
+                    try:
                         await message.channel.send(
-                            embed=discord.Embed(
-                                description=final_msg, color=discord.Color.random()
+                            final_msg,
+                            file=await render(draw_level_up, leveled, name="level_up"),
+                            allowed_mentions=discord.AllowedMentions.none(),
+                            **(
+                                {"view": LevelRewardInfoView()}
+                                if new_level <= 20
+                                else {}
                             ),
-                            view=LevelRewardInfoView() if new_level <= 20 else None,
                         )
-                    except:
-                        pass
+                    except Exception as error:
+                        print(f"Level up message failed: {error}")
 
     async def assign_level_roles(
         self, user_id: int, guild_id: int, old_level: int, new_level: int

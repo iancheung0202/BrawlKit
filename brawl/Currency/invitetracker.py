@@ -27,7 +27,7 @@ from brawl.Currency.helper import (
     get_current_month_key,
 )
 from brawl.Currency.invitecard import draw_invitees, invited_by, invitees, month_name
-from brawl.Currency.tutorial import TutorialManager
+from brawl.Currency.tutorial import TutorialManager, hint, shift
 
 
 class WelcomeView(discord.ui.View):
@@ -289,14 +289,12 @@ class InviteTracker(commands.Cog):
         welcome_channel = self.bot.get_channel(GENERAL_CHAT)
         if welcome_channel:
             if is_new:
-                guide.description = (
-                    f"Welcome, {member.mention}! Here are {BEAN_EMOTE} **{TUTORIAL_BEANS}** to start.\n\n"
-                    + guide.description
-                )
                 await welcome_channel.send(
-                    f"### {member.mention} just joined <:pandaHappy:855019705836240916> ~ please give them a warm welcome! <:PumpkinLove:1391457782061990099>",
+                    f"### {member.mention} just joined <:pandaHappy:855019705836240916> ~ please give them a warm welcome! <:PumpkinLove:1391457782061990099>\n"
+                    f"Welcome, {member.mention}! Here are {BEAN_EMOTE} **{TUTORIAL_BEANS}** to start.\n"
+                    f"-# {hint(guide)}",
                     view=WelcomeView(member, self.bot),
-                    embed=guide,
+                    file=await shift(guide, member.id),
                 )
             else:
                 await welcome_channel.send(

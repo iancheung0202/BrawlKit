@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from brawl.Currency import events
+from brawl.Currency.card import render
 from brawl.Currency.config import (
     ORDER_CHAT_BEANS,
     ORDER_FILLER,
@@ -15,9 +16,6 @@ from brawl.Currency.config import (
     ORDER_TASK_LEVELS,
     QUEST_BEAN_REWARDS,
     QUEST_BONUS_BEANS,
-    QUEST_DESCRIPTIONS,
-    QUEST_GOAL_PRESETS,
-    QUEST_STATION,
 )
 from brawl.Currency.db import u_daily_checkin_streaks, u_quests
 from brawl.Currency.helper import (
@@ -27,11 +25,19 @@ from brawl.Currency.helper import (
     STAMP_EMOTE,
     YES_EMOTE,
 )
-from brawl.Currency.ladder import level_of, unlocked
+from brawl.Currency.home import background
+from brawl.Currency.ladder import level_of
+from brawl.Currency.rewardcard import draw_order
 
-QUEST_TYPES = list(QUEST_DESCRIPTIONS)
+QUEST_TYPES = list(ORDER_LABELS)
 
-DURATIONS = ["daily", "weekly", "monthly"]
+
+class Progress(list):
+    """The lines a finished task prints, with the Beans and Stamp they came with."""
+
+    beans = 0
+    stamp = False
+
 
 ARROW = "<:fastforward:1351972114433048719>"
 
@@ -45,23 +51,6 @@ def get_next_daily_reset():
     return midnight(now + datetime.timedelta(days=1))
 
 
-def get_next_weekly_reset():
-    now = datetime.datetime.now(datetime.timezone.utc)
-    return midnight(now + datetime.timedelta(days=(6 - now.weekday()) % 7 or 7))
-
-
-def get_next_monthly_reset():
-    now = datetime.datetime.now(datetime.timezone.utc)
-    return midnight((now.replace(day=1) + datetime.timedelta(days=32)).replace(day=1))
-
-
-RESETS = {
-    "daily": get_next_daily_reset,
-    "weekly": get_next_weekly_reset,
-    "monthly": get_next_monthly_reset,
-}
-
-
 def generate_order(level):
     unlocked = [task for task, need in ORDER_TASK_LEVELS.items() if level >= need]
     tasks = random.sample(unlocked, min(ORDER_STATION_TASKS, len(unlocked)))
@@ -73,16 +62,7 @@ def generate_order(level):
 
 
 def generate_quests(duration, level=0):
-    if duration == "daily":
-        return generate_order(level)
-    types = [quest for quest in QUEST_TYPES if duration in QUEST_GOAL_PRESETS[quest]]
-    return {
-        quest: {
-            "current": 0,
-            "goal": random.choice(QUEST_GOAL_PRESETS[quest][duration]),
-        }
-        for quest in random.sample(types, min(3, len(types)))
-    }
+    return generate_order(level)
 
 
 def label(task, goal):
@@ -121,84 +101,59 @@ def order_lines(user_id):
     ]
 
 
-async def update_quest(
-    user_id, guild_id, quest_dict, bot, refresh_only=False, durations=DURATIONS
-):
-    ref = u_quests(user_id)
-    quest_data = ref.get() or {}
+async def update_quest(user_id, guild_id, quest_dict, bot, refresh_only=False):
+    """Moves Today's Order forward and pays for what got finished."""
+    ref = u_quests(user_id).child("daily")
+    data = ref.get() or {}
+    if time.time() >= data.get("end_time", 0):
+        data = {
+            "quests": generate_quests("daily", await level_of(bot, user_id, guild_id)),
+            "end_time": get_next_daily_reset(),
+            "completed": {},
+        }
+        ref.set(data)
+    if refresh_only or not clocked_in(user_id):
+        return []
+
+    quests = data.get("quests", {})
+    completed = data.get("completed", {})
+    each, bonus = QUEST_BEAN_REWARDS["daily"], QUEST_BONUS_BEANS["daily"]
     beans = 0
-    messages = []
-
-    longer = await unlocked(bot, user_id, guild_id, QUEST_STATION)
-
-    for duration in DURATIONS:
-        data = quest_data.get(duration, {})
-
-        if time.time() >= data.get("end_time", 0):
-            level = await level_of(bot, user_id, guild_id) if duration == "daily" else 0
-            data = {
-                "quests": generate_quests(duration, level),
-                "end_time": RESETS[duration](),
-                "completed": {},
-            }
-            ref.child(duration).set(data)
-
-        if refresh_only or duration not in durations:
+    messages = Progress()
+    updated = False
+    for quest, amount in quest_dict.items():
+        if quest not in quests or quest in completed:
             continue
-        if duration != "daily" and not longer:
+        quests[quest]["current"] += amount
+        updated = True
+        if quests[quest]["current"] < quests[quest]["goal"]:
             continue
-        if duration == "daily" and not clocked_in(user_id):
-            continue
+        completed[quest] = True
+        beans += each
+        messages.append(
+            f"{YES_EMOTE} **{label(quest, quests[quest]['goal'])}** ‎ {ARROW} ‎ "
+            f"{BEAN_EMOTE} `+{each}`"
+        )
+    if not updated:
+        return []
 
-        quests = data.get("quests", {})
-        completed = data.get("completed", {})
-        updated = False
-
-        for quest, amount in quest_dict.items():
-            if quest not in quests or quest in completed:
-                continue
-            quests[quest]["current"] += amount
-            updated = True
-            if quests[quest]["current"] < quests[quest]["goal"]:
-                continue
-            completed[quest] = True
-            beans += QUEST_BEAN_REWARDS[duration]
-            name = (
-                label(quest, quests[quest]["goal"])
-                if duration == "daily"
-                else f"{QUEST_DESCRIPTIONS[quest]} ({duration})"
-            )
-            messages.append(
-                f"{YES_EMOTE} **{name}** ‎ {ARROW} ‎ "
-                f"{BEAN_EMOTE} `+{QUEST_BEAN_REWARDS[duration]}`"
-            )
-
-        if not updated:
-            continue
-
-        if len(completed) == len(quests) and "bonus_awarded" not in data:
-            data["bonus_awarded"] = True
-            beans += QUEST_BONUS_BEANS[duration]
-            if duration == "daily":
-                await events.emit("order", user_id)
-                messages.append(
-                    f"<a:tada:1227425729654820885> **Order complete!** ‎ {ARROW} ‎ "
-                    f"{STAMP_EMOTE} **1 Stamp** and {BEAN_EMOTE} `+{QUEST_BONUS_BEANS[duration]}`"
-                )
-            else:
-                messages.append(
-                    f"<a:tada:1227425729654820885> **All {duration} quests done** ‎ {ARROW} ‎ "
-                    f"{BEAN_EMOTE} `+{QUEST_BONUS_BEANS[duration]}`"
-                )
-
-        data["quests"] = quests
-        data["completed"] = completed
-        ref.child(duration).set(data)
+    if len(completed) == len(quests) and "bonus_awarded" not in data:
+        data["bonus_awarded"] = True
+        beans += bonus
+        messages.stamp = True
+        await events.emit("order", user_id)
+        messages.append(
+            f"<a:tada:1227425729654820885> **Order complete!** ‎ {ARROW} ‎ "
+            f"{STAMP_EMOTE} **1 Stamp** and {BEAN_EMOTE} `+{bonus}`"
+        )
+    data["quests"] = quests
+    data["completed"] = completed
+    ref.set(data)
 
     currency = bot.get_cog("CurrencySystem")
     if beans and currency:
         await currency.add_beans(user_id, beans, skip_quest_check=True, reason="quest")
-
+    messages.beans = beans
     return messages
 
 
@@ -207,21 +162,47 @@ async def wildcard(user_id, guild_id, bot):
     for task, _, data, done in order_tasks(user_id):
         if not done and task != "chat_earnings":
             return await update_quest(
-                user_id,
-                guild_id,
-                {task: data["goal"] - data["current"]},
-                bot,
-                durations=["daily"],
+                user_id, guild_id, {task: data["goal"] - data["current"]}, bot
             )
     return []
 
 
+def standing(user_id):
+    """Today's Order as the rows a card draws."""
+    return [
+        (
+            name,
+            "Done" if done else f"{task['current']:,} / {task['goal']:,}",
+            done,
+            1 if done else task["current"] / task["goal"],
+        )
+        for _, name, task, done in order_tasks(user_id)
+    ]
+
+
+async def order_card(user_id, messages):
+    progress = {
+        "tasks": standing(user_id),
+        "beans": getattr(messages, "beans", 0),
+        "stamp": getattr(messages, "stamp", False),
+        "background": background(user_id),
+    }
+    return await render(draw_order, progress, name="order")
+
+
 async def report(interaction, messages, guide=None):
-    if messages or guide:
+    """After a station reply: the order if it moved, and the first shift if it did."""
+    from brawl.Currency.tutorial import hint, shift
+
+    user_id = interaction.user.id
+    files = []
+    if messages:
+        files.append(await order_card(user_id, messages))
+    if guide:
+        files.append(await shift(guide, user_id))
+    if files:
         await interaction.followup.send(
-            "\n".join(messages),
-            **({"embed": guide} if guide else {}),
-            ephemeral=True,
+            hint(guide) if guide else "", files=files, ephemeral=True
         )
 
 
@@ -302,14 +283,8 @@ class QuestAdmin(commands.Cog):
             ref = u_quests(user_id)
             quest_data = ref.get() or {}
 
-            # Get all unique quest types the user has across all durations
-            quest_types_available = set()
+            quest_types_available = set(quest_data.get("daily", {}).get("quests", {}))
             current_lower = current.lower()
-
-            for duration in ["daily", "weekly", "monthly"]:
-                dur_data = quest_data.get(duration, {})
-                quests = dur_data.get("quests", {})
-                quest_types_available.update(quests.keys())
 
             options = []
             for quest_type in sorted(quest_types_available):

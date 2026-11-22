@@ -7,10 +7,6 @@ from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import (
     BACKGROUNDS,
     LADDER,
-    QUEST_BEAN_REWARDS,
-    QUEST_BONUS_BEANS,
-    QUEST_DESCRIPTIONS,
-    QUEST_STATION,
 )
 from brawl.Currency.db import (
     u_background,
@@ -18,16 +14,15 @@ from brawl.Currency.db import (
     u_daily_checkin_streaks,
     u_mega_boxes,
     u_pin_message,
-    u_quests,
     u_star_drops,
 )
 from brawl.Currency.factions import table_card
 from brawl.Currency.helper import (
+    BEAN_EMOTE,
     EFFECT_EMOTE,
     INVITES_EMOTE,
     MAIN_GUILD_ID,
     NO_EMOTE,
-    QUEST_EMOTE,
     SERVER_STORE,
     STAMP_EMOTE,
     STORE_ITEMS,
@@ -39,9 +34,7 @@ from brawl.Currency.invitecard import INVITE_HELP, draw_invites, invited_by, sum
 from brawl.Currency.itemcard import draw_inventory
 from brawl.Currency.ladder import locked, unlocked
 from brawl.Currency.levels import get_level
-from brawl.Currency.questcard import draw_quests
 from brawl.Currency.quests import (
-    get_next_daily_reset,
     order_tasks,
     update_quest,
 )
@@ -49,6 +42,7 @@ from brawl.Currency.shopcard import clean
 from brawl.Currency.stampcard import stamps
 
 HOME_STATIONS = {"table_info": "tables"}
+PAGES = ("overview", "stampcard", "effect_info", "balance_invites", "table_info")
 
 
 def progress(name, task, done):
@@ -100,8 +94,43 @@ class BalanceInfoView(discord.ui.View):
         for child in to_remove:
             self.remove_item(child)
 
+    def mark(self, current):
+        """The button of the page on screen is the blurple one."""
+        for child in self.children:
+            if getattr(child, "custom_id", None) in PAGES:
+                child.style = (
+                    discord.ButtonStyle.blurple
+                    if child is current
+                    else discord.ButtonStyle.grey
+                )
+
     @discord.ui.button(
         style=discord.ButtonStyle.blurple,
+        emoji=BEAN_EMOTE,
+        custom_id="overview",
+        label="Overview",
+    )
+    async def overview(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        user_id = int(
+            interaction.message.attachments[0].filename.split("_")[1].split(".")[0]
+        )
+        if interaction.user.id != user_id:
+            return await interaction.response.send_message(
+                "This is not your command.", ephemeral=True
+            )
+        self._remove_selects()
+        self.mark(button)
+        home = interaction.client.get_cog("Balance")
+        await interaction.response.edit_message(
+            attachments=[await home.home_card(interaction.user, interaction.guild)],
+            embed=None,
+            view=self,
+        )
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.grey,
         emoji=STAMP_EMOTE,
         custom_id="stampcard",
         label="Stamp Card",
@@ -122,6 +151,7 @@ class BalanceInfoView(discord.ui.View):
                 "Stamp Card system unavailable.", ephemeral=True
             )
         self._remove_selects()
+        self.mark(button)
         await interaction.response.edit_message(
             attachments=[await stamp_cog.card(interaction.user, interaction.guild)],
             embed=None,
@@ -169,6 +199,7 @@ class BalanceInfoView(discord.ui.View):
             ],
         }
         self._remove_selects()
+        self.mark(button)
         await interaction.response.edit_message(
             attachments=[
                 await render(draw_inventory, member, name=f"balance_{user_id}")
@@ -196,6 +227,7 @@ class BalanceInfoView(discord.ui.View):
 
         months = sorted(invited_by(interaction.guild.id, user_id), reverse=True)[:25]
         self._remove_selects()
+        self.mark(button)
         if months:
             from brawl.Currency.invitetracker import MonthSelect
 
@@ -247,89 +279,11 @@ class BalanceInfoView(discord.ui.View):
                 ephemeral=True,
             )
         self._remove_selects()
+        self.mark(button)
         await interaction.response.edit_message(
             attachments=[
                 await table_card(table, interaction, name=f"balance_{user_id}")
             ],
-            embed=None,
-            view=self,
-        )
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.grey,
-        emoji=QUEST_EMOTE,
-        custom_id="quests",
-        label="Quests",
-    )
-    async def quests(self, interaction: discord.Interaction, button: discord.ui.Button):
-        try:
-            user_id = int(
-                interaction.message.attachments[0].filename.split("_")[1].split(".")[0]
-            )
-            if interaction.user.id != user_id:
-                return await interaction.response.send_message(
-                    "This is not your command. You cannot use this button.",
-                    ephemeral=True,
-                )
-        except:
-            pass
-
-        guild_id = interaction.guild.id
-
-        # Refresh quests in case they need to reset
-        await update_quest(user_id, guild_id, {}, interaction.client, refresh_only=True)
-
-        quest_data = u_quests(user_id).get() or {}
-        longer = await unlocked(
-            interaction.client, user_id, interaction.guild.id, QUEST_STATION
-        )
-        sections = [
-            {
-                "kind": "daily",
-                "end_time": get_next_daily_reset(),
-                "tasks": [
-                    progress(name, task, done)
-                    for _, name, task, done in order_tasks(user_id)
-                ],
-                "reward": "You get 1 Stamp when all of them are done.",
-            }
-        ]
-        for duration in ("weekly", "monthly") if longer else ():
-            data = quest_data.get(duration, {})
-            if not data.get("quests"):
-                continue
-            each, bonus = QUEST_BEAN_REWARDS[duration], QUEST_BONUS_BEANS[duration]
-            sections.append(
-                {
-                    "kind": duration,
-                    "end_time": data["end_time"],
-                    "tasks": [
-                        progress(
-                            QUEST_DESCRIPTIONS[task],
-                            quest,
-                            task in data.get("completed", {}),
-                        )
-                        for task, quest in data["quests"].items()
-                    ],
-                    "reward": (
-                        f"You got the {bonus:,} Bean bonus for finishing all of them."
-                        if data.get("bonus_awarded")
-                        else f"{each:,} Beans each, and {bonus:,} more for finishing all of them."
-                    ),
-                }
-            )
-        member = {
-            "background": background(user_id),
-            "sections": sections,
-            "locked": (
-                ""
-                if longer
-                else f"Weekly and monthly quests unlock at Level {LADDER[QUEST_STATION][0]}."
-            ),
-        }
-        self._remove_selects()
-        await interaction.response.edit_message(
-            attachments=[await render(draw_quests, member, name=f"balance_{user_id}")],
             embed=None,
             view=self,
         )

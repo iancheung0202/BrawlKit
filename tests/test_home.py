@@ -3,6 +3,7 @@ import io
 import time
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 from PIL import Image
 
@@ -128,45 +129,36 @@ def test_inventory_is_a_card_of_what_the_member_holds(cafe, monkeypatch):
     assert drawn[0]["held"]["star_drops"] == 3 and drawn[0]["effects"] == []
 
 
-def press_quests(cafe, monkeypatch, level):
-    from brawl.Currency import balance, questcard
+def test_the_button_of_the_page_on_screen_is_blurple(cafe):
+    from brawl.Currency import balance
 
-    drawn = []
-    monkeypatch.setattr(
-        balance,
-        "draw_quests",
-        lambda member: drawn.append(member) or questcard.draw_quests(member),
-    )
-    cafe.cogs["Leveling"] = MagicMock(level_of=AsyncMock(return_value=level))
     interaction = cafe.interaction(USER)
+    interaction.user.display_name = "sam"
+    interaction.user.display_avatar.replace.return_value.read = AsyncMock(
+        return_value=b""
+    )
     interaction.message.attachments = [MagicMock(filename=f"balance_{USER}.jpg")]
 
     async def press():
         view = balance.BalanceInfoView()
-        button = next(b for b in view.children if b.custom_id == "quests")
-        await button.callback(interaction)
+        pages = [button.custom_id for button in view.children]
+        assert pages == list(balance.PAGES)
+        lit = []
+        for custom_id in ("effect_info", "overview"):
+            button = next(b for b in view.children if b.custom_id == custom_id)
+            await button.callback(interaction)
+            lit.append(
+                [
+                    b.custom_id
+                    for b in view.children
+                    if b.style == discord.ButtonStyle.blurple
+                ]
+            )
+        return lit
 
-    asyncio.run(press())
+    assert asyncio.run(press()) == [["effect_info"], ["overview"]]
     sent = interaction.response.edit_message.call_args.kwargs
-    assert sent["embed"] is None
     assert sent["attachments"][0].filename == f"balance_{USER}.jpg"
-    return drawn[0]
-
-
-def test_quests_card_shows_only_the_order_before_weekly_quests_unlock(
-    cafe, monkeypatch
-):
-    member = press_quests(cafe, monkeypatch, 1)
-    assert [section["kind"] for section in member["sections"]] == ["daily"]
-    assert member["sections"][0]["tasks"]
-    assert "Level 3" in member["locked"]
-
-
-def test_quests_card_adds_weekly_and_monthly_once_unlocked(cafe, monkeypatch):
-    member = press_quests(cafe, monkeypatch, 3)
-    kinds = [section["kind"] for section in member["sections"]]
-    assert kinds == ["daily", "weekly", "monthly"] and member["locked"] == ""
-    assert all(section["tasks"] for section in member["sections"])
 
 
 @pytest.mark.before_clock_in

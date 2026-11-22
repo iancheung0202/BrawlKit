@@ -21,8 +21,8 @@ from brawl.Currency.helper import (
     get_current_month_key,
 )
 from brawl.Currency.home import background, draw_stamp_card
-from brawl.Currency.panel import panel
 from brawl.Currency.quests import order_tasks, update_quest
+from brawl.Currency.rewardcard import draw_redeemed
 
 TIERS = {"brawl_pass": "Brawl Pass", "brawl_pass_plus": "Brawl Pass Plus"}
 
@@ -142,16 +142,22 @@ class StampCard(commands.Cog):
         )
 
         _, tokens = wallet.balance(user_id)
-        embed = panel(
-            "stamps",
-            f"{tier.name} redeemed",
-            f"You paid {STAMP_EMOTE} `{goal}` and {TOKEN_EMOTE} `{cost}`.\n"
-            f"You have {TOKEN_EMOTE} `{tokens}` and {STAMP_EMOTE} `{count - goal}` left.",
-            "Open a ticket in <#1390908939767648328> with a screenshot of this "
+        sale = {
+            "tier": tier.value,
+            "name": tier.name,
+            "stamps": goal,
+            "cost": cost,
+            "tokens": tokens,
+            "left": count - goal,
+            "month": month.get("count", 0) + 1,
+            "limit": STAMP_MONTHLY_LIMIT,
+            "background": background(user_id),
+        }
+        await interaction.response.send_message(
+            "-# **Next:** open a ticket in <#1390908939767648328> with a screenshot of this "
             "message and the server owner will deliver your pass.",
-            "good",
+            file=await render(draw_redeemed, sale, name="redeemed"),
         )
-        await interaction.response.send_message(embed=embed)
 
     @redeem.error
     async def redeem_error(self, interaction, error):

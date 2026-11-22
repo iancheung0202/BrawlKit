@@ -126,28 +126,9 @@ ORDER_LABELS = {
     "shop_purchases": "Buy from the shop",
 }
 
-QUEST_GOAL_PRESETS = {
-    "chat_earnings": {
-        "weekly": [3000, 4000, 5000],
-        "monthly": [15000, 17500, 20000],
-    },
-    "brew_start": {"weekly": [3, 4], "monthly": [12, 15, 17]},
-    "brew_sells": {"weekly": [3, 4], "monthly": [12, 15, 17]},
-    "shop_purchases": {"weekly": [3, 5], "monthly": [8, 10, 12]},
-    "daily_checkins": {"weekly": [4, 5, 6], "monthly": [20, 22, 24]},
-}
+QUEST_BEAN_REWARDS = {"daily": 200}
 
-QUEST_DESCRIPTIONS = {
-    "chat_earnings": "Earn Beans from chat",
-    "brew_start": "Start brews",
-    "brew_sells": "Sell brews",
-    "shop_purchases": "Buy from the shop",
-    "daily_checkins": "Clock in",
-}
-
-QUEST_BEAN_REWARDS = {"daily": 200, "weekly": 500, "monthly": 1500}
-
-QUEST_BONUS_BEANS = {"daily": 400, "weekly": 1000, "monthly": 4500}
+QUEST_BONUS_BEANS = {"daily": 400}
 
 TABLE_QUEST_TYPES = {
     "bean_collector": {
@@ -172,11 +153,6 @@ PIN = "</pin:1427543833792610344>"
 LADDER = {
     "brewing": (1, "Brewing", f"Turn Beans into Tokens: {BREW}, wait, then {SELL}."),
     "shop": (2, "Shop", f"Spend Beans and Tokens: browse {SHOP}, then {BUY}."),
-    "quests": (
-        3,
-        "Weekly Quests",
-        f"Longer goals that pay Beans. Open {HOME} and press Quests.",
-    ),
     "drops": (
         4,
         "Star Drops",
@@ -222,8 +198,6 @@ ITEM_STATIONS = {
     "message_pin": "style",
     "custom_credit": "style",
 }
-
-QUEST_STATION = "quests"
 
 TUTORIAL_BEANS = 500
 TUTORIAL_TOKENS = 3

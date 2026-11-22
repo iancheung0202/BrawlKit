@@ -66,36 +66,24 @@ def test_veterans_keep_every_station(cafe):
         assert asyncio.run(ladder.unlocked(cafe.bot, USER, MAIN_GUILD_ID, station))
 
 
-def test_weekly_quests_wait_for_their_level(cafe, monkeypatch):
-    monkeypatch.setattr(
-        quests, "generate_quests", lambda *_: {"brew_start": {"current": 0, "goal": 9}}
-    )
-    level(cafe, 2)
-    asyncio.run(quests.update_quest(USER, MAIN_GUILD_ID, {"brew_start": 1}, cafe.bot))
-    assert u_quests(USER).child("weekly/quests/brew_start/current").get() == 0
-    level(cafe, 3)
-    asyncio.run(quests.update_quest(USER, MAIN_GUILD_ID, {"brew_start": 1}, cafe.bot))
-    assert u_quests(USER).child("weekly/quests/brew_start/current").get() == 1
-
-
 def test_level_up_teaches_only_the_new_stations():
     assert ladder.lessons(0, 1) == [
         f"🔓 **You unlocked Brewing**\n{LADDER['brewing'][2]}"
     ]
-    assert len(ladder.lessons(1, 3)) == 2
+    assert len(ladder.lessons(1, 4)) == 2
     assert ladder.lessons(5, 6) == []
 
 
 def test_tutorial_is_clock_in_brew_sell(cafe):
     manager = cafe.cogs["CurrencySystem"].tutorial_manager
     member = MagicMock(id=USER)
-    assert "Step 1 of 3" in asyncio.run(manager.start(member)).description
+    assert asyncio.run(manager.start(member)) == tutorial.CLOCK_IN
     assert u_balance(USER).get()["Beans"] == 500
     assert asyncio.run(manager.advance(USER, "brew")) is None
-    assert asyncio.run(manager.advance(USER, "clock_in")) is not None
-    assert asyncio.run(manager.advance(USER, "brew")) is not None
+    assert asyncio.run(manager.advance(USER, "clock_in")) == tutorial.BREW_STEP
+    assert asyncio.run(manager.advance(USER, "brew")) == tutorial.SELL_STEP
     done = asyncio.run(manager.advance(USER, "sell"))
-    assert done.title == "First shift complete!"
+    assert done == tutorial.FINISHED
     assert u_balance(USER).get()["Tokens"] == TUTORIAL_TOKENS
     assert u_tutorial(USER).get() == tutorial.DONE
     assert asyncio.run(manager.advance(USER, "sell")) is None
@@ -120,10 +108,13 @@ def test_selling_a_first_brew_ends_the_tutorial(cafe):
         }
     )
     interaction = run(cafe, "Brewing", "sell")
-    embeds = [
-        call.kwargs.get("embed") for call in interaction.followup.send.call_args_list
+    files = [
+        file.filename
+        for call in interaction.followup.send.call_args_list
+        for file in call.kwargs.get("files", [])
     ]
-    assert any(embed and embed.title == "First shift complete!" for embed in embeds)
+    assert "shift.jpg" in files
+    assert u_tutorial(USER).get() == tutorial.DONE
 
 
 GATES = [

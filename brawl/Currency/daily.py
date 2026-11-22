@@ -6,6 +6,7 @@ from discord.ext import commands
 from discord.ui import Button, View
 
 from brawl.Currency.boss import start_inspection
+from brawl.Currency.card import render
 from brawl.Currency.config import BREW, HOME, LADDER, SELL, STAMP_GOALS
 from brawl.Currency.db import sync_shop_effects, u_daily_checkin_streaks
 from brawl.Currency.helper import (
@@ -24,10 +25,13 @@ from brawl.Currency.helper import (
     ULTRA_TIER_ROLE_ID,
     YES_EMOTE,
 )
+from brawl.Currency.home import background
 from brawl.Currency.panel import NEXT, panel
-from brawl.Currency.quests import get_next_daily_reset, order_lines, update_quest
+from brawl.Currency.quests import get_next_daily_reset, standing, update_quest
+from brawl.Currency.rewardcard import draw_clock_in
 from brawl.Currency.shop import open_shop
 from brawl.Currency.staff import StaffInfoView
+from brawl.Currency.tutorial import hint, shift
 
 
 def runs_staff_text(message):
@@ -615,60 +619,40 @@ class Daily(commands.Cog):
         ):
             beans_earned += 1500
 
+        await interaction.response.defer(ephemeral=True, thinking=True)
         await self.economy.add_beans(user_id, beans_earned)
-        order = await update_quest(
+        await update_quest(
             user_id, interaction.guild.id, {"daily_checkins": 1}, self.bot
         )
         if tokens_earned:
             await self.economy.add_tokens(user_id, tokens_earned)
 
-        embed = panel("clock_in", "Clocked in", tone="good")
-        reward_text = f"{BEAN_EMOTE} **{beans_earned} Beans**"
-        if tokens_earned:
-            reward_text += (
-                f" | {TOKEN_EMOTE} **{tokens_earned} Tokens** (from 7-day streak)"
-            )
+        notes = []
         if is_booster:
-            reward_text += "\n-# <a:moneydance:1227425759077859359> **Booster Bonus!** (Higher base reward)"
+            notes.append("Booster bonus")
         if double_daily_active:
-            reward_text += (
-                f"\n-# {EFFECT_EMOTE} **Daily Bean Doubler!** (Double daily rewards)"
-            )
-        if insurance_used:
-            reward_text += f"\n-# 🛡️ **Streak Shield activated!** Your streak was saved from breaking."
+            notes.append("Daily Bean Doubler, doubled")
         if random_bonus:
-            reward_text += "\n-# <a:moneydance:1227425759077859359> **Lucky Bonus!** (Double base reward)"
-
-        embed.add_field(name="Rewards Earned", value=reward_text, inline=False)
-        embed.add_field(
-            name="Current Streak",
-            value=f"<a:streak:1371651844652273694> `{streak_data['current_streak']}` days",
-            inline=True,
-        )
-        embed.add_field(
-            name="All-Time Record",
-            value=f"<a:max_streak:1371655286049214672> `{streak_data['all_time_high']}` days",
-            inline=True,
-        )
-        embed.add_field(
-            name="Next Clock In",
-            value=f"<a:clock:1382887924273774754> <t:{next_claim}:R>",
-            inline=True,
-        )
-        embed.add_field(
-            name="Today's Order",
-            value="\n".join(order_lines(user_id) + order)
-            + "\n-# Finish all of them for 1 Stamp on your Stamp Card."
-            + f"\n-# **Next:** {NEXT['chat']}",
-            inline=False,
-        )
-        embed.set_footer(text="Every 7th day in a row pays 4x Beans plus Tokens.")
-        embeds = [embed]
-
+            notes.append("Lucky bonus, doubled")
+        if insurance_used:
+            notes.append("Streak Shield saved your streak")
+        clocked = {
+            "beans": beans_earned,
+            "tokens": tokens_earned,
+            "notes": notes,
+            "streak": streak_data["current_streak"],
+            "tasks": standing(user_id),
+            "background": background(user_id),
+        }
+        files = [await render(draw_clock_in, clocked, name="clock_in")]
         guide = await self.economy.tutorial_manager.advance(user_id, "clock_in")
         if guide:
-            embeds.append(guide)
-        await interaction.response.send_message(embeds=embeds, ephemeral=True)
+            files.append(await shift(guide, user_id))
+        await interaction.followup.send(
+            f"-# **Next:** {hint(guide).removeprefix('**Next:** ') if guide else NEXT['chat']}",
+            files=files,
+            ephemeral=True,
+        )
 
 
 class ClockInView(discord.ui.View):

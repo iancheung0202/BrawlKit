@@ -7,25 +7,25 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View
 
+from brawl.Currency.brewcard import draw_brewing, draw_roasts, draw_sold
+from brawl.Currency.card import GOLD, GREEN, MUTED, RED, render
 from brawl.Currency.db import g_invites_member_data, sync_sell_alarm
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     BRIDGE_ROLE_ID,
     EFFECT_EMOTE,
-    EMOJIS,
     MAIN_GUILD_ID,
     MASTER_ROLE_ID,
     NO_EMOTE,
     PERFECT_BREW_CHANCE,
     ROAST_TYPES,
-    TOKEN_EMOTE,
     TRAINEE_ROLE_ID,
     ULTRA_TIER_ROLE_ID,
     UNLOCK_REQ,
-    YES_EMOTE,
 )
+from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
-from brawl.Currency.panel import COLORS, NEXT, STATIONS, panel
+from brawl.Currency.panel import NEXT
 from brawl.Currency.quests import report, update_quest
 
 
@@ -80,31 +80,25 @@ class Brewing(commands.Cog):
         def __init__(self, cog):
             super().__init__(timeout=None)
             self.cog = cog
+            self.free = False
+
+        async def free_for(self, user_id):
+            effects = await self.cog.economy.effect_manager.get_user_active_effects(
+                user_id
+            )
+            guild = self.cog.bot.get_guild(MAIN_GUILD_ID)
+            member = guild.get_member(user_id) if guild else None
+            role = guild.get_role(ULTRA_TIER_ROLE_ID) if guild else None
+            return "free_insurance" in effects or bool(
+                member and role and role in member.roles
+            )
 
         async def update_button_for_user(self, user_id):
-            active_effects = (
-                await self.cog.economy.effect_manager.get_user_active_effects(user_id)
-            )
-            free_insurance = "free_insurance" in active_effects
-
-            guild = self.cog.bot.get_guild(MAIN_GUILD_ID)
-            if guild:
-                member = guild.get_member(user_id)
-                ultra_role = guild.get_role(ULTRA_TIER_ROLE_ID)
-                if member and ultra_role and ultra_role in member.roles:
-                    free_insurance = True
-
-            for child in self.children:
-                if (
-                    hasattr(child, "custom_id")
-                    and child.custom_id == "insure_with_beans"
-                ):
-                    if free_insurance:
-                        child.label = "Get FREE Insurance"
-                        child.emoji = EFFECT_EMOTE
-                        child.style = discord.ButtonStyle.blurple
-                elif hasattr(child, "custom_id") and child.custom_id == "no_thanks":
-                    self.remove_item(child)
+            self.free = await self.free_for(user_id)
+            if self.free:
+                self.insure_button.label = "Insure for free"
+                self.insure_button.emoji = EFFECT_EMOTE
+                self.insure_button.style = discord.ButtonStyle.blurple
 
         @discord.ui.button(
             label="Insure with Beans",
@@ -116,81 +110,53 @@ class Brewing(commands.Cog):
             self, interaction: discord.Interaction, button: discord.ui.Button
         ):
             user_id = interaction.user.id
-            if str(user_id) not in interaction.message.embeds[0].description:
+            files = [file.filename for file in interaction.message.attachments]
+            if not any(name.startswith(f"brew_{user_id}_") for name in files):
                 return await interaction.response.send_message(
                     f"{NO_EMOTE} This is not your brew!", ephemeral=True
                 )
             active = await self.cog.economy.get_active_brew(user_id)
-            shown = [field.value for field in interaction.message.embeds[0].fields]
             if (
                 not active
                 or active.get("insured")
-                or f"`{active['batch_id']}`" not in shown
+                or f"brew_{user_id}_{active['batch_id']}.jpg" not in files
             ):
                 return await interaction.response.send_message(
                     f"{NO_EMOTE} This brew can no longer be insured.", ephemeral=True
                 )
-
-            active_effects = (
-                await self.cog.economy.effect_manager.get_user_active_effects(user_id)
-            )
-            free_insurance = "free_insurance" in active_effects
-
-            guild = self.cog.bot.get_guild(MAIN_GUILD_ID)
-            if guild:
-                member = guild.get_member(user_id)
-                ultra_role = guild.get_role(ULTRA_TIER_ROLE_ID)
-                if member and ultra_role and ultra_role in member.roles:
-                    free_insurance = True
-
-            success = await self.cog.insure_brew(user_id, active["roast_type"])
-            if success:
-                for child in self.children:
-                    child.disabled = True
-
-                embed = interaction.message.embeds[0]
-                insurance_text = (
-                    f"{EFFECT_EMOTE} **Brew Insured for free!** (Barista's Protection Plan)"
-                    if free_insurance
-                    else f"{YES_EMOTE} **Brew Insured!**"
-                )
-                embed.description = embed.description.replace(
-                    "🛡️ **Brew Insurance Offer**", insurance_text
-                )
-                embed.description = embed.description.replace(
-                    f"{EFFECT_EMOTE} **FREE Insurance Available!**", insurance_text
-                )
-                embed.color = discord.Color.green()
-
-                await interaction.response.edit_message(embed=embed, view=None)
-            else:
-                await interaction.response.send_message(
+            free = await self.free_for(user_id)
+            roast = active["roast_type"]
+            if not await self.cog.insure_brew(user_id, roast):
+                return await interaction.response.send_message(
                     f"{NO_EMOTE} You don't have enough Beans to insure this brew!",
                     ephemeral=True,
                 )
-
-        @discord.ui.button(
-            label="No Thanks", style=discord.ButtonStyle.grey, custom_id="no_thanks"
-        )
-        async def decline_button(
-            self, interaction: discord.Interaction, button: discord.ui.Button
-        ):
-            if (
-                str(interaction.user.id)
-                not in interaction.message.embeds[0].description
-            ):
-                return await interaction.response.send_message(
-                    f"{NO_EMOTE} This is not your brew!", ephemeral=True
-                )
-            for child in self.children:
-                child.disabled = True
-
-            embed = interaction.message.embeds[0]
-            embed.description = embed.description.replace(
-                "🛡️ **Brew Insurance Offer**", f"{NO_EMOTE} **Not Insured**"
+            beans, _ = await self.cog.economy.get_balance(user_id)
+            started = {
+                "roast": roast,
+                "time": active["end_time"] - active["start_time"],
+                "insurance": "free" if free else "insured",
+                "paid": ROAST_TYPES[roast]["cost"]
+                + (0 if free else ROAST_TYPES[roast]["insurance_cost"]),
+                "beans": beans,
+                "background": background(user_id),
+            }
+            lines = [
+                line
+                for line in interaction.message.content.split("\n")
+                if "insur" not in line
+            ]
+            await interaction.response.edit_message(
+                content="\n".join(lines),
+                attachments=[
+                    await render(
+                        draw_brewing,
+                        started,
+                        name=f"brew_{user_id}_{active['batch_id']}",
+                    )
+                ],
+                view=None,
             )
-
-            await interaction.response.edit_message(embed=embed, view=None)
 
     @app_commands.command(
         name="brew", description="Brew a batch of coffee using your Beans"
@@ -220,60 +186,16 @@ class Brewing(commands.Cog):
         if await locked(interaction, "brewing"):
             return
         if roast_type is None:
-            embed = discord.Embed(
-                title="Roast Guide",
-                description=(
-                    f"Brewing turns {BEAN_EMOTE} Beans into {TOKEN_EMOTE} Tokens. "
-                    "One brew at a time.\n"
-                    "-# 🛡️ Insurance turns a burnt brew into the lowest payout.\n"
-                    f"-# **Next:** {NEXT['brew']}"
-                ),
-                color=COLORS["info"],
+            stats = await self.economy.get_brew_stats(interaction.user.id) or {}
+            guide = {
+                "background": background(interaction.user.id),
+                "brews": stats.get("total_brews", 0),
+            }
+            return await interaction.response.send_message(
+                f"-# **Next:** {NEXT['brew']}",
+                file=await render(draw_roasts, guide, name="roasts"),
+                ephemeral=True,
             )
-
-            for key, data in ROAST_TYPES.items():
-                emoji = EMOJIS.get(key, "")
-                name = f"{emoji} {data['name']}"
-                cost = f"{BEAN_EMOTE} `{data['cost']:,}`"
-                hours = data["time"] // 3600
-                time_str = f"`{hours} hour{'s' if hours != 1 else ''}`"
-                insurance_cost = (
-                    f"{BEAN_EMOTE} `{data['insurance_cost']:,}`"
-                    if data["insurance_cost"] > 0
-                    else "Not applicable"
-                )
-
-                payout_lines = []
-                for reward, weight in zip(data["payout"], data["weights"]):
-                    if reward == 0:
-                        payout_lines.append(f"> -# `{weight}%` - 💀 Burnt Brew")
-                    else:
-                        payout_lines.append(
-                            f"> -# `{weight}%` - {TOKEN_EMOTE} `{reward}` Token{'s' if reward > 1 else ''}"
-                        )
-
-                payout_lines.append(
-                    f"-# ✨ **Perfect Brew** (`{PERFECT_BREW_CHANCE}%` chance) for double reward!"
-                )
-                payout_lines.append(f"-# 🛡️ **Insurance**: {insurance_cost}")
-
-                if key == "golden":
-                    payout_lines.insert(
-                        0, f"*🔓 Requires `{UNLOCK_REQ}` total brews to unlock*"
-                    )
-                    payout_lines.append(
-                        f"-# 💀 No risk of burnt brew. Guaranteed reward!"
-                    )
-
-                value = (
-                    f"**Cost:** {cost}\n"
-                    f"**Brew Time:** {time_str}\n" + "\n".join(payout_lines)
-                )
-
-                embed.add_field(name=name, value=value, inline=True)
-
-            embed.set_footer(text="Higher roasts cost more Beans and pay more Tokens.")
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         user_id = interaction.user.id
         roast = roast_type.value
@@ -352,42 +274,27 @@ class Brewing(commands.Cog):
                 interaction.guild.id,
             )
 
-        embed = panel(
-            "brew",
-            f"{ROAST_TYPES[roast]['name']} started",
-            f"{interaction.user.mention}, your coffee is brewing. Ready <t:{int(brew_data['end_time'])}:R>.",
-        )
-
-        if "half_brew_time" in active_effects:
-            embed.description += "\n<:reply:1036792837821435976> **Turbo Brewing Kit** - 50% faster brewing time! ⚡"
-
+        lines = [
+            f"{interaction.user.mention}, your coffee is ready <t:{int(brew_data['end_time'])}:R>."
+        ]
+        insurance = "safe"
+        view = None
         if roast != "golden" and ROAST_TYPES[roast]["insurance_cost"] > 0:
-            insurance_cost = ROAST_TYPES[roast]["insurance_cost"]
-
-            active_effects = await self.economy.effect_manager.get_user_active_effects(
-                user_id
-            )
-            free_insurance = "free_insurance" in active_effects
-
-            ultra_role = interaction.guild.get_role(ULTRA_TIER_ROLE_ID)
-            if ultra_role and ultra_role in interaction.user.roles:
-                free_insurance = True
-
-            if free_insurance:
-                embed.description += (
-                    f"\n\n> {EFFECT_EMOTE} **FREE Insurance Available!**\n"
-                    f"> -# Your Barista's Protection Plan covers this brew for free!"
-                )
-            else:
-                embed.description += (
-                    f"\n\n> 🛡️ **Brew Insurance Offer**\n"
-                    f"> -# Protect your brew from burns for {BEAN_EMOTE} `{insurance_cost}` Beans"
-                )
+            insurance = "open"
             view = self.InsuranceView(self)
             await view.update_button_for_user(user_id)
-        else:
-            view = None
-        embed.description += f"\n-# **Next:** {NEXT['sell']}"
+            if view.free:
+                lines.append(
+                    f"-# {EFFECT_EMOTE} Your insurance is free for this brew. Press the button to use it."
+                )
+            else:
+                lines.append(
+                    f"-# You can insure it for {BEAN_EMOTE} `{ROAST_TYPES[roast]['insurance_cost']:,}` so it can't burn."
+                )
+        if "half_brew_time" in active_effects:
+            lines.append(
+                f"-# {EFFECT_EMOTE} Turbo Brewing Kit made this brew twice as fast."
+            )
 
         ref_mapping = g_invites_member_data(interaction.guild.id, interaction.user.id)
         mapping = ref_mapping.get() or {}
@@ -402,32 +309,34 @@ class Brewing(commands.Cog):
             )
             if log_entry:
                 await self.economy.log_referral_milestone(log_entry)
-                embed.description += f"\n\n<:Information:855023058255478794> **Referral Milestone:** Your inviter {inviter.mention} earned <@&{TRAINEE_ROLE_ID}> too!"
+                lines.append(
+                    f"<:Information:855023058255478794> Your inviter {inviter.mention} earned <@&{TRAINEE_ROLE_ID}> too!"
+                )
 
         welcome_bonus_msg = await self.economy.process_invitee_welcome_bonus(
             interaction, "brew", interaction.user
         )
         if welcome_bonus_msg:
-            extra_newline = (
-                "\n"
-                if "<:Information:855023058255478794>" not in embed.description
-                else ""
-            )
-            embed.description += f"\n{extra_newline}{welcome_bonus_msg}"
+            lines.append(welcome_bonus_msg)
             new_beans += 150
+        lines.append(f"-# **Next:** {NEXT['sell']}")
 
-        embed.add_field(
-            name="Cost", value=f"{BEAN_EMOTE} `{cost:,}` Beans", inline=True
+        started = {
+            "roast": roast,
+            "time": brew_time,
+            "insurance": insurance,
+            "paid": cost,
+            "beans": new_beans,
+            "background": background(user_id),
+        }
+        sent = {"view": view} if view else {}
+        await interaction.followup.send(
+            "\n".join(lines),
+            file=await render(
+                draw_brewing, started, name=f"brew_{user_id}_{brew_data['batch_id']}"
+            ),
+            **sent,
         )
-        embed.add_field(
-            name="Remaining", value=f"{BEAN_EMOTE} `{new_beans:,}` Beans", inline=True
-        )
-        embed.add_field(name="Brew ID", value=f"`{brew_data['batch_id']}`", inline=True)
-
-        if view is not None:
-            await interaction.followup.send(embed=embed, view=view)
-        else:
-            await interaction.followup.send(embed=embed)
         await report(interaction, order, guide)
 
     @brew.error
@@ -530,46 +439,21 @@ class Brewing(commands.Cog):
         if sync_sell_alarm(user_id, "get"):
             sync_sell_alarm(user_id, "delete", guild_id=interaction.guild.id)
 
-        embed = panel(
-            "brew",
-            f"{ROAST_TYPES[roast_type]['name']} sold",
-            tone="gold" if perfect else "good" if tokens else "bad",
-        )
-
+        lines = [f"{interaction.user.mention}"]
+        notes = []
         if tokens == 0:
-            embed.description = f"💀 **Burnt Brew!** {interaction.user.mention}, you didn't earn any {TOKEN_EMOTE} Tokens."
+            notes.append(("It burnt, so it paid nothing.", RED))
             if not insured:
-                embed.description += (
-                    f"\n-# 🛡️ **Tip:** Insurance would have protected this brew!"
-                )
+                notes.append(("Insurance would have saved it.", MUTED))
         else:
-            embed.description = f"{interaction.user.mention}, you earned {TOKEN_EMOTE} **{tokens} Token{'s' if tokens > 1 else ''}**!"
-            if perfect:
-                if "perfect_brew_boost" in active_effects:
-                    embed.description += f"\n{EFFECT_EMOTE} **Perfect Brew!** (Expert Barista boost - 25% chance)"
-                else:
-                    embed.description += "\n✨ **Perfect Brew!** (double reward)"
-            if saved_burn:
-                if "burnt_to_perfect" in active_effects:
-                    embed.description += f"\n{EFFECT_EMOTE} **Burnt Brew Revival!** (Burnt brew converted to perfect)"
-                else:
-                    embed.description += "\n🛡️ **Insurance Saved!** (minimum reward)"
+            if burnt_to_perfect:
+                notes.append(("Burnt, then revived as a perfect brew", GOLD))
+            elif perfect:
+                notes.append(("Perfect brew, double Tokens", GOLD))
+            if saved_burn and not burnt_to_perfect:
+                notes.append(("Burnt, but insurance paid the minimum", GREEN))
             if master_bonus:
-                embed.description += (
-                    f"\n☕ **Master Barista Bonus!** ({master_bonus} extra Tokens)"
-                )
-
-        embed.description += f"\n-# **Next:** {NEXT['brew']}"
-        embed.add_field(
-            name="New Token Balance",
-            value=f"{TOKEN_EMOTE} `{new_tokens}` Tokens",
-            inline=True,
-        )
-        embed.add_field(
-            name="Brew ID", value=f"`{active_brew['batch_id']}`", inline=True
-        )
-        if insured:
-            embed.add_field(name="Insurance Status", value="🛡️ Insured", inline=True)
+                notes.append((f"Master Barista bonus +{master_bonus}", GREEN))
 
         if tokens != 0:
             flavor_notes = {
@@ -599,11 +483,8 @@ class Brewing(commands.Cog):
                 ],
             }
 
-            embed.add_field(
-                name="Flavor Profile",
-                value=random.choice(flavor_notes[roast_type]),
-                inline=False,
-            )
+            if len(notes) < 2:
+                notes.append((random.choice(flavor_notes[roast_type]), MUTED))
 
             ref_mapping = g_invites_member_data(
                 interaction.guild.id, interaction.user.id
@@ -635,20 +516,26 @@ class Brewing(commands.Cog):
                     earned_rewards = f"Your inviter {inviter.mention} earned <@&{MASTER_ROLE_ID}> too!"
 
                 if earned_rewards:
-                    embed.description += f"\n\n<:Information:855023058255478794> **Referral Milestone::** {earned_rewards}"
+                    lines.append(f"<:Information:855023058255478794> {earned_rewards}")
 
             welcome_bonus_msg = await self.economy.process_invitee_welcome_bonus(
                 interaction, "sell", interaction.user
             )
             if welcome_bonus_msg:
-                extra_newline = (
-                    "\n"
-                    if "<:Information:855023058255478794>" not in embed.description
-                    else ""
-                )
-                embed.description += f"\n{extra_newline}{welcome_bonus_msg}"
+                lines.append(welcome_bonus_msg)
 
-        await interaction.followup.send(embed=embed)
+        lines.append(f"-# **Next:** {NEXT['brew']}")
+        sale = {
+            "roast": roast_type,
+            "tokens": tokens,
+            "perfect": perfect or burnt_to_perfect,
+            "notes": notes,
+            "have": new_tokens,
+            "background": background(user_id),
+        }
+        await interaction.followup.send(
+            "\n".join(lines), file=await render(draw_sold, sale, name="sold")
+        )
         await report(
             interaction,
             order,

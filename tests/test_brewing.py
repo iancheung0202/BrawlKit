@@ -1,4 +1,5 @@
 import asyncio
+from unittest.mock import MagicMock
 
 from discord import app_commands
 
@@ -18,6 +19,29 @@ def brew(cafe):
     sent = cafe.interaction(USER)
     asyncio.run(cog.brew.callback(cog, sent, LIGHT))
     return sent
+
+
+def pressing(cafe, sent, who=USER):
+    press = cafe.interaction(who)
+    press.message.content = "you\n-# You can insure it"
+    press.message.attachments = [MagicMock(filename=sent["file"].filename)]
+    return press
+
+
+def test_only_the_brewer_can_insure(cafe):
+    user(cafe, "balance").set({"Beans": 5000})
+    sent = brew(cafe).followup.send.call_args.kwargs
+    press = pressing(cafe, sent, who=USER + 1)
+    asyncio.run(sent["view"].children[0].callback(press))
+    assert "not your brew" in press.response.send_message.call_args.args[0]
+    assert user(cafe, "inventory/brews/active_brew/insured").get() is False
+
+
+def test_the_roast_guide_is_a_card(cafe):
+    cog = cafe.cogs["Brewing"]
+    sent = cafe.interaction(USER)
+    asyncio.run(cog.brew.callback(cog, sent, None))
+    assert sent.response.send_message.call_args.kwargs["file"].filename == "roasts.jpg"
 
 
 def sell(cafe):
@@ -47,9 +71,9 @@ def test_insurance_button_charges_and_marks_the_batch(cafe):
     user(cafe, "balance").set({"Beans": 5000})
     sent = brew(cafe).followup.send.call_args.kwargs
     view = sent["view"]
-    press = cafe.interaction(USER)
-    press.message.embeds = [sent["embed"]]
+    press = pressing(cafe, sent)
     asyncio.run(view.children[0].callback(press))
+    assert press.response.edit_message.call_args.kwargs["view"] is None
     cost = ROAST_TYPES["light"]["cost"] + ROAST_TYPES["light"]["insurance_cost"]
     assert user(cafe, "balance/Beans").get() == 5000 - cost
     assert user(cafe, "inventory/brews/active_brew/insured").get() is True
@@ -59,8 +83,7 @@ def test_insurance_button_ignores_an_older_brew(cafe):
     user(cafe, "balance").set({"Beans": 5000})
     sent = brew(cafe).followup.send.call_args.kwargs
     user(cafe, "inventory/brews/active_brew/batch_id").set("OTHER")
-    press = cafe.interaction(USER)
-    press.message.embeds = [sent["embed"]]
+    press = pressing(cafe, sent)
     asyncio.run(sent["view"].children[0].callback(press))
     assert user(cafe, "balance/Beans").get() == 5000 - ROAST_TYPES["light"]["cost"]
     assert user(cafe, "inventory/brews/active_brew/insured").get() is False

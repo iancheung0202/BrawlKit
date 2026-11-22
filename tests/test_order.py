@@ -84,13 +84,12 @@ def test_only_one_stamp_per_day(order):
     assert stampcard.stamps(USER) == 1
 
 
-def test_boss_ticks_a_station_task_but_not_chat_or_weekly(order):
+def test_boss_ticks_a_station_task_but_not_chat(order):
     level(order, 1)
     for _ in range(5):
         asyncio.run(quests.wildcard(USER, MAIN_GUILD_ID, order.bot))
     daily = u_quests(USER).child("daily").get()
     assert set(daily["completed"]) == {"brew_start", "brew_sells"}
-    assert u_quests(USER).child("weekly/quests/brew_start/current").get() == 0
     assert stampcard.stamps(USER) == 0
 
 
@@ -148,7 +147,7 @@ def test_redeem_stops_at_the_monthly_limit(cafe):
 def test_redeem_spends_stamps_and_tokens_and_counts_the_month(cafe):
     u_stamp_card(USER).set({"count": 33})
     u_balance(USER).set({"Tokens": 450})
-    assert "embed" in redeem(cafe).kwargs
+    assert redeem(cafe).kwargs["file"].filename == "redeemed.jpg"
     assert u_stamp_card(USER).get()["count"] == 3
     assert u_balance(USER).get()["Tokens"] == 50
     month = g_stamp_redemptions(MAIN_GUILD_ID, get_current_month_key()).get()

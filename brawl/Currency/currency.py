@@ -46,6 +46,7 @@ from brawl.Currency.helper import (
     get_current_month_key,
 )
 from brawl.Currency.home import background
+from brawl.Currency.rewardcard import draw_ready
 from brawl.Currency.stationcard import draw_thermometer
 from brawl.Currency.tutorial import TutorialManager
 
@@ -193,19 +194,10 @@ class CurrencySystem(commands.Cog):
                                     guild.get_channel(BOT_COMMANDS) if guild else None
                                 )
 
-                                embed = discord.Embed(
-                                    title="☕ Brew Ready to Sell!",
-                                    description=f"Your **{ROAST_TYPES.get(alarm_data.get('roast_type', 'light'), {}).get('name', 'coffee')}** (Batch ID: `{alarm_data.get('batch_id', 'N/A')}`) is ready to sell!",
-                                    color=0x6F4E37,
-                                )
-                                embed.add_field(
-                                    name="What to do?",
-                                    value=f"Head to {bot_channel.mention if bot_channel else 'the bot channel'} and use </sell:1396588612790784071> to collect your tokens!",
-                                    inline=False,
-                                )
-                                embed.set_footer(
-                                    text="This is an automated reminder from your Sell Alarm effect"
-                                )
+                                ready = {
+                                    "roast": alarm_data.get("roast_type", "light"),
+                                    "background": background(user_id),
+                                }
 
                                 view = discord.ui.View()
                                 if bot_channel:
@@ -217,7 +209,9 @@ class CurrencySystem(commands.Cog):
                                     view.add_item(button)
 
                                 await user.send(
-                                    embed=embed, view=view if bot_channel else None
+                                    f"-# **Next:** use </sell:1396588612790784071> in {bot_channel.mention if bot_channel else 'the bot channel'}. This reminder is from your Sell Alarm.",
+                                    file=await render(draw_ready, ready, name="ready"),
+                                    **({"view": view} if bot_channel else {}),
                                 )
                                 sync_sell_alarm(
                                     user_id, "update", {"notified": True}, MAIN_GUILD_ID
