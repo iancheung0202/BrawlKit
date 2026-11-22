@@ -122,3 +122,25 @@ def test_first_brew_completes_the_daily_brew_quest(cafe, monkeypatch):
         quests.QUEST_BONUS_BEANS.values()
     )
     assert user(cafe, "balance/Beans").get() == 5000 - spent + earned
+
+
+def test_the_first_tutorial_brew_is_free_ready_and_insured(cafe):
+    from brawl.Currency import tutorial
+    from brawl.Currency.db import u_tutorial
+
+    u_tutorial(USER).set(tutorial.BREW_STEP)
+    user(cafe, "balance").set({"Beans": 0, "Tokens": 0})
+    sent = brew(cafe)
+    active = user(cafe, "inventory/brews/active_brew").get()
+    assert active["insured"] and active["end_time"] <= active["start_time"]
+    assert user(cafe, "balance").get()["Beans"] == 0
+    assert "view" not in sent.followup.send.call_args_list[0].kwargs
+    assert u_tutorial(USER).get() == tutorial.SELL_STEP
+
+    user(cafe, "balance").set({"Beans": 0, "Tokens": 0})
+    assert "need" in brew_again(cafe)
+
+
+def brew_again(cafe):
+    user(cafe, "inventory/brews/active_brew").delete()
+    return brew(cafe).response.send_message.call_args.args[0]

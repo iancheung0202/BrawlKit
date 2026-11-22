@@ -83,16 +83,18 @@ def draw_brewing(brew):
     card.tag(32, 12, "BREW STARTED", BLUE, WHITE)
     card.icon("brewing", 34, 44, 76)
     card.text(124, 44, roast["name"], 26)
-    card.text(124, 82, f"Ready in {hours(brew['time'])}", 16, MUTED, "la", 2)
+    ready = f"Ready in {hours(brew['time'])}" if brew["time"] else "Ready now"
+    card.text(124, 82, ready, 16, MUTED, "la", 2)
     state, color = {
         "insured": ("Insured", GREEN),
         "free": ("Insured for free", GREEN),
         "safe": ("Never burns", GREEN),
+        "first": ("First brew, free and can't burn", GREEN),
         "open": (f"Not insured, {roast['weights'][0]}% burn chance", GOLD),
     }[brew["insurance"]]
     card.text(124, 102, state, 16, color, "la", 2)
     card.text(604, 46, "You paid", 13, MUTED, "ra", 2)
-    paid = f"{brew['paid']:,}"
+    paid = f"{brew['paid']:,}" if brew["paid"] else "Free"
     card.text(604, 62, paid, 22, GOLD, "ra")
     card.icon("kit/bean", 574 - card.measure(paid, 22), 62, 26)
     left = f"{brew['beans']:,} left"

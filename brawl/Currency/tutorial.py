@@ -11,8 +11,8 @@ STEPS = {"clock_in": CLOCK_IN, "brew": BREW_STEP, "sell": SELL_STEP}
 STORE = f"<#{SERVER_STORE}>"
 HINTS = {
     CLOCK_IN: f"**First:** press Clock In below, or in {STORE} on any other day.",
-    BREW_STEP: f"**Next:** brew a Light Roast with {BREW}. Brewing opens at Level 1, a few minutes of chat.",
-    SELL_STEP: f"**Next:** sell your brew with {SELL} when it is ready. That is your first Token.",
+    BREW_STEP: f"**Next:** brew a Light Roast with {BREW}. Your first one is free and ready right away. Brewing opens at Level 1, a few minutes of chat.",
+    SELL_STEP: f"**Next:** sell your brew with {SELL}. It is ready now.",
     FINISHED: f"Chat for {BEAN_EMOTE} Beans and finish Today's Order for {STAMP_EMOTE} Stamps. "
     f"New stations unlock as you level up, and {HOME} shows what is next.",
 }

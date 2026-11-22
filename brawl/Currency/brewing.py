@@ -27,6 +27,7 @@ from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import NEXT
 from brawl.Currency.quests import report, update_quest
+from brawl.Currency.tutorial import BREW_STEP, step_of
 
 
 class Brewing(commands.Cog):
@@ -223,7 +224,8 @@ class Brewing(commands.Cog):
                     ephemeral=True,
                 )
 
-        cost = ROAST_TYPES[roast]["cost"]
+        first = roast == "light" and step_of(user_id) == BREW_STEP
+        cost = 0 if first else ROAST_TYPES[roast]["cost"]
         beans, tokens = await self.economy.get_balance(user_id)
         if beans < cost:
             return await interaction.response.send_message(
@@ -244,13 +246,15 @@ class Brewing(commands.Cog):
         )
         if "half_brew_time" in active_effects:
             brew_time = brew_time // 2
+        if first:
+            brew_time = 0
 
         brew_data = {
             "roast_type": roast,
             "start_time": current_time,
             "end_time": current_time + brew_time,
             "batch_id": secrets.token_hex(4).upper(),
-            "insured": False,
+            "insured": first,
         }
 
         await self.economy.set_active_brew(user_id, brew_data)
@@ -275,11 +279,17 @@ class Brewing(commands.Cog):
             )
 
         lines = [
-            f"{interaction.user.mention}, your coffee is ready <t:{int(brew_data['end_time'])}:R>."
+            (
+                f"{interaction.user.mention}, your first brew is on the house and ready now."
+                if first
+                else f"{interaction.user.mention}, your coffee is ready <t:{int(brew_data['end_time'])}:R>."
+            )
         ]
         insurance = "safe"
         view = None
-        if roast != "golden" and ROAST_TYPES[roast]["insurance_cost"] > 0:
+        if first:
+            insurance = "first"
+        elif roast != "golden" and ROAST_TYPES[roast]["insurance_cost"] > 0:
             insurance = "open"
             view = self.InsuranceView(self)
             await view.update_button_for_user(user_id)
@@ -291,7 +301,7 @@ class Brewing(commands.Cog):
                 lines.append(
                     f"-# You can insure it for {BEAN_EMOTE} `{ROAST_TYPES[roast]['insurance_cost']:,}` so it can't burn."
                 )
-        if "half_brew_time" in active_effects:
+        if "half_brew_time" in active_effects and not first:
             lines.append(
                 f"-# {EFFECT_EMOTE} Turbo Brewing Kit made this brew twice as fast."
             )
@@ -319,7 +329,7 @@ class Brewing(commands.Cog):
         if welcome_bonus_msg:
             lines.append(welcome_bonus_msg)
             new_beans += 150
-        lines.append(f"-# **Next:** {NEXT['sell']}")
+        lines.append(f"-# **Next:** {NEXT['sell_now' if first else 'sell']}")
 
         started = {
             "roast": roast,
