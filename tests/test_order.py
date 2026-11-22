@@ -94,11 +94,11 @@ def test_boss_ticks_a_station_task_but_not_chat(order):
     assert stampcard.stamps(USER) == 0
 
 
-def test_old_progress_converts_by_share(cafe):
+def test_old_progress_converts_one_stamp_for_six_old_ones(cafe):
     u_stamp_card(USER).set(
         {"stamps": {"daily_checkins": 30, "brew_sells": 15, "shop_purchases": 99}}
     )
-    assert stampcard.stamps(USER) == round(2.5 / 6 * STAMP_GOALS["brawl_pass"])
+    assert stampcard.stamps(USER) == round((30 + 15 + 10) / 6)
 
 
 def test_price_falls_with_the_streak(cafe):

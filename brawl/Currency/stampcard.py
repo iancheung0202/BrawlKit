@@ -33,10 +33,9 @@ def stamps(user_id):
     if "count" in card:
         return card["count"]
     old = card.get("stamps", {})
-    share = sum(
-        min(old.get(task, 0) / goal, 1) for task, goal in LEGACY_STAMP_GOALS.items()
-    ) / len(LEGACY_STAMP_GOALS)
-    return round(share * STAMP_GOALS["brawl_pass"])
+    # Every stamp on the old card counts the same, up to its objective's goal.
+    kept = sum(min(old.get(task, 0), goal) for task, goal in LEGACY_STAMP_GOALS.items())
+    return round(kept / len(LEGACY_STAMP_GOALS))
 
 
 def price(user_id, tier):
