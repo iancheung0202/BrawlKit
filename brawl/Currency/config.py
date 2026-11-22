@@ -149,7 +149,7 @@ CUSTOMIZE = "</customize:1486174479489957908>"
 STARDROP = "</stardrop:1447676573020065996>"
 MEGABOX = "</megabox:1486191980349358224>"
 PIN = "</pin:1427543833792610344>"
-HOW = "`/how`"
+HOW = "</how:1573924258306850936>"
 
 LADDER = {
     "brewing": (1, "Brewing", f"Turn Beans into Tokens: {BREW}, wait, then {SELL}."),
