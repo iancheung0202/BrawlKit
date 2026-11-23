@@ -35,6 +35,7 @@ from brawl.Currency.db import (
     u_star_drops,
 )
 from brawl.Currency.effects import EffectManager
+from brawl.Currency.goldenbean import GoldenBean, paid_today
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     BOT_COMMANDS,
@@ -70,6 +71,7 @@ class CurrencySystem(commands.Cog):
         self.heat_channel = None
         self.heat_told = {}
         self.heat_notice = None
+        self.bean = GoldenBean(self.bot, self)
         self.thermometer_decay_task = self.bot.loop.create_task(
             self.thermometer_decay_loop()
         )
@@ -114,7 +116,9 @@ class CurrencySystem(commands.Cog):
         notice, self.heat_notice = self.heat_notice, None
         try:
             card = await render(
-                draw_heat, {"level": now, "rose": rose}, name="thermometer"
+                draw_heat,
+                {"level": now, "rose": rose, "bean": await self.bean.who()},
+                name="thermometer",
             )
             told, self.heat_told[now[1]] = self.heat_told.get(now[1], 0), time.time()
             if not rose and notice and channel.last_message_id == notice.id:
@@ -127,6 +131,23 @@ class CurrencySystem(commands.Cog):
             self.heat_notice = None if rose else sent
         except Exception as e:
             print(f"Failed to post the thermometer level: {e}")
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload):
+        await self.bean.fake(payload)
+
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload):
+        self.bean.deleted({payload.message_id})
+
+    @commands.Cog.listener()
+    async def on_raw_bulk_message_delete(self, payload):
+        self.bean.deleted(payload.message_ids)
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        if member.guild.id == MAIN_GUILD_ID:
+            self.bean.left(member.id)
 
     async def effect_cleanup_loop(self):
         """Clean up expired effects every minute"""
@@ -591,6 +612,8 @@ class CurrencySystem(commands.Cog):
             "heat": self.thermometer_heat,
             "drops": heat.drops_today(interaction.user.id),
             "beans": heat.beans_today(interaction.user.id),
+            "held": paid_today(interaction.user.id),
+            "bean": await self.bean.who(),
         }
         frozen = heat.freeze(interaction.guild.id)
         if frozen:

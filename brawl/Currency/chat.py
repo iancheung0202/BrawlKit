@@ -152,6 +152,7 @@ class ChatRewardSystem:
         chat_boost_active = "chat_boost" in active_effects
         MAX_DAILY_CHAT_BEAN_LIMIT = chat_limit(message.author, active_effects)
 
+        stolen = cog.bean.holder is not None
         if message.channel.id in MAIN_CHAT_CHANNELS and not heat.freeze(
             message.guild.id
         ):
@@ -162,6 +163,9 @@ class ChatRewardSystem:
                 ),
                 message.channel,
             )
+
+        if cog.bean.offer(message):
+            await cog.bean.tell(message, stolen)
 
         level = heat.level_of(min(cog.thermometer_heat, 100))
         if level[2]:
@@ -285,6 +289,7 @@ class ChatRewardSystem:
                         "reset": reset_time,
                         "order": order and paid(order),
                         "heat": level,
+                        "bean": cog.bean.holder == user_id,
                     },
                     name="chat",
                 )

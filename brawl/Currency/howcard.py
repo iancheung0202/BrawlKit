@@ -33,6 +33,8 @@ from brawl.Currency.config import (
     CHAT_WEEKEND_MULTIPLIER,
     DAILY_BEANS,
     DAILY_GAMBLING_LIMITS,
+    GOLDEN_BEAN_BEANS,
+    GOLDEN_BEAN_HOLD_SECONDS,
     ITEM_STATIONS,
     LADDER,
     LUCKY_DAILY_CHANCE,
@@ -909,7 +911,7 @@ def stations_page():
     card = page(
         "THERMOMETER AND BOSS",
         "Thermometer Beans have no limit and do not count for the chat task.",
-        848,
+        996,
     )
     section(card, 124, 430, "THERMOMETER")
     card.icon("kit/icon_chat", 46, 148, 26)
@@ -967,6 +969,26 @@ def stations_page():
         item_row(card, y, key, does)
         y += 40
     top = 594
+    section(card, top, 128, "GOLDEN BEAN")
+    line = "One member holds it, shown as a reaction on their message. It pays at every heat."
+    card.text(46, top + 22, line, 15, MUTED, "la", 2)
+    hours = GOLDEN_BEAN_HOLD_SECONDS // 3600
+    flow(
+        card,
+        top + 52,
+        [
+            ("kit/golden_bean", "Reply to steal", "any message of the holder"),
+            (
+                "kit/bean",
+                f"+{GOLDEN_BEAN_BEANS} Beans",
+                "once a minute, at a random moment",
+            ),
+            ("kit/icon_clock", f"{hours} hours", "one hold pays, then steal it again"),
+        ],
+        size=0,
+        arrows=False,
+    )
+    top += 148
     section(card, top, 204, "BOSS INSPECTION", RED, WHITE)
     card.icon("kit/icon_megaboss_big", 46, top + 26, 76)
     names = {"mega_box": "Mega Box", "star_drop": "Star Drop", "nothing": "Air"}

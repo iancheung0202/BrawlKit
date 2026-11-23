@@ -214,6 +214,8 @@ def draw_chat(reward):
     card = Card.strip(foot=bool(order) + bool(heat), small=True)
     card.tag(32, 12, "CHAT BEANS", GOLD)
     card.avatar(reward["avatar"], 34, 40, 52)
+    if reward.get("bean"):  # this member holds the Golden Bean
+        card.icon("kit/golden_bean", 69, 72, 26)
     card.text(100, 40, card.fit(reward["name"], 16, 180), 16, MUTED, "la", 2)
     gain = f"+{reward['beans']:,}"
     card.icon("kit/bean", 98, 62, 30)

@@ -281,6 +281,16 @@ THERMOMETER_NEWS_SECONDS = 900
 # Heat lost each minute: (above this heat, points lost).
 THERMOMETER_COOLING = ((100, 20), (75, 10), (50, 5), (0, 2))
 
+# The Golden Bean pays its holder once in this long, at a random moment.
+GOLDEN_BEAN_BEANS = 5
+GOLDEN_BEAN_PAY_SECONDS = 60
+# One hold stops paying after this long; it pays again once someone else takes it.
+GOLDEN_BEAN_HOLD_SECONDS = 7200
+# The reaction moves at most once in this long, however fast the bean does.
+GOLDEN_BEAN_MOVE_SECONDS = 2
+# In a Cold chat a take is posted at most once in this long.
+GOLDEN_BEAN_NEWS_SECONDS = 60
+
 BOSS_SECONDS = 300
 # Visits in each half of the UTC day, and the hours between two of the same half.
 BOSS_HALF_VISITS = 2

@@ -13,6 +13,7 @@ from brawl.Currency.card import (
 from brawl.Currency.config import (
     BOSS_ODDS,
     BOSS_SECONDS,
+    GOLDEN_BEAN_BEANS,
     THERMOMETER_DAILY_TOKEN_DROPS,
     THERMOMETER_LEVELS,
 )
@@ -25,6 +26,7 @@ BOSS = {
     "nothing": ("kit/icon_air", "Air", "The boss is not happy", RED),
 }
 SHOWN = 12
+BEAN = "kit/golden_bean"
 
 
 def percent(odds):
@@ -58,69 +60,127 @@ def flame(level):
     return "kit/icon_wasabi_power_hot" if level[2] else "kit/icon_wasabi_power"
 
 
+def holds(card, x, y, bean, size):
+    """The holder's picture with the Golden Bean pinned to its corner."""
+    card.avatar(bean["avatar"], x, y, size, 8 if size < 40 else 12)
+    pin = size // 2
+    card.icon(BEAN, x + size - pin * 2 // 3, y + size - pin * 3 // 4, pin)
+
+
+def chips(card, y, level, bean):
+    """Two boxes: what a message pays everyone, and who holds the Golden Bean.
+
+    Every amount carries the Bean icon. The Golden Bean is a thing one member
+    holds, so it is only ever drawn on its holder, never beside a number.
+    """
+    beans = level[2]
+    card.slot(36, y, 278, 50)
+    card.icon(flame(level), 46, y + 8, 34)
+    card.icon("kit/bean", 88, y + 5, 24)
+    card.text(116, y + 4, f"+{beans}", 22, GOLD if beans else GREY)
+    x = 124 + card.measure(f"+{beans}", 22)
+    card.text(x, y + 9, "a message", 15, WHITE if beans else GREY, "la", 2)
+    warm = THERMOMETER_LEVELS[-2]
+    who = "Everyone" if beans else f"Everyone, +{warm[2]} when {warm[1]}"
+    card.text(88, y + 29, who, 13, MUTED, "la", 2)
+    card.slot(326, y, 278, 50, lit=True)
+    if bean:
+        holds(card, 336, y + 9, bean, 32)
+        line = card.fit(f"{named(bean['name'])} holds the Golden Bean", 13, 212)
+    else:
+        card.icon(BEAN, 338, y + 10, 30)
+        line = "Nobody holds the Golden Bean"
+    card.icon("kit/bean", 384, y + 5, 24)
+    gain = f"+{GOLDEN_BEAN_BEANS}"
+    card.text(412, y + 4, gain, 22, GOLD)
+    card.text(420 + card.measure(gain, 22), y + 9, "once a minute", 15, WHITE, "la", 2)
+    card.text(384, y + 29, line, 13, MUTED, "la", 2)
+
+
+def steal(bean):
+    """What to do about the Golden Bean, in one short line."""
+    if not bean:
+        return "The next message takes the Golden Bean"
+    return f"Reply to {named(bean['name'])} to steal the Golden Bean"
+
+
 def draw_heat(news):
     """A strip posted in chat when the thermometer moves to another level."""
-    level = news["level"]
+    level, bean = news["level"], news.get("bean")
     start, name, beans, drops = level
     above = next_up(level)
-    card = Card.strip(foot=True)
+    card = Card(640, 214)
+    card.panel(16, 24, 608, 174)
     card.tag(32, 12, "THERMOMETER", HEAT[name])
-    card.icon(flame(level), 34, 46, 72)
+    card.icon(flame(level), 36, 44, 52)
     verb = "is now" if news["rose"] else "cooled to"
-    card.text(122, 44, f"Chat {verb} {name}", 28, HEAT[name])
-    if beans:
-        card.text(122, 84, "Extra Beans every message, no limit.", 16, MUTED, "la", 2)
-        card.text(122, 104, "They do not count for the chat task.", 16, MUTED, "la", 2)
-        gain = f"+{beans}"
-        card.text(604, 54, gain, 30, GOLD, "ra")
-        card.icon("kit/bean", 564 - card.measure(gain, 30), 54, 34)
-        card.text(604, 88, "Beans a message", 13, MUTED, "ra", 2)
-        card.text(604, 106, chance(drops), 13, GOLD, "ra", 2)
+    card.text(100, 44, f"Chat {verb} {name}", 28, HEAT[name])
+    if drops:
+        card.text(100, 80, chance(drops), 13, GOLD, "la", 2)
     else:
-        card.text(122, 84, "No bonus right now.", 16, MUTED, "la", 2)
-        card.text(122, 104, "Nobody is chatting.", 16, MUTED, "la", 2)
+        card.text(100, 80, "Nobody is chatting.", 13, MUTED, "la", 2)
+    chips(card, 106, level, bean)
     if news["rose"]:
         line = f"Keep it going. {above[1]} at {above[0]}%" if above else "Hottest level"
     else:
         line = "Come back and chat to heat it up."
-    card.text(36, card.foot, line, 15, GOLD, "la", 2)
-    if above:
-        card.text(604, card.foot, f"{above[1]}: {pays(above)}", 15, MUTED, "ra", 2)
+    card.text(36, 168, line, 15, GOLD, "la", 2)
+    card.text(604, 168, card.fit(steal(bean), 15, 320), 15, MUTED, "ra", 2)
+    return card.jpg()
+
+
+def draw_stolen(bean):
+    """A strip posted when a member takes the Golden Bean, saying what it does."""
+    card = Card.strip(foot=True, small=True)
+    card.tag(32, 12, "GOLDEN BEAN", GOLD)
+    holds(card, 34, 40, bean, 52)
+    card.text(104, 40, card.fit(named(bean["name"]), 16, 300), 16, MUTED, "la", 2)
+    verb = "Stole" if bean["stolen"] else "Found"
+    card.text(104, 60, f"{verb} the Golden Bean", 24, GOLD)
+    gain = f"+{GOLDEN_BEAN_BEANS}"
+    card.text(604, 52, gain, 28, GOLD, "ra")
+    card.icon("kit/bean", 566 - card.measure(gain, 28), 52, 32)
+    card.text(604, 84, "once a minute", 13, MUTED, "ra", 2)
+    line = "Pays whoever holds it once a minute, at a random moment."
+    card.text(36, card.foot, line, 15, MUTED, "la", 2)
+    card.text(604, card.foot, "Reply to them to steal it.", 15, GOLD, "ra", 2)
     return card.jpg()
 
 
 def draw_thermometer(cup):
-    """The heat now, what each message earns, and the four levels."""
+    """The heat now, what pays right now, the member's day, and the four levels."""
     heat = min(cup["heat"], 100)
     now = level_of(heat)
+    bean = cup.get("bean")
     mine = cup.get("drops") is not None
-    down = 64 if mine else 0
+    down = 80 + 84 * mine
     card = Card(640, 456 + down, cup["background"])
     card.panel(16, 24, 608, 416 + down)
     card.tag(32, 12, "THERMOMETER", HEAT[now[1]])
     card.icon(flame(now), 34, 48, 60)
     card.text(108, 44, now[1], 34, HEAT[now[1]])
-    line = (
-        "Every message pays extra Beans, with no daily limit."
-        if now[2]
-        else "No bonus right now."
-    )
-    card.text(108, 86, line, 16, MUTED, "la", 2)
+    card.text(108, 86, card.fit(steal(bean) + ".", 16, 490), 16, MUTED, "la", 2)
     card.bar(36, 122, 568, 26, heat / 100, HEAT[now[1]], f"{heat}%")
+    card.text(36, 158, "Now", 13, GOLD, "la", 2)
+    chips(card, 178, now, bean)
     if mine:
-        card.slot(36, 162, 278, 50)
-        card.icon("kit/bean", 46, 170, 34)
-        card.text(88, 166, f"+{cup.get('beans', 0):,}", 22, GOLD)
-        card.text(88, 191, "Extra today, not in the chat task", 13, MUTED, "la", 2)
-        card.slot(326, 162, 278, 50)
-        card.icon("kit/token", 336, 170, 34)
-        left = f"{cup['drops']} of {THERMOMETER_DAILY_TOKEN_DROPS}"
-        card.text(378, 166, left, 22, GOLD)
-        card.text(378, 191, "Your Token drops today", 13, MUTED, "la", 2)
+        card.text(36, 240, "You, today", 13, GOLD, "la", 2)
+        drops = f"{cup['drops']} of {THERMOMETER_DAILY_TOKEN_DROPS}"
+        totals = (
+            ("kit/bean", f"+{cup.get('beans', 0):,}", "From messages"),
+            ("kit/bean", f"+{cup.get('held', 0):,}", "From holding it"),
+            ("kit/token", drops, "Token drops"),
+        )
+        for spot, (picture, value, label) in enumerate(totals):
+            x = 36 + spot * 193
+            card.slot(x, 260, 182, 50)
+            card.icon(picture, x + 10, 268, 34)
+            card.text(x + 52, 264, value, 22, GOLD)
+            card.text(x + 52, 289, label, 13, MUTED, "la", 2)
     for row, level in enumerate(THERMOMETER_LEVELS):
         start, name, beans, drops = level
         y = 162 + down + row * 60
-        card.slot(36, y, 568, 54, GOLD if level is now else (0, 0, 0))
+        card.slot(36, y, 568, 54, lit=level is now)
         card.text(52, y + 6, name, 20, HEAT[name])
         span = f"{start}% and up" if start else "Under 50%"
         card.text(52, y + 31, span, 13, MUTED, "la", 2)
