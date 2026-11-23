@@ -732,12 +732,12 @@ def order_page():
         size=56,
     )
     levels = ORDER_TASK_LEVELS
-    limits = span(min(CHAT_LIMITS.values()), max(CHAT_LIMITS.values()))
+    chat = ("kit/bean", "Earn your daily chat limit", "")
     table(
         card,
         288,
         [
-            ("Chat task", GOLD, [("kit/bean", "Your daily chat limit", limits)]),
+            ("Chat task", GOLD, [chat]),
             (
                 "Station tasks",
                 BLUE,
