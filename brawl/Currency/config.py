@@ -119,7 +119,7 @@ ORDER_TASK_LEVELS = {
     "brew_sells": 1,
     "shop_purchases": 2,
     "boss_inspections": 5,
-    "thermometer_bonuses": 7,
+    "thermometer_bonuses": 6,
 }
 
 ORDER_FILLER = "daily_checkins"
@@ -163,10 +163,11 @@ LADDER = {
     "brewing": (1, "Brewing", f"Turn Beans into Tokens: {BREW}, wait, then {SELL}."),
     "shop": (2, "Shop", f"Spend Beans and Tokens: browse {SHOP}, then {BUY}."),
     "drops": (
-        4,
+        3,
         "Star Drops",
         f"Random rewards you earn or buy. Open one with {STARDROP}.",
     ),
+    "boxes": (4, "Mega Boxes", f"Big bundles of rewards. Open one with {MEGABOX}."),
     "boss": (
         5,
         "Boss Inspection",
@@ -174,24 +175,23 @@ LADDER = {
         "It can be a task of Today's Order.",
     ),
     "thermometer": (
-        7,
+        6,
         "Thermometer",
         "Active chat heats the cup. Hot chat drops Tokens. See `/thermometer`.",
     ),
     "tables": (
-        10,
+        7,
         "Tables",
         "Team up for weekly Bean goals: `/table seat` to join, `/table reserve` to host.",
     ),
-    "games": (15, "Games", "Bet Beans in `/coinflip` and `/blackjack`. Optional fun."),
+    "games": (8, "Games", "Bet Beans in `/coinflip` and `/blackjack`. Optional fun."),
     "effects": (
-        20,
+        9,
         "Effect Items",
         f"Timed boosts for chat and brewing. Find them in {SHOP}.",
     ),
-    "boxes": (25, "Mega Boxes", f"Big bundles of rewards. Open one with {MEGABOX}."),
     "style": (
-        35,
+        10,
         "Customize and Pin",
         f"Pick a home card background with {CUSTOMIZE} and pin messages with {PIN}.",
     ),

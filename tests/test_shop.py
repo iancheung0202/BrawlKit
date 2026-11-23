@@ -59,7 +59,7 @@ def test_effect_item_stays_locked_below_its_level(cafe):
         cafe.cogs["Shop"]._process_effect_purchase(interaction, USER, "double_daily")
     )
     reply = interaction.edit_original_response.call_args.kwargs
-    assert "Level 20" in text(reply)
+    assert "Level 9" in text(reply)
     assert u_balance(USER).get() == {"Beans": 5000, "Tokens": 10}
 
 
@@ -88,7 +88,7 @@ def test_shop_opens_as_a_card_with_the_members_balance(cafe):
 
 
 def test_shop_marks_what_the_member_has_not_unlocked(cafe):
-    sent, _ = open_shop(cafe, [], level=5)
+    sent, _ = open_shop(cafe, [], level=3)
     assert {"effects", "boxes", "style"} <= sent["view"].wallet["locked"]
     assert "drops" not in sent["view"].wallet["locked"]
 

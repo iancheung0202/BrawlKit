@@ -60,10 +60,10 @@ def test_the_station_opens_at_its_level(cafe):
 
 
 def test_games_stay_locked_below_their_level(cafe):
-    level(cafe, 14)
+    level(cafe, 7)
     u_balance(USER).set({"Beans": 5000})
     interaction = run(cafe, "Gambling", "coinflip", 100)
-    assert "Games unlocks at Level 15" in said(interaction)
+    assert "Games unlocks at Level 8" in said(interaction)
     assert u_balance(USER).get()["Beans"] == 5000
 
 
@@ -76,8 +76,8 @@ def test_veterans_keep_every_station(cafe):
 
 def test_level_up_teaches_only_the_new_stations():
     assert ladder.lessons(0, 1) == [f"Brewing: {LADDER['brewing'][2]}"]
-    assert len(ladder.lessons(1, 4)) == 2
-    assert ladder.lessons(5, 6) == []
+    assert len(ladder.lessons(1, 4)) == 3
+    assert ladder.lessons(10, 11) == []
 
 
 def test_tutorial_is_brew_sell_clock_in(cafe):
@@ -129,14 +129,14 @@ def test_a_new_member_brews_a_light_roast_before_level_one(cafe):
 
 
 GATES = [
-    ("Gacha", "stardrop", (), 3, "Star Drops"),
-    ("Gacha", "megabox", (), 24, "Mega Boxes"),
+    ("Gacha", "stardrop", (), 2, "Star Drops"),
+    ("Gacha", "megabox", (), 3, "Mega Boxes"),
     ("Shop", "shop", (), 1, "Shop"),
     ("Shop", "buy", ("Nitro",), 1, "Shop"),
-    ("Shop", "pin", ("link",), 34, "Customize and Pin"),
-    ("Gambling", "blackjack", (100,), 14, "Games"),
-    ("TableSystem", "table_seat", ("table",), 9, "Tables"),
-    ("TableSystem", "table_reserve", (), 9, "Tables"),
+    ("Shop", "pin", ("link",), 9, "Customize and Pin"),
+    ("Gambling", "blackjack", (100,), 7, "Games"),
+    ("TableSystem", "table_seat", ("table",), 6, "Tables"),
+    ("TableSystem", "table_reserve", (), 6, "Tables"),
 ]
 
 
