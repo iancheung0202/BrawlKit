@@ -265,6 +265,7 @@ class ChatRewardSystem:
                 if reward_triggered and order:
                     dropped.beans += order.beans
                     dropped.stamp = dropped.stamp or order.stamp
+                    dropped.boxes = dropped.boxes or order.boxes
                     dropped.redeem = dropped.redeem or order.redeem
                     order = None
                 files.append(await order_card(user_id, dropped))
@@ -292,7 +293,12 @@ class ChatRewardSystem:
 
 
 def paid(order):
-    return {"beans": order.beans, "stamp": order.stamp, "redeem": order.redeem}
+    return {
+        "beans": order.beans,
+        "stamp": order.stamp,
+        "redeem": order.redeem,
+        "boxes": order.boxes,
+    }
 
 
 async def face(member):

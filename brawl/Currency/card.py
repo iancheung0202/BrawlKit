@@ -26,6 +26,11 @@ def font(size):
 
 
 @lru_cache
+def gain(picture, amount):
+    """How a reward reads: +5 for a currency, x5 for Mega Boxes."""
+    return f"x{amount:,}" if picture == "items/mega_box" else f"+{amount:,}"
+
+
 def icon(name, height):
     image = Image.open(f"{ASSETS}{name}.png").convert("RGBA")
     width = max(1, round(image.width * height * SCALE / image.height))
@@ -261,9 +266,24 @@ class Card:
         self.text(x + 40, y + 3, cost, 19, color, "la", 2)
         return w
 
+    def tick(self, x, y, size=28, mark="kit/icon_check"):
+        """A done mark filling a size x size box. The Stamp icon is for Stamps only."""
+        mark = icon(mark, round(size * (1.3 if mark == "kit/icon_checkpoint" else 1.2)))
+        self.paste(
+            mark,
+            x + (size - mark.width / SCALE) / 2,
+            y + (size - mark.height / SCALE) / 2,
+        )
+
+    def stop(self, x, y, done):
+        """A step on a timeline: a checkpoint badge once it is reached."""
+        if done:
+            return self.tick(x, y, mark="kit/icon_checkpoint")
+        self.check(x, y, False)
+
     def check(self, x, y, done):
         if done:
-            return self.icon("kit/icon_ranked_round_token", x - 2, y - 4, 36)
+            return self.tick(x, y)
         self.draw.rounded_rectangle(
             box(x, y, 28, 28), 6 * SCALE, fill=SLOT, outline=BLACK, width=3 * SCALE
         )
@@ -290,9 +310,10 @@ class Card:
         width = 22 + self.measure(label, 14)
         x -= {"la": 0, "ma": width / 2, "ra": width}[anchor]
         self.icon("kit/icon_clock", x, y + 2, 15)
-        self.text(x + 22, y, label, 14, GREY, "la", 2)
+        self.text(x + 22, y, label, 14, MUTED, "la", 2)
 
-    def stamps(self, x, y, have, total, per_row, gap, radius=19):
+    def stamps(self, x, y, have, total, per_row, gap, radius=19, prize=None):
+        """Rows of Stamp slots. prize is (every, icon, amount): the slots that pay."""
         stamp = icon("kit/icon_ranked_round_token", int(radius * 2.5))
         for spot in range(total):
             cx = x + (spot % per_row) * gap
@@ -308,6 +329,10 @@ class Card:
                 outline=GOLD if spot == have else BLACK,
                 width=3 * SCALE,
             )
+            if prize and (spot + 1) % prize[0] == 0:
+                size = int(radius * 1.5)
+                self.icon(prize[1], cx - size / 2, cy - size / 2, size)
+                self.text(cx + radius, cy + 2, str(prize[2]), 15, WHITE, "ra", 2)
 
     def header(self, name, avatar, level, xp, xp_needed, beans, tokens):
         self.avatar(avatar, 29, 25, 68)

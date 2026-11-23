@@ -9,7 +9,12 @@ from discord.ext import commands
 from discord.ui import Modal, TextInput
 
 from brawl.Currency.card import faces, plain, render, roster
-from brawl.Currency.config import TABLE_SEATS, TABLE_SEATS_NEEDED, TABLE_WINNER_TOKENS
+from brawl.Currency.config import (
+    TABLE_SEATS,
+    TABLE_SEATS_NEEDED,
+    TABLE_WINNER_STAMPS,
+    TABLE_WINNER_TOKENS,
+)
 from brawl.Currency.db import (
     g_table_kicks,
     g_table_reset,
@@ -22,6 +27,7 @@ from brawl.Currency.helper import (
     MAIN_GUILD_ID,
     NO_EMOTE,
     STAFF_CHAT,
+    STAMP_EMOTE,
     TABLE_QUEST_TYPES,
     TOKEN_EMOTE,
     YES_EMOTE,
@@ -294,6 +300,9 @@ class TableSystem(commands.GroupCog, name="table"):
                             await currency_cog.add_tokens(
                                 member_id, TABLE_WINNER_TOKENS
                             )
+                            from brawl.Currency.stampcard import add as add_stamps
+
+                            boxes = add_stamps(member_id, TABLE_WINNER_STAMPS)
 
                             if await self.should_send_dm(member_id):
                                 user = self.bot.get_user(member_id)
@@ -313,6 +322,16 @@ class TableSystem(commands.GroupCog, name="table"):
                                                         ],
                                                         "currency": "token",
                                                         "headline": f"+{TABLE_WINNER_TOKENS} Tokens",
+                                                        "more": [
+                                                            (
+                                                                "kit/icon_ranked_round_token",
+                                                                TABLE_WINNER_STAMPS,
+                                                            ),
+                                                            (
+                                                                "items/mega_box",
+                                                                boxes,
+                                                            ),
+                                                        ],
                                                         "line": f"{plain(top_table_data['name'])} was the top table this week with {top_table_beans:,} Beans.",
                                                     },
                                                     name="table",
@@ -334,7 +353,7 @@ class TableSystem(commands.GroupCog, name="table"):
                                 f"**Table:** {top_table_data['emoji']} {top_table_data['name']}\n"
                                 f"**Weekly Beans:** {BEAN_EMOTE} {top_table_beans:,}\n"
                                 f"**Members Rewarded:** {len(top_table_members)}\n"
-                                f"**Reward:** {TABLE_WINNER_TOKENS} {TOKEN_EMOTE} Tokens per member"
+                                f"**Reward:** {TABLE_WINNER_TOKENS} {TOKEN_EMOTE} Tokens and {TABLE_WINNER_STAMPS} {STAMP_EMOTE} Stamp per member"
                             ),
                             color=discord.Color.gold(),
                         )

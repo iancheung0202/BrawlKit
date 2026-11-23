@@ -5,7 +5,7 @@ import discord
 import pytest
 
 from brawl.Currency import wallet
-from brawl.Currency.config import REP_BEANS, REP_PAID_DAILY
+from brawl.Currency.config import REP_PAID_DAILY, REP_TOKENS
 from brawl.TeamFinder import reputationSystem as reputation
 from brawl.TeamFinder import teamFind
 from tests.conftest import text
@@ -87,7 +87,7 @@ def test_only_host_or_admin_can_close(finder):
     assert not teamFind.get_request(MESSAGE)
 
 
-def test_host_ticks_who_played_and_they_get_rep_and_beans(finder):
+def test_host_ticks_who_played_and_they_get_rep_and_a_token(finder):
     press(finder, "claim", HELPER)
     press(finder, "claim", OTHER)
     asked = press(finder, "close", HOST)
@@ -99,19 +99,19 @@ def test_host_ticks_who_played_and_they_get_rep_and_beans(finder):
     asyncio.run(view.close.callback(asked))
     assert not teamFind.get_request(MESSAGE)
     assert reputation.get_totals() == {HELPER: 1}
-    assert wallet.balance(HELPER)[0] == REP_BEANS and wallet.balance(OTHER)[0] == 0
+    assert wallet.balance(HELPER)[1] == REP_TOKENS and wallet.balance(OTHER)[1] == 0
     sent = asked.guild.fetch_channel.return_value.send.call_args[0][0]
     assert f"<@{HELPER}>" in sent and f"<@{OTHER}>" not in sent
 
 
-def test_rep_is_once_a_day_per_host_and_beans_stop_at_the_cap(cafe):
+def test_rep_is_once_a_day_per_host_and_tokens_stop_at_the_cap(cafe):
     helper = member(HELPER)
-    assert asyncio.run(reputation.thank(helper, HOST)) == (REP_BEANS, [])
+    assert asyncio.run(reputation.thank(helper, HOST)) == (REP_TOKENS, [])
     assert asyncio.run(reputation.thank(helper, HOST)) is None
     for host in range(10, 10 + REP_PAID_DAILY):
         asyncio.run(reputation.thank(helper, host))
     assert reputation.rep_of(HELPER) == REP_PAID_DAILY + 1
-    assert wallet.balance(HELPER)[0] == REP_BEANS * REP_PAID_DAILY
+    assert wallet.balance(HELPER)[1] == REP_TOKENS * REP_PAID_DAILY
 
 
 def test_rep_unlocks_the_reward_role(cafe):

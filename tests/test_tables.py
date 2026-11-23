@@ -2,7 +2,12 @@ import asyncio
 from unittest.mock import AsyncMock
 
 from brawl.Currency import tablecard
-from brawl.Currency.config import TABLE_QUEST_TYPES, TABLE_SEATS, TABLE_WINNER_TOKENS
+from brawl.Currency.config import (
+    TABLE_QUEST_TYPES,
+    TABLE_SEATS,
+    TABLE_WINNER_STAMPS,
+    TABLE_WINNER_TOKENS,
+)
 from brawl.Currency.db import g_tables, g_user_tables, u_balance, u_veteran
 from brawl.Currency.helper import MAIN_GUILD_ID
 from tests.conftest import text
@@ -125,7 +130,7 @@ def test_cards_draw_for_every_size_of_table():
                     ],
                 }
             )
-    assert TABLE_WINNER_TOKENS == 3
+    assert (TABLE_WINNER_TOKENS, TABLE_WINNER_STAMPS) == (5, 1)
 
 
 def test_members_the_bot_has_not_loaded_are_asked_for():
@@ -168,7 +173,7 @@ def test_a_missed_sunday_still_resets_the_week(cafe):
             "emoji": "o",
             "color": "#ffffff",
             "formalized": True,
-            "members": [],
+            "members": [7],
             "weekly_beans": 900,
             "user_contributions": {"1": 900},
             "quest": {"start_time": 1, "current_tier": 5, "progress": 900},
@@ -179,4 +184,8 @@ def test_a_missed_sunday_still_resets_the_week(cafe):
     asyncio.run(cog.reset_week())
     table = g_tables(MAIN_GUILD_ID, "owls").get()
     assert table["weekly_beans"] == 0 and table["quest"]["current_tier"] == 0
+    from brawl.Currency import stampcard
+
+    assert u_balance(7).get()["Tokens"] == TABLE_WINNER_TOKENS
+    assert stampcard.stamps(7) == TABLE_WINNER_STAMPS
     assert not cog.reset_due()

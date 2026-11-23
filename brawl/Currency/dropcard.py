@@ -96,7 +96,7 @@ def draw_star_drop(drop):
             x = 196 + spot * 50
             card.slot(x, 78, 40, 40, GOLD if spot == used else (0, 0, 0))
             if spot < used:
-                card.icon("kit/icon_ranked_round_token", x + 1, 78, 40)
+                card.tick(x + 6, 84, 28)
         card.text(196, 126, f"{used} of {UPGRADES} upgrades used", 16, MUTED, "la", 2)
         hint = (
             "Each upgrade can raise the rarity."

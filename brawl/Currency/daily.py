@@ -677,7 +677,12 @@ class Daily(commands.Cog):
             "streak": streak_data["current_streak"],
             "tasks": standing(user_id),
             "order": order
-            and {"beans": order.beans, "stamp": order.stamp, "redeem": order.redeem},
+            and {
+                "beans": order.beans,
+                "stamp": order.stamp,
+                "redeem": order.redeem,
+                "boxes": order.boxes,
+            },
             "background": background(user_id),
         }
         guide = await self.economy.tutorial_manager.advance(user_id, "clock_in")

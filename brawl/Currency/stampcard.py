@@ -7,11 +7,18 @@ from brawl.Currency import events, wallet
 from brawl.Currency.card import render
 from brawl.Currency.config import (
     LEGACY_STAMP_GOALS,
+    STAMP_BOX_EVERY,
+    STAMP_BOXES,
     STAMP_GOALS,
     STAMP_MONTHLY_LIMIT,
     STAMP_PRICE_RANGES,
 )
-from brawl.Currency.db import g_stamp_redemptions, u_daily_checkin_streaks, u_stamp_card
+from brawl.Currency.db import (
+    g_stamp_redemptions,
+    u_daily_checkin_streaks,
+    u_mega_boxes,
+    u_stamp_card,
+)
 from brawl.Currency.helper import (
     MAIN_GUILD_ID,
     NO_EMOTE,
@@ -42,6 +49,25 @@ def count(card):
     return round(kept / len(LEGACY_STAMP_GOALS))
 
 
+def boxes(before, after):
+    """Mega Boxes for every fifth Stamp passed on the way from before to after."""
+    top = max(STAMP_GOALS.values())
+    steps = min(after, top) // STAMP_BOX_EVERY - min(before, top) // STAMP_BOX_EVERY
+    return max(steps, 0) * STAMP_BOXES
+
+
+def add(user_id, amount=1, day=None):
+    """Adds Stamps to a card and pays its Mega Boxes. Returns the boxes paid."""
+    have = stamps(user_id)
+    u_stamp_card(user_id).update(
+        {"count": have + amount, **({"last_stamp": day} if day else {})}
+    )
+    paid = boxes(have, have + amount)
+    if paid:
+        u_mega_boxes(user_id).set((u_mega_boxes(user_id).get() or 0) + paid)
+    return paid
+
+
 def price(user_id, tier):
     streak = (u_daily_checkin_streaks(user_id).get() or {}).get("current_streak", 0)
     low, high = STAMP_PRICE_RANGES[tier]
@@ -64,7 +90,7 @@ class StampCard(commands.Cog):
         card = u_stamp_card(user_id)
         if (card.get() or {}).get("last_stamp") == today:
             return
-        card.update({"count": stamps(user_id) + 1, "last_stamp": today})
+        add(user_id, 1, today)
 
     async def summary(self, user, guild):
         await update_quest(user.id, guild.id, {}, self.bot, refresh_only=True)

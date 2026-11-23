@@ -6,8 +6,8 @@ from discord.ui import Modal, TextInput, View
 from firebase_admin import db
 
 from brawl.Currency import wallet
-from brawl.Currency.config import REP_BEANS, REP_PAID_DAILY
-from brawl.Currency.helper import BEAN_EMOTE, MAIN_GUILD_ID
+from brawl.Currency.config import REP_PAID_DAILY, REP_TOKENS
+from brawl.Currency.helper import MAIN_GUILD_ID, TOKEN_EMOTE
 from brawl.Utility.style import NO
 
 ROLES = f"/Team Find Rep Roles/{MAIN_GUILD_ID}"
@@ -42,7 +42,7 @@ def status_embed() -> discord.Embed:
         title=f"{LIKE} Reputation",
         description=(
             "A host gives rep to the teammates who played when they close a "
-            f"request. Each rep also pays {BEAN_EMOTE} `{REP_BEANS}`, up to "
+            f"request. Each rep also pays {TOKEN_EMOTE} `{REP_TOKENS}`, up to "
             f"`{REP_PAID_DAILY}` times a day.\n### Roles\n"
             + ("\n".join(lines) or "None yet")
         ),
@@ -68,7 +68,7 @@ async def add_rep(member: discord.Member, amount: int) -> list:
 async def thank(member: discord.Member, host_id: int):
     """One rep from a host: once a day per host, and paid a few times a day.
 
-    Returns (Beans paid, roles earned), or None when this host already gave today.
+    Returns (Tokens paid, roles earned), or None when this host already gave today.
     """
     ref = db.reference(DAYS).child(str(member.id))
     day = ref.get() or {}
@@ -78,12 +78,14 @@ async def thank(member: discord.Member, host_id: int):
     if host_id in hosts:
         return None
     paid = day.get("paid", 0)
-    beans = REP_BEANS if paid < REP_PAID_DAILY else 0
-    ref.set({"day": day["day"], "hosts": [*hosts, host_id], "paid": paid + bool(beans)})
+    tokens = REP_TOKENS if paid < REP_PAID_DAILY else 0
+    ref.set(
+        {"day": day["day"], "hosts": [*hosts, host_id], "paid": paid + bool(tokens)}
+    )
     roles = await add_rep(member, 1)
-    if beans:
-        await wallet.change(member.id, beans=beans, reason="rep")
-    return beans, roles
+    if tokens:
+        await wallet.change(member.id, tokens=tokens, reason="rep")
+    return tokens, roles
 
 
 class AddRewardModal(Modal, title="Add a rep role"):

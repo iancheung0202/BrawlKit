@@ -44,12 +44,14 @@ from brawl.Currency.config import (
     QUEST_BEAN_REWARDS,
     QUEST_BONUS_BEANS,
     REFERRAL_ACCOUNT_DAYS,
-    REFERRAL_BRIDGE_BEANS,
+    REFERRAL_BRIDGE_STAMPS,
     REFERRAL_MASTER_SELLS,
     REFERRAL_TRAINEE_BEANS,
-    REP_BEANS,
     REP_PAID_DAILY,
+    REP_TOKENS,
     ROAST_TYPES,
+    STAMP_BOX_EVERY,
+    STAMP_BOXES,
     STAMP_GOALS,
     STAMP_MONTHLY_LIMIT,
     STAMP_PRICE_RANGES,
@@ -60,6 +62,7 @@ from brawl.Currency.config import (
     TABLE_QUEST_TYPES,
     TABLE_SEATS,
     TABLE_SEATS_NEEDED,
+    TABLE_WINNER_STAMPS,
     TABLE_WINNER_TOKENS,
     THERMOMETER_COOLING,
     THERMOMETER_DAILY_TOKEN_DROPS,
@@ -789,8 +792,16 @@ def order_page():
             card.text(x + 30, y + 57, f"{price}", 20, GOLD)
             if spot:
                 arrow(card, x - 22, y + 62, 8)
-    card.icon("kit/icon_ranked_round_token", 46, top + 242, 26)
-    card.text(80, top + 246, "1 Stamp a day, then /redeem", 16, GREEN, "la", 2)
+    card.icon("items/mega_box", 46, top + 242, 26)
+    card.text(
+        80,
+        top + 246,
+        f"x{STAMP_BOXES} Mega Boxes on every {STAMP_BOX_EVERY}th Stamp",
+        16,
+        GREEN,
+        "la",
+        2,
+    )
     month = f"{STAMP_MONTHLY_LIMIT} passes a month for the whole server"
     card.text(854, top + 246, month, 16, MUTED, "ra", 2)
     return card.jpg().getvalue()
@@ -989,15 +1000,14 @@ def social_page():
         "TABLES AND INVITES", "Team up for a weekly goal. Bring friends for more.", 732
     )
     section(card, 124, 262, "TABLES")
-    card.text(
-        46, 148, "Weekly quest: Beans the table earns together", 15, MUTED, "la", 2
-    )
-    card.text(854, 148, "for each member", 15, MUTED, "ra", 2)
-    left, width = 86, 728
+    card.text(46, 148, "Weekly quest", 15, GOLD, "la", 2)
+    card.text(46, 171, "Table earns", 15, MUTED, "la", 2)
+    card.text(46, 229, "Each member gets", 15, MUTED, "la", 2)
+    left, width = 106, 704
     card.bar(left, 198, width, 16, 0.5)
     for spot, (target, reward) in enumerate(zip(quest["targets"], quest["rewards"])):
         x = left + width * (spot + 1) / len(quest["targets"])
-        card.check(x - 14, 192, spot < 2)
+        card.stop(x - 14, 192, spot < 2)
         card.text(x, 170, f"{target // 1000}k", 17, WHITE, "ma", 2)
         card.icon("kit/bean", x - 38, 228, 18)
         card.text(x - 16, 228, f"+{reward:,}", 16, GOLD, "la", 2)
@@ -1013,11 +1023,18 @@ def social_page():
             width=3 * SCALE,
         )
     card.text(46, 348, f"{TABLE_SEATS_NEEDED} seats start the quest", 15, GOLD, "la", 2)
-    card.text(854, 284, "Top table of the week", 15, MUTED, "ra", 2)
-    prize = f"+{TABLE_WINNER_TOKENS} each"
-    card.text(854, 306, prize, 26, GOLD, "ra")
-    card.icon("kit/token", 818 - card.measure(prize, 26), 308, 28)
-    card.icon("kit/icon_trophy", 760 - card.measure(prize, 26), 304, 36)
+    card.text(854, 284, "Top table of the week, each member", 15, MUTED, "ra", 2)
+    x = 854
+    for picture, amount in (
+        ("kit/icon_ranked_round_token", TABLE_WINNER_STAMPS),
+        ("kit/token", TABLE_WINNER_TOKENS),
+    ):
+        prize = f"+{amount}"
+        card.text(x, 306, prize, 26, GOLD, "ra")
+        x -= card.measure(prize, 26) + 36
+        card.icon(picture, x, 308, 28)
+        x -= 18
+    card.icon("kit/icon_trophy", x - 44, 304, 36)
     card.text(854, 348, "New week on Sunday, 00:00 UTC", 15, MUTED, "ra", 2)
 
     top = 418
@@ -1034,8 +1051,8 @@ def social_page():
         (
             "ready",
             "They sell",
-            f"+{REFERRAL_BRIDGE_BEANS:,}",
-            "kit/bean",
+            f"+{REFERRAL_BRIDGE_STAMPS}",
+            "kit/icon_ranked_round_token",
             f"+{INVITEE_SELL_BEANS}",
             "Bridge Barista",
         ),
@@ -1069,7 +1086,7 @@ def social_page():
     )
     x = 46
     for line in checks:
-        card.icon("kit/icon_ranked_round_token", x, top + 190, 26)
+        card.tick(x + 2, top + 192, 22)
         card.text(x + 34, top + 194, line, 16, WHITE, "la", 2)
         x += 34 + card.measure(line, 16) + 34
     card.text(
@@ -1165,9 +1182,9 @@ def teams_page():
     rows = (
         ("kit/icon_like", "Play with a host who selects you", "+1 rep"),
         (
-            "kit/bean",
-            f"Every rep also pays Beans, up to {REP_PAID_DAILY} reps a day",
-            f"+{REP_BEANS} each",
+            "kit/token",
+            f"Every rep also pays a Token, up to {REP_PAID_DAILY} reps a day",
+            f"+{REP_TOKENS} each",
         ),
     )
     for row, (picture, name, value) in enumerate(rows):
@@ -1177,6 +1194,8 @@ def teams_page():
         fitted(card, picture, 46, y, 28)
         card.text(86, y + 4, name, 18, WHITE, "la", 2)
         card.text(854, y + 1, value, 22, GOLD, "ra")
+        if picture == "kit/token":
+            card.icon(picture, 818 - card.measure(value, 22), y + 2, 26)
     card.text(
         46,
         top + 112,
@@ -1204,6 +1223,7 @@ def teams_page():
         2,
     )
     card.text(854, top + 69, f"+{TOPIC_BEANS}", 22, GOLD, "ra")
+    card.icon("kit/bean", 820 - card.measure(f"+{TOPIC_BEANS}", 22), top + 70, 26)
     return card.jpg().getvalue()
 
 

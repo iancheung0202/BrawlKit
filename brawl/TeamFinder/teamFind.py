@@ -8,8 +8,8 @@ from discord.ui import Button, Modal, Select, TextInput, View
 from firebase_admin import db
 
 from brawl.Currency.card import faces, render, roster
-from brawl.Currency.config import REP_BEANS
-from brawl.Currency.helper import BEAN_EMOTE, MAIN_GUILD_ID
+from brawl.Currency.config import REP_TOKENS
+from brawl.Currency.helper import MAIN_GUILD_ID, TOKEN_EMOTE
 from brawl.Currency.home import background
 from brawl.Currency.panel import notice
 from brawl.Milestone.milestone import in_cafe
@@ -135,7 +135,7 @@ def start_embed(region: str) -> discord.Embed:
         "2. For Trophies, pick the game mode.\n"
         "3. Press **Continue** and enter your team code.\n"
         f"-# When you close the request, select who played. Each gets {LIKE} `1` rep "
-        f"and {BEAN_EMOTE} `{REP_BEANS}`."
+        f"and {TOKEN_EMOTE} `{REP_TOKENS}`."
     )
     embed.title = f"Find teammates in {REGIONS[region]}"
     return embed
@@ -315,9 +315,9 @@ class TeammatesView(View):
             result = await thank(member, self.request["host"]) if member else None
             if not result:
                 continue
-            beans, roles = result
+            tokens, roles = result
             line = f"{member.mention} earned {LIKE} `1` rep"
-            line += f" and {BEAN_EMOTE} `{beans}`" if beans else ""
+            line += f" and {TOKEN_EMOTE} `{tokens}`" if tokens else ""
             line += "".join(f", and the {role.mention} role" for role in roles)
             lines.append(line)
         if lines:
@@ -417,7 +417,7 @@ class RequestView(View):
         await interaction.response.send_message(
             embed=notice(
                 f"Select the teammates who played with you. Each gets {LIKE} `1` rep "
-                f"and {BEAN_EMOTE} `{REP_BEANS}`."
+                f"and {TOKEN_EMOTE} `{REP_TOKENS}`."
             ),
             view=TeammatesView(message, request, members),
             ephemeral=True,

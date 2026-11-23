@@ -11,6 +11,7 @@ from brawl.Currency.card import (
     WHITE,
     Card,
     box,
+    gain,
 )
 from brawl.Currency.config import (
     DAILY_BEANS,
@@ -30,7 +31,7 @@ PASSES = {
 def gains(card, x, y, rewards, size=26):
     """Rewards side by side, each as its icon and a +amount."""
     for picture, amount in rewards:
-        label = f"+{amount:,}"
+        label = gain(picture, amount)
         card.icon(picture, x, y + 2, size + 2)
         card.text(x + size + 10, y, label, size, GOLD)
         x += size + 28 + card.measure(label, size)
@@ -97,9 +98,7 @@ def draw_clock_in(shift):
 
 def order_pay(card, y, progress):
     """Under the tasks: what the order just paid."""
-    rewards = [("kit/bean", progress["beans"])] if progress["beans"] else []
-    if progress["stamp"]:
-        rewards.append(("kit/icon_ranked_round_token", 1))
+    rewards = earned(progress) if progress["beans"] else earned(progress)[1:]
     card.text(
         36,
         y + 6,
@@ -109,7 +108,7 @@ def order_pay(card, y, progress):
         "la",
         2,
     )
-    width = sum(48 + card.measure(f"+{amount:,}", 20) for _, amount in rewards) - 28
+    width = sum(48 + card.measure(gain(*reward), 20) for reward in rewards) - 28
     gains(card, 604 - width, y + 2, rewards, 20)
 
 
@@ -175,12 +174,16 @@ def earned(order):
     rewards = [("kit/bean", order["beans"])]
     if order["stamp"]:
         rewards.append(("kit/icon_ranked_round_token", 1))
+    if order.get("boxes"):
+        rewards.append(("items/mega_box", order["boxes"]))
     return rewards
 
 
 def right(card, y, rewards, size):
     """Rewards ending at the right edge of a strip."""
-    width = sum(size + 28 + card.measure(f"+{n:,}", size) for _, n in rewards) - 18
+    width = (
+        sum(size + 28 + card.measure(gain(*reward), size) for reward in rewards) - 18
+    )
     gains(card, 604 - width, y, rewards, size)
 
 

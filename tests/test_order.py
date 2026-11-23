@@ -338,3 +338,31 @@ def test_the_clock_in_card_grows_to_show_what_the_order_paid():
     plain = Image.open(rewardcard.draw_clock_in(shift)).height
     paid = {"beans": 1000, "stamp": True, "redeem": None}
     assert Image.open(rewardcard.draw_clock_in({**shift, "order": paid})).height > plain
+
+
+def test_every_fifth_stamp_pays_mega_boxes_up_to_the_top_goal(cafe):
+    from brawl.Currency.config import STAMP_BOXES
+    from brawl.Currency.db import u_mega_boxes
+
+    assert stampcard.boxes(3, 4) == 0
+    assert stampcard.boxes(4, 5) == STAMP_BOXES
+    assert stampcard.boxes(44, 45) == STAMP_BOXES
+    assert stampcard.boxes(45, 50) == 0
+    u_stamp_card(USER).set({"count": 4})
+    assert stampcard.add(USER) == STAMP_BOXES
+    assert stampcard.add(USER) == 0
+    assert stampcard.stamps(USER) == 6
+    assert u_mega_boxes(USER).get() == STAMP_BOXES
+
+
+def test_the_fifth_order_stamp_shows_its_boxes(order):
+    from brawl.Currency.config import STAMP_BOXES
+
+    u_stamp_card(USER).set({"count": 4})
+    level(order, 1)
+    do(order, brew_start=1, brew_sells=1)
+    paid = do(order, chat_earnings=ORDER_CHAT_BEANS)
+    assert paid.stamp and paid.boxes == STAMP_BOXES
+    assert ("items/mega_box", STAMP_BOXES) in rewardcard.earned(
+        {"beans": 1, "stamp": True, "boxes": paid.boxes}
+    )

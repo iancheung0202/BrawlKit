@@ -4,6 +4,8 @@ from brawl.Currency.card import BACKGROUND, BLUE, GOLD, GREEN, MUTED, RED, WHITE
 from brawl.Currency.config import (
     BACKGROUNDS,
     ROAST_TYPES,
+    STAMP_BOX_EVERY,
+    STAMP_BOXES,
     STAMP_GOALS,
     STAMP_MONTHLY_LIMIT,
 )
@@ -45,6 +47,8 @@ def draw_order(card, tasks, store):
         )
     done = sum(task[2] for task in tasks)
     card.text(420, 132, f"{done} of {len(tasks)} done", 20, GOLD, "ra")
+    card.icon("kit/icon_ranked_round_token", 46, 337, 20)
+    card.text(72, 340, "Complete all for 1 Stamp", 14, GOLD, "la", 2)
     for row, (name, state, finished, part) in enumerate(tasks):
         card.task(46, 166 + row * 58, 374, name, state, finished, part)
     card.next_order(420, 340, "ra")
@@ -134,11 +138,26 @@ def draw_stamp_card(member):
     stamps = member["stamps"]
     card.title("STAMP CARD", "You get a Stamp each day you finish Today's Order.")
     card.stat(
-        "Passes this month", f"{member['redeemed']} of {STAMP_MONTHLY_LIMIT} redeemed"
+        "Whole server, this month",
+        f"{member['redeemed']} of {STAMP_MONTHLY_LIMIT} redeemed",
     )
     card.panel(26, 118, 848, 232)
-    card.stamps(84, 156, stamps, max(STAMP_GOALS.values()), STAMP_ROW, 52, 19)
+    card.stamps(
+        84,
+        156,
+        stamps,
+        max(STAMP_GOALS.values()),
+        STAMP_ROW,
+        52,
+        19,
+        (STAMP_BOX_EVERY, "items/mega_box", STAMP_BOXES),
+    )
     card.text(48, 308, f"{stamps} Stamps", 24)
+    boxes = f"on every {STAMP_BOX_EVERY}th Stamp"
+    x = 450 - (card.measure(boxes, 16) + 40) / 2
+    card.icon("items/mega_box", x, 306, 28)
+    card.text(x + 32, 320, str(STAMP_BOXES), 15, WHITE, "ra", 2)
+    card.text(x + 40, 312, boxes, 16, MUTED, "la", 2)
     today = (
         "Stamped today"
         if member["stamped"]

@@ -39,6 +39,8 @@ class Progress(list):
 
     beans = 0
     stamp = False
+    # Mega Boxes the Stamp came with, when it was a fifth Stamp.
+    boxes = 0
     # The pass the member can redeem now, named once their Stamps reach its goal.
     redeem = None
 
@@ -176,10 +178,12 @@ async def update_quest(
         data["bonus_awarded"] = True
         beans += bonus
         messages.stamp = True
-        await events.emit("order", user_id)
-        from brawl.Currency.stampcard import TIERS, stamps
+        from brawl.Currency.stampcard import TIERS, boxes, stamps
 
+        before = stamps(user_id)
+        await events.emit("order", user_id)
         have = stamps(user_id)
+        messages.boxes = boxes(before, have)
         messages.redeem = next(
             (
                 TIERS[tier]
@@ -222,6 +226,7 @@ async def order_card(user_id, messages):
         "beans": getattr(messages, "beans", 0),
         "stamp": getattr(messages, "stamp", False),
         "redeem": getattr(messages, "redeem", None),
+        "boxes": getattr(messages, "boxes", 0),
         "background": background(user_id),
     }
     return await render(draw_order, progress, name="order")

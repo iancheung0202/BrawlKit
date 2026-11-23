@@ -16,7 +16,7 @@ from brawl.Currency.config import (
     INVITEE_BREW_BEANS,
     INVITEE_SELL_BEANS,
     REFERRAL_ACCOUNT_DAYS,
-    REFERRAL_BRIDGE_BEANS,
+    REFERRAL_BRIDGE_STAMPS,
     REFERRAL_MASTER_SELLS,
     REFERRAL_TRAINEE_BEANS,
     THERMOMETER_COOLING,
@@ -46,6 +46,7 @@ from brawl.Currency.helper import (
     MASTER_ROLE_ID,
     NO_EMOTE,
     ROAST_TYPES,
+    STAMP_EMOTE,
     TOKEN_EMOTE,
     TRAINEE_ROLE_ID,
     get_current_month_key,
@@ -594,8 +595,8 @@ class CurrencySystem(commands.Cog):
             mapping["brew_done"] = True
             role_granted = TRAINEE_ROLE_ID
             await self.add_beans(inviter_id, REFERRAL_TRAINEE_BEANS)
-            reward_message = f"🎉 Your invitee {invitee.mention} brewed their first coffee! You **earned {BEAN_EMOTE} `300` Beans** and unlocked the `Trainee Barista` role!"
-            log_entry = f"🎯 **Milestone Reached:** <@&{TRAINEE_ROLE_ID}>\n🎁 **Reward:** `+300` Beans to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
+            reward_message = f"🎉 Your invitee {invitee.mention} brewed their first coffee! You **earned {BEAN_EMOTE} `{REFERRAL_TRAINEE_BEANS:,}` Beans** and unlocked the `Trainee Barista` role!"
+            log_entry = f"🎯 **Milestone Reached:** <@&{TRAINEE_ROLE_ID}>\n🎁 **Reward:** `+{REFERRAL_TRAINEE_BEANS:,}` Beans to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
 
         elif (
             milestone_type == "bridge"
@@ -605,9 +606,12 @@ class CurrencySystem(commands.Cog):
             milestone["bridge_done"] = True
             mapping["sell_done"] = True
             role_granted = BRIDGE_ROLE_ID
-            await self.add_beans(inviter_id, REFERRAL_BRIDGE_BEANS)
-            reward_message = f"🎉 Your invitee {invitee.mention} sold their first coffee! You **earned {BEAN_EMOTE} `3,000` Beans** and unlocked the `Bridge Barista` role!"
-            log_entry = f"🎯 **Milestone Reached:** <@&{BRIDGE_ROLE_ID}>\n🎁 **Reward:** `+3000` Beans to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
+            from brawl.Currency.stampcard import add as add_stamps
+
+            boxes = add_stamps(inviter_id, REFERRAL_BRIDGE_STAMPS)
+            extra = f" and `x{boxes}` Mega Boxes" if boxes else ""
+            reward_message = f"🎉 Your invitee {invitee.mention} sold their first coffee! You **earned {STAMP_EMOTE} `{REFERRAL_BRIDGE_STAMPS}` Stamp{extra}** and unlocked the `Bridge Barista` role!"
+            log_entry = f"🎯 **Milestone Reached:** <@&{BRIDGE_ROLE_ID}>\n🎁 **Reward:** `+{REFERRAL_BRIDGE_STAMPS}` Stamp{extra} to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
 
         elif milestone_type == "sell":
             milestone["sells"] = milestone.get("sells", 0) + 1

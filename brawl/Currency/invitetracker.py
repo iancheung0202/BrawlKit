@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import random
 import time
 
 import discord
@@ -8,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from brawl.Currency.card import render
+from brawl.Currency.config import WELCOME_TOKEN_CHANCE
 from brawl.Currency.db import (
     g_invites_member_data,
     g_invites_monthly,
@@ -20,6 +22,7 @@ from brawl.Currency.helper import (
     INVITE_LOG,
     MAX_BUTTON_WELCOMES,
     NO_EMOTE,
+    TOKEN_EMOTE,
     WELCOME_BUTTON_REWARD,
     YES_EMOTE,
     get_current_month_key,
@@ -80,9 +83,13 @@ class WelcomeView(discord.ui.View):
                 await currency_cog.add_beans(
                     interaction.user.id, WELCOME_BUTTON_REWARD, skip_quest_check=True
                 )
+                lucky = ""
+                if random.random() < WELCOME_TOKEN_CHANCE:
+                    await currency_cog.add_tokens(interaction.user.id, 1)
+                    lucky = f" and a lucky {TOKEN_EMOTE} **1 Token**"
                 await interaction.response.send_message(
                     embed=discord.Embed(
-                        description=f"🎉 Thanks for welcoming {self.member.mention}! You earned <:StarrBean:1393442086279315456> **{WELCOME_BUTTON_REWARD} Beans**",
+                        description=f"🎉 Thanks for welcoming {self.member.mention}! You earned <:StarrBean:1393442086279315456> **{WELCOME_BUTTON_REWARD} Beans**{lucky}",
                         color=discord.Color.green(),
                     ),
                     ephemeral=True,

@@ -109,8 +109,8 @@ SHOWN = 10
 
 def draw_invites(invites):
     """This month's invites and the three referral steps."""
-    card = Card(640, 304, invites["background"])
-    card.panel(16, 24, 608, 264)
+    card = Card(640, 330, invites["background"])
+    card.panel(16, 24, 608, 290)
     card.tag(32, 12, "INVITES", GOLD)
     card.icon("kit/icon_inbox", 36, 50, 40)
     count = f"{invites['valid']}"
@@ -131,6 +131,9 @@ def draw_invites(invites):
         card.text(90, y + 28, need, 12, MUTED, "la", 2)
         card.text(588, y + 14, reward, 16, GOLD, "ra", 2)
         card.icon(icon, 556 - card.measure(reward, 16), y + 12, 24)
+    card.icon("kit/icon_calendar", 36, 276, 20)
+    reset = "Starts over on the 1st of each month, so you can earn these again."
+    card.text(64, 279, reset, 13, MUTED, "la", 2)
     return card.jpg()
 
 

@@ -79,7 +79,8 @@ STAR_DROP_RATES = {
     },
 }
 
-WELCOME_BUTTON_REWARD = 250
+WELCOME_BUTTON_REWARD = 500
+WELCOME_TOKEN_CHANCE = 0.05
 
 MAX_BUTTON_WELCOMES = 10
 
@@ -96,6 +97,9 @@ STAMP_PRICE_RANGES = {
 }
 
 STAMP_MONTHLY_LIMIT = 5
+# Mega Boxes paid each time a card reaches another multiple of this many Stamps
+STAMP_BOX_EVERY = 5
+STAMP_BOXES = 5
 
 LEGACY_STAMP_GOALS = {
     "daily_checkins": 30,
@@ -205,11 +209,11 @@ ITEM_STATIONS = {
 }
 
 DAILY_BEANS = 500
-# Team finder: Beans for a rep from a host, and how many reps a day pay
-REP_BEANS = 150
+# Team finder: Tokens for a rep from a host, and how many reps a day pay
+REP_TOKENS = 1
 REP_PAID_DAILY = 3
 # Beans a member gets when staff approve the /topic question they suggested
-TOPIC_BEANS = 500
+TOPIC_BEANS = 100
 BOOSTER_DAILY_BEANS = 700
 ULTRA_DAILY_BONUS = 1500
 LUCKY_DAILY_CHANCE = 0.1
@@ -278,12 +282,13 @@ BOSS_ODDS = (("mega_box", 0.5), ("star_drop", 0.25), ("nothing", 0.25))
 
 TABLE_SEATS = 10
 TABLE_SEATS_NEEDED = 5
-TABLE_WINNER_TOKENS = 3
+TABLE_WINNER_TOKENS = 5
+TABLE_WINNER_STAMPS = 1
 TABLE_KICK_DAYS = 14
 
 # Referral steps shown on the Invites card: (key, role, what it takes, icon, reward)
-REFERRAL_TRAINEE_BEANS = 300
-REFERRAL_BRIDGE_BEANS = 3000
+REFERRAL_TRAINEE_BEANS = 5000
+REFERRAL_BRIDGE_STAMPS = 1
 REFERRAL_MASTER_SELLS = 3
 REFERRAL_ACCOUNT_DAYS = 14
 INVITEE_BREW_BEANS = 150
@@ -300,8 +305,8 @@ REFERRAL_STEPS = (
         "bridge_done",
         "Bridge Barista",
         "A new member you invited sells",
-        "kit/bean",
-        f"+{REFERRAL_BRIDGE_BEANS:,}",
+        "kit/icon_ranked_round_token",
+        f"+{REFERRAL_BRIDGE_STAMPS}",
     ),
     (
         "master_done",
