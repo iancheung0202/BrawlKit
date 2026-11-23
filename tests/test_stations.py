@@ -86,15 +86,17 @@ def test_thermometer_levels_run_hot_to_cold():
 
 def test_token_rolls_follow_the_config(monkeypatch):
     boiling, hot, warm = THERMOMETER_LEVELS[:3]
-    monkeypatch.setattr(heat.random, "random", lambda: 0.001)
+    assert [level[2] for level in (boiling, hot, warm)] == [10, 5, 2]
+    monkeypatch.setattr(heat.random, "random", lambda: 0.0004)
     assert heat.roll_tokens(boiling) == (5, True)
     assert heat.roll_tokens(hot) == (1, False)
+    assert heat.roll_tokens(warm) == (1, False)
+    for roll, tokens in ((0.001, 3), (0.002, 2), (0.004, 1), (0.018, 1), (0.019, 0)):
+        monkeypatch.setattr(heat.random, "random", lambda: roll)
+        assert heat.roll_tokens(boiling) == (tokens, False)
+    monkeypatch.setattr(heat.random, "random", lambda: 0.006)
+    assert heat.roll_tokens(hot) == (1, False)
     assert heat.roll_tokens(warm) == (0, False)
-    monkeypatch.setattr(heat.random, "random", lambda: 0.019)
-    assert heat.roll_tokens(boiling)[0] in (1, 2)
-    assert heat.roll_tokens(hot) == (0, False)
-    monkeypatch.setattr(heat.random, "random", lambda: 0.02)
-    assert heat.roll_tokens(boiling) == (0, False)
 
 
 def test_token_drops_stop_at_the_daily_limit(cafe, monkeypatch):
@@ -137,6 +139,59 @@ def test_a_hot_chat_drops_tokens_as_a_card(cafe, monkeypatch):
     message.channel.send = AsyncMock()
     asyncio.run(cog.chat_system.process_message(message, cog))
     assert u_balance(USER).get()["Tokens"] == 5
-    files = message.channel.send.call_args.kwargs["files"]
-    assert [file.filename for file in files] == ["tokens.png"]
+    sent = message.channel.send.call_args_list
+    assert [call.kwargs["file"].filename for call in sent] == ["tokens.png"]
     assert chat
+
+
+def test_the_boss_visits_twice_in_each_half_of_the_day():
+    from brawl.Currency.config import BOSS_VISITS
+
+    hour = 3600
+    for _ in range(500):
+        times = boss.plan(0)
+        assert len(times) == BOSS_VISITS == 4
+        assert all(0 <= moment < 12 * hour for moment in times[:2])
+        assert all(12 * hour <= moment < 24 * hour for moment in times[2:])
+        gaps = [after - before for before, after in zip(times, times[1:])]
+        assert all(gap >= hour - 1 for gap in gaps)
+        assert all(gap <= 8 * hour for gap in (gaps[0], gaps[2]))
+
+
+def test_thermometer_beans_count_until_the_daily_reset(cafe, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(heat.time, "time", lambda: clock[0])
+    heat.count_beans(USER, 10, 2000)
+    heat.count_beans(USER, 5, 2000)
+    assert heat.beans_today(USER) == 15
+    clock[0] = 2001
+    assert heat.beans_today(USER) == 0
+
+
+def test_a_level_change_is_posted_and_a_dead_chat_keeps_one_notice(cafe):
+    cog = cafe.cogs["CurrencySystem"]
+    channel = MagicMock(send=AsyncMock(), last_message_id=None)
+    cog.thermometer_heat, cog.heat_told, cog.heat_notice = 74, {}, None
+    asyncio.run(cog.set_heat(74.5, channel))
+    channel.send.assert_not_awaited()
+    asyncio.run(cog.set_heat(76, channel))
+    assert channel.send.await_count == 1 and cog.heat_notice is None
+    # It cools with the chat quiet: one new post, then that post is edited.
+    notice = channel.send.return_value = MagicMock(id=5)
+    notice.edit = AsyncMock(return_value=notice)
+    asyncio.run(cog.set_heat(60))
+    assert channel.send.await_count == 2 and cog.heat_notice is notice
+    channel.last_message_id = 5
+    asyncio.run(cog.set_heat(10))
+    assert channel.send.await_count == 2 and notice.edit.await_count == 1
+    # Someone wrote after the notice, then it rose and fell again within minutes.
+    channel.last_message_id = 6
+    asyncio.run(cog.set_heat(60, channel))
+    asyncio.run(cog.set_heat(10))
+    assert channel.send.await_count == 2
+
+
+def test_the_ended_inspection_keeps_the_role_ping(cafe):
+    view, channel = inspection(cafe)
+    asyncio.run(view.end_inspection())
+    assert "<@&" in view.message.edit.await_args.kwargs["content"]

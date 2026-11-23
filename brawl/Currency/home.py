@@ -1,16 +1,33 @@
 import time
 
-from brawl.Currency.card import BACKGROUND, BLUE, GOLD, GREEN, MUTED, RED, WHITE, Card
+from brawl.Currency.card import (
+    BACKGROUND,
+    BLUE,
+    GOLD,
+    GREEN,
+    MUTED,
+    NAME_WIDTH,
+    WHITE,
+    Card,
+)
 from brawl.Currency.config import (
     BACKGROUNDS,
+    REFERRAL_BRIDGE_STAMPS,
+    REFERRAL_TRAINEE_STAMPS,
     ROAST_TYPES,
     STAMP_BOX_EVERY,
     STAMP_BOXES,
     STAMP_GOALS,
     STAMP_MONTHLY_LIMIT,
+    STAMP_PRICE_STREAK,
+    TABLE_WINNER_STAMPS,
+    TABLE_WINNER_TOKENS,
+    THERMOMETER_LEVELS,
 )
 from brawl.Currency.db import u_background
+from brawl.Currency.heat import level_of
 from brawl.Currency.ladder import next_unlock
+from brawl.Currency.stationcard import HEAT, flame
 
 STAMP_ROW = 15
 
@@ -18,16 +35,6 @@ STAMP_ROW = 15
 def clock(seconds):
     hours, minutes = divmod(int(seconds) // 60, 60)
     return f"{hours}h {minutes}m" if hours else f"{minutes}m"
-
-
-def goal(stamps):
-    for tier, name in (
-        ("brawl_pass", "Brawl Pass"),
-        ("brawl_pass_plus", "Brawl Pass Plus"),
-    ):
-        if stamps < STAMP_GOALS[tier]:
-            return tier, name
-    return "brawl_pass_plus", "Brawl Pass Plus"
 
 
 def draw_order(card, tasks, store):
@@ -88,33 +95,32 @@ def draw_brew(card, brew, unlocked):
     card.text(482, 326, hint, 17, GOLD, "la", 2)
 
 
-def draw_stamps(card, stamps, level, streak):
-    card.panel(26, 388, 848, 132)
-    card.tag(42, 376, "STAMP CARD", RED, WHITE)
-    tier, name = goal(stamps)
-    need = STAMP_GOALS[tier]
-    have = min(stamps, need)
-    card.icon("kit/icon_ranked_round_token", 46, 416, 46)
-    card.text(104, 408, f"{have} of {need} Stamps", 24, GOLD)
-    card.text(854, 412, name, 20, WHITE, "ra")
-    card.icon(f"kit/icon_{tier}", 786 - card.measure(name, 20), 406, 34)
-    left = need - have
-    card.bar(
-        104,
-        444,
-        750,
-        28,
-        have / need,
-        GOLD if left else GREEN,
-        f"{left} more to redeem" if left else "Ready, use /redeem",
+def draw_heat(card, heat, beans):
+    """One row: the thermometer now, what a message pays, and what it paid today."""
+    level = level_of(min(heat, 100))
+    tint = HEAT[level[1]]
+    card.panel(26, 388, 848, 68)
+    card.tag(42, 376, "THERMOMETER", tint)
+    card.icon(flame(level), 44, 404, 40)
+    card.text(94, 410, level[1], 24, tint)
+    x = 116 + card.measure(level[1], 24)
+    pay = level[2] or THERMOMETER_LEVELS[-2][2]
+    card.icon("kit/bean", x, 399, 24)
+    line = (
+        f"+{pay} a message, no daily limit"
+        if level[2]
+        else f"+{pay} a message when Warm"
     )
-    card.text(46, 492, next_unlock(level), 15, MUTED, "la", 2)
-    card.text(854, 492, f"{streak}-day streak", 15, MUTED, "ra", 2)
+    card.text(x + 30, 400, line, 18, GOLD if level[2] else WHITE, "la", 2)
+    card.text(x, 428, "Extra Beans, outside the chat task", 14, MUTED, "la", 2)
+    gain = f"+{beans:,} today"
+    card.text(854, 411, gain, 19, GOLD, "ra", 2)
+    card.icon("kit/bean", 822 - card.measure(gain, 19), 409, 26)
 
 
 def draw_home(member):
-    card = Card(900, 540, member["background"])
-    card.header(
+    card = Card(900, 512, member["background"])
+    under = card.header(
         member["name"],
         member["avatar"],
         member["level"],
@@ -122,24 +128,65 @@ def draw_home(member):
         member["xp_needed"],
         member["beans"],
         member["tokens"],
+        member["stamps"],
     )
+    card.text(under, 91, next_unlock(member["level"]), 12, MUTED, "la", 2)
     if member.get("rep"):
-        x = 130 + card.measure(card.fit(member["name"], 32, 380), 32)
+        x = 130 + card.measure(card.fit(member["name"], 32, NAME_WIDTH), 32)
         card.icon("kit/icon_like", x, 27, 26)
         card.text(x + 32, 27, f"{member['rep']:,}", 20, WHITE, "la", 2)
     draw_order(card, member["tasks"], member.get("store", "the store"))
+    card.icon("kit/icon_calendar", 44, 132, 20)
+    card.text(70, 136, f"{member['streak']}-day streak", 15, MUTED, "la", 2)
     draw_brew(card, member["brew"], member["brewing"])
-    draw_stamps(card, member["stamps"], member["level"], member["streak"])
+    draw_heat(card, member.get("heat", 0), member.get("heat_beans", 0))
+    draw_more(card, 476)
     return card.jpg()
 
 
+def draw_more(card, y):
+    """One line: what the other pages pay, so their buttons get pressed."""
+    pays = (
+        ("Stamp Card", (("items/mega_box", f"x{STAMP_BOXES}"),)),
+        (
+            "Invites",
+            (
+                (
+                    "kit/icon_ranked_round_token",
+                    f"+{REFERRAL_TRAINEE_STAMPS + REFERRAL_BRIDGE_STAMPS}",
+                ),
+                ("kit/token", "+50%"),
+            ),
+        ),
+        (
+            "Table",
+            (
+                ("kit/token", f"+{TABLE_WINNER_TOKENS}"),
+                ("kit/icon_ranked_round_token", f"+{TABLE_WINNER_STAMPS}"),
+            ),
+        ),
+    )
+    card.text(30, y, "MORE WAYS TO EARN BELOW", 15, GOLD, "la", 2)
+    x = 874
+    for name, prizes in reversed(pays):
+        for picture, amount in reversed(prizes):
+            x -= card.measure(amount, 16)
+            card.text(x, y - 1, amount, 16, WHITE, "la", 2)
+            x -= 28
+            card.icon(picture, x, y - 4, 24)
+            x -= 8
+        x -= card.measure(name, 15)
+        card.text(x, y, name, 15, MUTED, "la", 2)
+        x -= 34
+
+
 def draw_stamp_card(member):
-    card = Card(900, 532, member["background"])
+    card = Card(900, 580, member["background"])
     stamps = member["stamps"]
     card.title("STAMP CARD", "You get a Stamp each day you finish Today's Order.")
     card.stat(
-        "Whole server, this month",
-        f"{member['redeemed']} of {STAMP_MONTHLY_LIMIT} redeemed",
+        "Passes redeemed this month",
+        f"{member['redeemed']} of {STAMP_MONTHLY_LIMIT}",
     )
     card.panel(26, 118, 848, 232)
     card.stamps(
@@ -192,12 +239,30 @@ def draw_stamp_card(member):
             stamps / need,
             GREEN if left <= 0 else GOLD,
             (
-                "Ready, use /redeem"
+                "Ready to use /redeem"
                 if left <= 0
                 else f"{left} more Stamp{'s' * (left != 1)}"
             ),
         )
+    draw_streak(card, member["streak"], 520)
     return card.jpg()
+
+
+def draw_streak(card, streak, y):
+    """How the Clock In streak lowers the Token price of a pass."""
+    start, lowest = STAMP_PRICE_STREAK
+    card.icon("kit/icon_calendar", 30, y, 32)
+    card.text(72, y + 5, f"{streak}-day streak", 20, GOLD)
+    line = (
+        f"Passes cost fewer Tokens from a {start}-day streak"
+        if streak < start
+        else (
+            f"Your passes cost fewer Tokens each day, down to {lowest} days"
+            if streak < lowest
+            else "Your passes are at their lowest Token price"
+        )
+    )
+    card.text(872, y + 9, line, 16, MUTED, "ra", 2)
 
 
 def background(user_id):

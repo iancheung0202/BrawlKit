@@ -2,7 +2,11 @@ import random
 import time
 
 from brawl.Currency.config import THERMOMETER_DAILY_TOKEN_DROPS, THERMOMETER_LEVELS
-from brawl.Currency.db import g_shop_effects, u_thermometer_cooldown
+from brawl.Currency.db import (
+    g_shop_effects,
+    u_thermometer_beans,
+    u_thermometer_cooldown,
+)
 
 DAY = 86400
 
@@ -46,6 +50,24 @@ def take_drop(user_id):
     start = (ref.get() or {}).get("first_reward_time") if count else None
     ref.set({"count": count + 1, "first_reward_time": start or time.time()})
     return count + 1
+
+
+def beans_today(user_id):
+    """Beans the thermometer paid this member since the last daily reset."""
+    data = u_thermometer_beans(user_id).get() or {}
+    return data.get("beans", 0) if time.time() < data.get("reset_time", 0) else 0
+
+
+def count_beans(user_id, amount, reset_time):
+    u_thermometer_beans(user_id).set(
+        {"beans": beans_today(user_id) + amount, "reset_time": reset_time}
+    )
+
+
+def next_up(level):
+    """The level above this one, or None at the top."""
+    spot = THERMOMETER_LEVELS.index(level)
+    return THERMOMETER_LEVELS[spot - 1] if spot else None
 
 
 async def setup(bot):

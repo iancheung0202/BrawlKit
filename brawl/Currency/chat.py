@@ -18,7 +18,7 @@ from brawl.Currency.config import (
     THERMOMETER_MAX,
     THERMOMETER_MESSAGE_HEAT,
 )
-from brawl.Currency.db import g_thermometer, u_daily_chat_earnings
+from brawl.Currency.db import u_daily_chat_earnings
 from brawl.Currency.helper import (
     MAIN_CHAT_CHANNELS,
     NO_EMOTE,
@@ -155,11 +155,13 @@ class ChatRewardSystem:
         if message.channel.id in MAIN_CHAT_CHANNELS and not heat.freeze(
             message.guild.id
         ):
-            cog.thermometer_heat = min(
-                THERMOMETER_MAX,
-                cog.thermometer_heat + random.randint(*THERMOMETER_MESSAGE_HEAT),
+            await cog.set_heat(
+                min(
+                    THERMOMETER_MAX,
+                    cog.thermometer_heat + random.randint(*THERMOMETER_MESSAGE_HEAT),
+                ),
+                message.channel,
             )
-            g_thermometer(message.guild.id).update({"heat": cog.thermometer_heat})
 
         level = heat.level_of(min(cog.thermometer_heat, 100))
         if level[2]:
@@ -282,12 +284,15 @@ class ChatRewardSystem:
                         "limit": MAX_DAILY_CHAT_BEAN_LIMIT,
                         "reset": reset_time,
                         "order": order and paid(order),
+                        "heat": level,
                     },
                     name="chat",
                 )
-                await message.channel.send(files=[strip, *files])
-            elif drop:
-                await message.channel.send(message.author.mention, files=files)
+                files.insert(0, strip)
+            # One picture a message: Discord crops several into small squares.
+            for spot, file in enumerate(files):
+                mention = None if spot or reward_triggered else message.author.mention
+                await message.channel.send(mention, file=file)
         except Exception as e:
             print(f"Failed to send bean reward message: {e}")
 

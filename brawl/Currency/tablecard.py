@@ -37,9 +37,16 @@ def quest(card, y, table):
     beans, done = table["weekly_beans"], table["tier"]
     targets = QUEST["targets"]
     card.text(36, y - 24, "Weekly quest", 13, GOLD, "la", 2)
-    card.text(36, y + 2, "Table earns", 13, MUTED, "la", 2)
-    card.text(36, y + 62, "Each gets", 13, MUTED, "la", 2)
-    left, width = 76, 492
+    card.text(
+        46 + card.measure("Weekly quest", 13),
+        y - 24,
+        "Beans the table earns, and what each member gets",
+        13,
+        MUTED,
+        "la",
+        2,
+    )
+    left, width = 44, 524
     card.bar(left, y + 30, width, 16, beans / targets[-1])
     for step, (target, reward) in enumerate(zip(targets, QUEST["rewards"])):
         x = left + width * target / targets[-1]
@@ -75,7 +82,7 @@ def draw_table(table):
     seats = table["members"]
     rows = (len(seats) + 1) // 2
     recognized = len(seats) >= TABLE_SEATS_NEEDED
-    top = 276 if recognized else 150
+    top = 276 if recognized else 318
     card = Card(640, top + 30 + rows * 44 + 24, table["background"])
     card.panel(16, 24, 608, card.height - 40)
     card.tag(32, 12, table.get("tag", "TABLE"), color, WHITE)
@@ -92,19 +99,49 @@ def draw_table(table):
     else:
         label = f"{len(seats)} / {TABLE_SEATS_NEEDED} seats to start the quest"
         card.bar(36, 112, 568, 24, len(seats) / TABLE_SEATS_NEEDED, color, label)
+        quest(card, 178, {"weekly_beans": 0, "tier": -1})
+        top_prize(card, 278)
     card.text(36, top, "Seated", 17, WHITE, "la", 2)
     card.text(604, top + 2, f"{len(seats)} / {TABLE_SEATS}", 14, MUTED, "ra", 2)
     for spot, (name, share, host, you, avatar) in enumerate(seats):
         x, y = 36 + spot % 2 * 288, top + 30 + spot // 2 * 44
-        card.slot(x, y, 280, 38, GOLD if you else (0, 0, 0))
+        card.slot(x, y, 280, 38)
         card.avatar(avatar, x + 8, y + 6, 26, 6)
-        name = card.fit(named(name), 16, 110 if host else 150)
-        card.text(x + 44, y + 9, name, 16, WHITE, "la", 2)
-        if host:
-            card.text(
-                x + 52 + card.measure(name, 16), y + 11, "HOST", 12, color, "la", 2
-            )
+        tags = [
+            (tag, tint)
+            for tag, on, tint in (("HOST", host, color), ("YOU", you, MUTED))
+            if on
+        ]
+        room = 150 - sum(card.measure(tag, 12) + 8 for tag, _ in tags)
+        name = card.fit(named(name), 16, room)
+        card.text(x + 44, y + 9, name, 16, GOLD if you else WHITE, "la", 2)
+        at = x + 52 + card.measure(name, 16)
+        for tag, tint in tags:
+            card.text(at, y + 11, tag, 12, tint, "la", 2)
+            at += card.measure(tag, 12) + 8
         card.text(x + 268, y + 10, f"{share:,}", 15, GOLD if share else GREY, "ra", 2)
+    return card.jpg()
+
+
+def draw_no_table(member):
+    """For a member with no seat: what a table pays and how to get one."""
+    card = Card(640, 318, member["background"])
+    card.panel(16, 24, 608, 278)
+    card.tag(32, 12, "TABLE", GOLD)
+    card.text(36, 42, "You have no table yet", 28)
+    line = f"Sit with {TABLE_SEATS_NEEDED} or more members. Beans you all earn in chat pay everyone."
+    card.text(36, 80, line, 14, MUTED, "la", 2)
+    quest(card, 136, {"weekly_beans": 0, "tier": 0})
+    top_prize(card, 236)
+    card.text(
+        36,
+        270,
+        "Join one with /table seat, or start one with /table reserve",
+        14,
+        GOLD,
+        "la",
+        2,
+    )
     return card.jpg()
 
 

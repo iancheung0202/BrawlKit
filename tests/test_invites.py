@@ -7,7 +7,7 @@ from brawl.Currency import invitecard
 from brawl.Currency.config import (
     REFERRAL_BRIDGE_STAMPS,
     REFERRAL_STEPS,
-    REFERRAL_TRAINEE_BEANS,
+    REFERRAL_TRAINEE_STAMPS,
 )
 from brawl.Currency.db import (
     g_invites_member_data,
@@ -34,6 +34,7 @@ def test_the_summary_reads_this_months_counts_and_steps(cafe):
     summary = invitecard.summary(MAIN_GUILD_ID, ME)
     assert (summary["valid"], summary["total"], summary["left"]) == (4, 6, 2)
     assert summary["done"] == {"trainee_done": True}
+    assert 1 <= summary["days"] <= 31
     assert invitecard.draw_invites(summary).read(2) == b"\xff\xd8"
 
 
@@ -45,7 +46,7 @@ def test_a_member_with_no_invites_still_gets_a_card(cafe):
 
 def test_the_card_rewards_are_the_ones_the_bot_pays():
     rewards = {key: reward for key, _, _, _, reward in REFERRAL_STEPS}
-    assert rewards["trainee_done"] == f"+{REFERRAL_TRAINEE_BEANS:,}"
+    assert rewards["trainee_done"] == f"+{REFERRAL_TRAINEE_STAMPS}"
     assert rewards["bridge_done"] == f"+{REFERRAL_BRIDGE_STAMPS}"
 
 

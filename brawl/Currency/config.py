@@ -96,6 +96,9 @@ STAMP_PRICE_RANGES = {
     "brawl_pass_plus": (300, 500),
 }
 
+# The Clock In streak where a pass starts to cost fewer Tokens, and where it is cheapest.
+STAMP_PRICE_STREAK = (10, 100)
+
 STAMP_MONTHLY_LIMIT = 5
 # Mega Boxes paid each time a card reaches another multiple of this many Stamps
 STAMP_BOX_EVERY = 5
@@ -265,19 +268,25 @@ async def setup(bot):
 # Thermometer: each row is the heat it starts at, its name, the Beans added to
 # every counted message, and the Token drops it can roll (odds, amounts).
 THERMOMETER_LEVELS = (
-    (100, "Boiling", 6, ((0.005, (5,)), (0.015, (1, 1, 2)))),
-    (75, "Hot", 4, ((0.01, (1,)),)),
-    (50, "Warm", 2, ()),
+    (100, "Boiling", 10, ((0.0005, (5,)), (0.001, (3,)), (0.002, (2,)), (0.015, (1,)))),
+    (75, "Hot", 5, ((0.01, (1,)),)),
+    (50, "Warm", 2, ((0.005, (1,)),)),
     (0, "Cold", 0, ()),
 )
 THERMOMETER_DAILY_TOKEN_DROPS = 3
 THERMOMETER_MESSAGE_HEAT = (1, 2)
 THERMOMETER_MAX = 130
+# The chat is told about a level once in this long, however often it flips.
+THERMOMETER_NEWS_SECONDS = 900
 # Heat lost each minute: (above this heat, points lost).
 THERMOMETER_COOLING = ((100, 20), (75, 10), (50, 5), (0, 2))
 
 BOSS_SECONDS = 300
-BOSS_VISITS = (3, 5)  # a day
+# Visits in each half of the UTC day, and the hours between two of the same half.
+BOSS_HALF_VISITS = 2
+BOSS_VISITS = BOSS_HALF_VISITS * 2  # a day
+BOSS_GAP_HOURS = (1, 8)
+BOSS_LATE_SECONDS = 600
 BOSS_ODDS = (("mega_box", 0.5), ("star_drop", 0.25), ("nothing", 0.25))
 
 TABLE_SEATS = 10
@@ -287,19 +296,19 @@ TABLE_WINNER_STAMPS = 1
 TABLE_KICK_DAYS = 14
 
 # Referral steps shown on the Invites card: (key, role, what it takes, icon, reward)
-REFERRAL_TRAINEE_BEANS = 5000
+REFERRAL_TRAINEE_STAMPS = 1
 REFERRAL_BRIDGE_STAMPS = 1
 REFERRAL_MASTER_SELLS = 3
 REFERRAL_ACCOUNT_DAYS = 14
-INVITEE_BREW_BEANS = 150
-INVITEE_SELL_BEANS = 500
+# What Master Barista pays, worded the same on every card.
+REFERRAL_MASTER_REWARD = "+50% every sell this month"
 REFERRAL_STEPS = (
     (
         "trainee_done",
         "Trainee Barista",
         "A new member you invited brews",
-        "kit/bean",
-        f"+{REFERRAL_TRAINEE_BEANS:,}",
+        "kit/icon_ranked_round_token",
+        f"+{REFERRAL_TRAINEE_STAMPS}",
     ),
     (
         "bridge_done",
@@ -313,6 +322,6 @@ REFERRAL_STEPS = (
         "Master Barista",
         f"{REFERRAL_MASTER_SELLS} sells by new members you invited",
         "kit/token",
-        "+50% per brew",
+        REFERRAL_MASTER_REWARD,
     ),
 )

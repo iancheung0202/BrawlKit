@@ -117,6 +117,7 @@ def test_a_drop_that_moves_the_order_is_sent_with_the_order_card(cafe, monkeypat
     message.channel.send = AsyncMock()
     asyncio.run(economy.chat_system.process_message(message, economy))
     sent = [call.kwargs for call in message.channel.send.call_args_list]
-    names = [file.filename for kwargs in sent for file in kwargs.get("files", [])]
+    # One picture a message, so Discord shows each in full.
+    names = [kwargs["file"].filename for kwargs in sent]
     assert names == ["tokens.png", "order.png"]
     assert "thermometer_bonuses" in u_quests(USER).child("daily/completed").get()

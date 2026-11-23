@@ -92,7 +92,15 @@ def draw_inventory(member):
     top = 178
     if not sections:
         card.panel(16, 166, 608, 64)
-        card.text(36, 186, "No effect items held or running.", 18, MUTED, "la", 2)
+        card.text(
+            36,
+            186,
+            "No effect items yet. They boost your Beans and brews.",
+            18,
+            MUTED,
+            "la",
+            2,
+        )
     for name, color, rows in sections:
         card.panel(16, top, 608, 26 + len(rows) * 44)
         card.tag(32, top - 12, name, color, BLACK)

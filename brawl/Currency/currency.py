@@ -8,18 +8,17 @@ from discord import app_commands
 from discord.ext import commands
 
 from brawl.Currency import heat, wallet
-from brawl.Currency.boss import start_inspection
+from brawl.Currency.boss import plan, start_inspection
 from brawl.Currency.card import render, roster
 from brawl.Currency.chat import ChatRewardSystem
 from brawl.Currency.config import (
-    BOSS_VISITS,
-    INVITEE_BREW_BEANS,
-    INVITEE_SELL_BEANS,
+    BOSS_LATE_SECONDS,
     REFERRAL_ACCOUNT_DAYS,
     REFERRAL_BRIDGE_STAMPS,
     REFERRAL_MASTER_SELLS,
-    REFERRAL_TRAINEE_BEANS,
+    REFERRAL_TRAINEE_STAMPS,
     THERMOMETER_COOLING,
+    THERMOMETER_NEWS_SECONDS,
 )
 from brawl.Currency.db import (
     g_boss_inspection,
@@ -53,8 +52,9 @@ from brawl.Currency.helper import (
 )
 from brawl.Currency.home import background
 from brawl.Currency.panel import DRAWN, notice
+from brawl.Currency.quests import get_next_daily_reset
 from brawl.Currency.rewardcard import draw_ready
-from brawl.Currency.stationcard import draw_thermometer
+from brawl.Currency.stationcard import draw_heat, draw_thermometer
 from brawl.Currency.tutorial import TutorialManager
 
 
@@ -67,6 +67,9 @@ class CurrencySystem(commands.Cog):
         self.bot.loop.create_task(self.monthly_referral_reset())
         heat_ref = g_thermometer(MAIN_GUILD_ID).get()
         self.thermometer_heat = heat_ref.get("heat", 0) if heat_ref else 0
+        self.heat_channel = None
+        self.heat_told = {}
+        self.heat_notice = None
         self.thermometer_decay_task = self.bot.loop.create_task(
             self.thermometer_decay_loop()
         )
@@ -91,6 +94,39 @@ class CurrencySystem(commands.Cog):
 
             for user_id, beans in cache.items():
                 await self.add_beans(user_id, beans)
+                heat.count_beans(user_id, beans, get_next_daily_reset())
+
+    async def set_heat(self, heat_now, channel=None):
+        """Moves the thermometer, and tells the chat when that changes its level.
+
+        channel is where the message that heated it was sent. A drop is told
+        there too, in the last drop notice when nobody has written since.
+        """
+        before = heat.level_of(min(self.thermometer_heat, 100))
+        self.thermometer_heat = heat_now
+        g_thermometer(MAIN_GUILD_ID).update({"heat": heat_now})
+        self.heat_channel = channel or self.heat_channel
+        now = heat.level_of(min(heat_now, 100))
+        if now is before:
+            return
+        channel = self.heat_channel or self.bot.get_channel(MAIN_CHAT_CHANNELS[0])
+        rose = now[0] > before[0]
+        notice, self.heat_notice = self.heat_notice, None
+        try:
+            card = await render(
+                draw_heat, {"level": now, "rose": rose}, name="thermometer"
+            )
+            told, self.heat_told[now[1]] = self.heat_told.get(now[1], 0), time.time()
+            if not rose and notice and channel.last_message_id == notice.id:
+                self.heat_notice = await notice.edit(attachments=[card])
+                return
+            if time.time() - told < THERMOMETER_NEWS_SECONDS:
+                self.heat_told[now[1]] = told
+                return
+            sent = await channel.send(file=card)
+            self.heat_notice = None if rose else sent
+        except Exception as e:
+            print(f"Failed to post the thermometer level: {e}")
 
     async def effect_cleanup_loop(self):
         """Clean up expired effects every minute"""
@@ -125,9 +161,7 @@ class CurrencySystem(commands.Cog):
                 lost = next(
                     lost for above, lost in THERMOMETER_COOLING if current_heat > above
                 )
-                new_heat = max(0, current_heat - lost)
-                self.thermometer_heat = new_heat
-                g_thermometer(MAIN_GUILD_ID).set({"heat": new_heat})
+                await self.set_heat(max(0, current_heat - lost))
 
     async def monthly_referral_reset(self):
         """Reset referral system on 1st of each month"""
@@ -232,99 +266,50 @@ class CurrencySystem(commands.Cog):
                 await asyncio.sleep(60)
 
     async def boss_inspection_loop(self):
-        """Drop Boss Inspection a few times a day in random chat channels (UTC time)"""
+        """Sends the boss into a random chat channel at each of the day's planned times."""
         await self.bot.wait_until_ready()
-
         await asyncio.sleep(10)
 
         while not self.bot.is_closed():
             try:
-                current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                ref = g_boss_inspection(MAIN_GUILD_ID)
-                inspection_data = ref.get() or {}
-
-                if not inspection_data:
-                    drops_today = random.randint(*BOSS_VISITS)
-                    inspection_data = {
-                        "total_drops": drops_today,
-                        "completed_drops": 0,
-                        "last_drop_time": 0,
-                    }
-                    ref.set(inspection_data)
-                    print(
-                        f"Boss Inspection: New day initialized with {drops_today} drops planned"
-                    )
-
-                if inspection_data["completed_drops"] >= inspection_data["total_drops"]:
-                    now = datetime.now(timezone.utc)
-                    next_midnight = (now + timedelta(days=1)).replace(
-                        hour=0, minute=0, second=0, microsecond=0
-                    )
-                    seconds_until_midnight = (next_midnight - now).total_seconds()
-
-                    print(
-                        f"Boss Inspection: All drops complete for today. Sleeping until midnight ({seconds_until_midnight/3600:.2f} hours)"
-                    )
-                    await asyncio.sleep(seconds_until_midnight + 60)
-                    continue
-
-                min_wait = 30 * 60
-                # More visits planned means shorter gaps, so they fit in the day.
-                max_wait = 24 * 3600 / inspection_data["total_drops"]
-                wait_time = random.uniform(min_wait, max_wait)
-
                 now = datetime.now(timezone.utc)
-                next_midnight = (now + timedelta(days=1)).replace(
-                    hour=0, minute=0, second=0, microsecond=0
-                )
-                seconds_until_midnight = (next_midnight - now).total_seconds()
+                midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                ref = g_boss_inspection(MAIN_GUILD_ID)
+                day = ref.get() or {}
+                if "times" not in day:
+                    day = {"times": plan(int(midnight.timestamp())), "done": 0}
+                    ref.set(day)
+                    print(f"Boss Inspection: planned {len(day['times'])} visits")
 
-                if wait_time >= seconds_until_midnight:
-                    print(
-                        f"Boss Inspection: Not enough time for another drop today. Waiting until midnight."
-                    )
-                    await asyncio.sleep(seconds_until_midnight + 60)
+                # A visit missed while the bot was off is skipped, not sent late.
+                while (
+                    day["done"] < len(day["times"])
+                    and day["times"][day["done"]] < time.time() - BOSS_LATE_SECONDS
+                ):
+                    day["done"] += 1
+                if day["done"] >= len(day["times"]):
+                    ref.update({"done": day["done"]})
+                    tomorrow = midnight + timedelta(days=1)
+                    await asyncio.sleep((tomorrow - now).total_seconds() + 60)
                     continue
 
-                print(
-                    f"Boss Inspection: Waiting {wait_time/3600:.2f} hours until next drop"
-                )
-                await asyncio.sleep(wait_time)
-
+                wait = day["times"][day["done"]] - time.time()
+                print(f"Boss Inspection: next visit in {wait / 3600:.2f} hours")
+                await asyncio.sleep(max(wait, 0))
                 if self.bot.is_closed():
                     break
 
-                new_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                if new_date != current_date:
-                    print("Boss Inspection: Day changed during sleep, restarting loop")
-                    continue
-
-                if not MAIN_CHAT_CHANNELS:
-                    print("Warning: Boss Inspection channels not configured!")
-                    await asyncio.sleep(3600)
-                    continue
-
-                channel_id = random.choice(MAIN_CHAT_CHANNELS)
-                channel = self.bot.get_channel(channel_id)
-
-                if not channel:
-                    print(
-                        f"Warning: Could not find channel {channel_id} for Boss Inspection"
-                    )
-                    await asyncio.sleep(3600)
-                    continue
-
+                channel = self.bot.get_channel(random.choice(MAIN_CHAT_CHANNELS))
+                # Counted before it is sent, so a failed visit is never retried in a loop.
+                ref.update({"done": day["done"] + 1})
                 await start_inspection(self, channel)
-
-                inspection_data["completed_drops"] += 1
-                inspection_data["last_drop_time"] = time.time()
-                ref.set(inspection_data)
                 print(
-                    f"Boss Inspection dropped in {channel.name} (drop {inspection_data['completed_drops']}/{inspection_data['total_drops']})"
+                    f"Boss Inspection dropped in {channel.name} "
+                    f"(visit {day['done'] + 1}/{len(day['times'])})"
                 )
             except Exception as e:
                 print(f"Error in boss_inspection_loop: {e}")
-                await asyncio.sleep(3600)
+                await asyncio.sleep(600)
 
     def _get_balance_ref(self, user_id: int):
         return u_balance(user_id)
@@ -481,71 +466,6 @@ class CurrencySystem(commands.Cog):
         await self.update_brew_stats(user_id, stats)
         return stats
 
-    async def process_invitee_welcome_bonus(self, interaction, event_type, invitee):
-        """Process welcome bonus for an invitee and notify inviter"""
-        guild = interaction.guild
-        ref_mapping = g_invites_member_data(guild.id, invitee.id)
-        mapping = ref_mapping.get() or {}
-
-        if not mapping.get("inviter") or not mapping.get("is_new"):
-            return None
-
-        inviter_id = int(mapping["inviter"])
-        try:
-            inviter = await guild.fetch_member(inviter_id)
-        except (discord.NotFound, discord.HTTPException):
-            return None
-        if not inviter:
-            return None
-
-        account_age = (datetime.now(timezone.utc) - invitee.created_at).days
-        if account_age < REFERRAL_ACCOUNT_DAYS:
-            return None
-
-        current_month = get_current_month_key()
-        ref_history = g_member_history(guild.id, invitee.id)
-        history = ref_history.get()
-        if (
-            history
-            and history.get("first_join")
-            and history["first_join"] < current_month
-        ):
-            return None
-
-        bonus_key = f"{event_type}_done"
-        if mapping.get(bonus_key, False):
-            return None
-
-        mapping[bonus_key] = True
-        ref_mapping.set(mapping)
-
-        if event_type == "brew":
-            beans_earned = INVITEE_BREW_BEANS
-            message_invitee = f"🎉 **Welcome bonus!** You earned a bonus {BEAN_EMOTE} **{beans_earned} Beans** for your first brew!"
-            message_inviter = f"☕ Your invitee {invitee.mention} **brewed** their first coffee and earned a welcome bonus!"
-            await self.log_referral_milestone(
-                f"{inviter.mention}'s (inviter) invitee {invitee.mention} **brewed** their first coffee and earned a welcome bonus!",
-                "Brew Welcome Bonus",
-            )
-        else:
-            beans_earned = INVITEE_SELL_BEANS
-            message_invitee = f"🎉 **Welcome bonus!** You earned a bonus {BEAN_EMOTE} **{beans_earned} Beans** for your first sale!"
-            message_inviter = f"☕ Your invitee {invitee.mention} **sold** their first coffee and earned a welcome bonus!"
-            await self.log_referral_milestone(
-                f"{inviter.mention}'s (inviter) invitee {invitee.mention} **sold** their first coffee and earned a welcome bonus!",
-                "Sell Welcome Bonus",
-            )
-
-        await self.add_beans(invitee.id, beans_earned)
-
-        try:
-            await inviter.send(
-                embed=discord.Embed(description=message_inviter, color=0x808080)
-            )
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-        return message_invitee
-
     async def process_referral_milestone(self, interaction, milestone_type, invitee):
         """Process referral milestones (inviter only)"""
         guild = interaction.guild
@@ -594,9 +514,12 @@ class CurrencySystem(commands.Cog):
             milestone["trainee_done"] = True
             mapping["brew_done"] = True
             role_granted = TRAINEE_ROLE_ID
-            await self.add_beans(inviter_id, REFERRAL_TRAINEE_BEANS)
-            reward_message = f"🎉 Your invitee {invitee.mention} brewed their first coffee! You **earned {BEAN_EMOTE} `{REFERRAL_TRAINEE_BEANS:,}` Beans** and unlocked the `Trainee Barista` role!"
-            log_entry = f"🎯 **Milestone Reached:** <@&{TRAINEE_ROLE_ID}>\n🎁 **Reward:** `+{REFERRAL_TRAINEE_BEANS:,}` Beans to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
+            from brawl.Currency.stampcard import add as add_stamps
+
+            boxes = add_stamps(inviter_id, REFERRAL_TRAINEE_STAMPS)
+            extra = f" and `x{boxes}` Mega Boxes" if boxes else ""
+            reward_message = f"🎉 Your invitee {invitee.mention} brewed their first coffee! You **earned {STAMP_EMOTE} `{REFERRAL_TRAINEE_STAMPS}` Stamp{extra}** and unlocked the `Trainee Barista` role!"
+            log_entry = f"🎯 **Milestone Reached:** <@&{TRAINEE_ROLE_ID}>\n🎁 **Reward:** `+{REFERRAL_TRAINEE_STAMPS}` Stamp{extra} to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
 
         elif (
             milestone_type == "bridge"
@@ -621,7 +544,7 @@ class CurrencySystem(commands.Cog):
             ):
                 milestone["master_done"] = True
                 role_granted = MASTER_ROLE_ID
-                reward_message = f"🏆 Your invitee(s) have successfully sold a total of 3 coffees! You unlocked the `Master Barista` role and will now **earn {TOKEN_EMOTE} `+50%` Tokens per non-burnt brew** until the end of this month."
+                reward_message = f"🏆 Your invitees sold {REFERRAL_MASTER_SELLS} coffees! You unlocked the `Master Barista` role and now **earn {TOKEN_EMOTE} `+50%` Tokens on every sell this month**."
                 log_entry = f"🎯 **Milestone Reached:** <@&{MASTER_ROLE_ID}>\n🎁 **Reward:** `+`1 Token per future brew for {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
 
         color = discord.Color.blurple()
@@ -667,6 +590,7 @@ class CurrencySystem(commands.Cog):
             "background": background(interaction.user.id),
             "heat": self.thermometer_heat,
             "drops": heat.drops_today(interaction.user.id),
+            "beans": heat.beans_today(interaction.user.id),
         }
         frozen = heat.freeze(interaction.guild.id)
         if frozen:

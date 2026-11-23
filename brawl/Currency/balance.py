@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from brawl.Currency import heat
 from brawl.Currency import quests as daily_order
 from brawl.Currency.bag import held
 from brawl.Currency.card import BACKGROUND, render
@@ -37,6 +38,7 @@ from brawl.Currency.panel import notice
 from brawl.Currency.quests import order_tasks, update_quest
 from brawl.Currency.shopcard import clean
 from brawl.Currency.stampcard import stamps
+from brawl.Currency.tablecard import draw_no_table
 from brawl.TeamFinder.reputationSystem import rep_of
 
 HOME_STATIONS = {"table_info": "tables"}
@@ -274,19 +276,19 @@ class BalanceInfoView(discord.ui.View):
         table = table_cog and await table_cog.get_user_table(
             user_id, interaction.guild.id
         )
-        if not table:
-            return await interaction.response.send_message(
-                embed=notice(
-                    f"{NO_EMOTE} You're not seated at a table. Join one with `/table seat` or start one with `/table reserve`.",
-                    "bad",
-                ),
-                ephemeral=True,
-            )
         self._remove_selects()
         self.mark(button)
         await interaction.response.edit_message(
             attachments=[
-                await table_card(table, interaction, name=f"balance_{user_id}")
+                (
+                    await table_card(table, interaction, name=f"balance_{user_id}")
+                    if table
+                    else await render(
+                        draw_no_table,
+                        {"background": background(user_id)},
+                        name=f"balance_{user_id}",
+                    )
+                )
             ],
             embed=None,
             view=self,
@@ -385,6 +387,8 @@ class Balance(commands.Cog):
                 "current_streak", 0
             ),
             "background": background(user.id),
+            "heat": self.economy.thermometer_heat,
+            "heat_beans": heat.beans_today(user.id),
         }
 
     async def home_card(self, user, guild, background=None):

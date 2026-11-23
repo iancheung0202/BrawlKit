@@ -16,7 +16,7 @@ from brawl.Currency.config import (
     THERMOMETER_DAILY_TOKEN_DROPS,
     THERMOMETER_LEVELS,
 )
-from brawl.Currency.heat import level_of
+from brawl.Currency.heat import level_of, next_up
 
 HEAT = {"Boiling": RED, "Hot": (255, 140, 40), "Warm": GOLD, "Cold": BLUE}
 BOSS = {
@@ -41,27 +41,85 @@ def tokens(drops):
     return lines
 
 
+def pays(level):
+    """'+5 Beans a message' for a level that pays."""
+    return f"+{level[2]} Beans a message"
+
+
+def chance(drops):
+    """All of a level's Token drops in one line: '1.85% chance of 1 to 5 Tokens'."""
+    amounts = [amount for _, kinds in drops for amount in kinds]
+    low, high = min(amounts), max(amounts)
+    amount = "1 Token" if high == 1 else f"{low} to {high} Tokens"
+    return f"{percent(sum(odds for odds, _ in drops))} chance of {amount}"
+
+
+def flame(level):
+    return "kit/icon_wasabi_power_hot" if level[2] else "kit/icon_wasabi_power"
+
+
+def draw_heat(news):
+    """A strip posted in chat when the thermometer moves to another level."""
+    level = news["level"]
+    start, name, beans, drops = level
+    above = next_up(level)
+    card = Card.strip(foot=True)
+    card.tag(32, 12, "THERMOMETER", HEAT[name])
+    card.icon(flame(level), 34, 46, 72)
+    verb = "is now" if news["rose"] else "cooled to"
+    card.text(122, 44, f"Chat {verb} {name}", 28, HEAT[name])
+    if beans:
+        card.text(122, 84, "Extra Beans every message, no limit.", 16, MUTED, "la", 2)
+        card.text(122, 104, "They do not count for the chat task.", 16, MUTED, "la", 2)
+        gain = f"+{beans}"
+        card.text(604, 54, gain, 30, GOLD, "ra")
+        card.icon("kit/bean", 564 - card.measure(gain, 30), 54, 34)
+        card.text(604, 88, "Beans a message", 13, MUTED, "ra", 2)
+        card.text(604, 106, chance(drops), 13, GOLD, "ra", 2)
+    else:
+        card.text(122, 84, "No bonus right now.", 16, MUTED, "la", 2)
+        card.text(122, 104, "Nobody is chatting.", 16, MUTED, "la", 2)
+    if news["rose"]:
+        line = f"Keep it going. {above[1]} at {above[0]}%" if above else "Hottest level"
+    else:
+        line = "Come back and chat to heat it up."
+    card.text(36, card.foot, line, 15, GOLD, "la", 2)
+    if above:
+        card.text(604, card.foot, f"{above[1]}: {pays(above)}", 15, MUTED, "ra", 2)
+    return card.jpg()
+
+
 def draw_thermometer(cup):
     """The heat now, what each message earns, and the four levels."""
     heat = min(cup["heat"], 100)
     now = level_of(heat)
-    card = Card(640, 456, cup["background"])
-    card.panel(16, 24, 608, 416)
+    mine = cup.get("drops") is not None
+    down = 64 if mine else 0
+    card = Card(640, 456 + down, cup["background"])
+    card.panel(16, 24, 608, 416 + down)
     card.tag(32, 12, "THERMOMETER", HEAT[now[1]])
-    card.icon(
-        "kit/icon_wasabi_power_hot" if now[2] else "kit/icon_wasabi_power", 34, 48, 60
-    )
+    card.icon(flame(now), 34, 48, 60)
     card.text(108, 44, now[1], 34, HEAT[now[1]])
-    line = "Each message you send earns a bonus." if now[2] else "No bonus right now."
+    line = (
+        "Every message pays extra Beans, with no daily limit."
+        if now[2]
+        else "No bonus right now."
+    )
     card.text(108, 86, line, 16, MUTED, "la", 2)
-    if cup.get("drops") is not None:
-        left = f"{cup['drops']} of {THERMOMETER_DAILY_TOKEN_DROPS}"
-        card.text(604, 50, "Your Token drops today", 13, MUTED, "ra", 2)
-        card.text(604, 66, left, 22, GOLD, "ra")
     card.bar(36, 122, 568, 26, heat / 100, HEAT[now[1]], f"{heat}%")
+    if mine:
+        card.slot(36, 162, 278, 50)
+        card.icon("kit/bean", 46, 170, 34)
+        card.text(88, 166, f"+{cup.get('beans', 0):,}", 22, GOLD)
+        card.text(88, 191, "Extra today, not in the chat task", 13, MUTED, "la", 2)
+        card.slot(326, 162, 278, 50)
+        card.icon("kit/token", 336, 170, 34)
+        left = f"{cup['drops']} of {THERMOMETER_DAILY_TOKEN_DROPS}"
+        card.text(378, 166, left, 22, GOLD)
+        card.text(378, 191, "Your Token drops today", 13, MUTED, "la", 2)
     for row, level in enumerate(THERMOMETER_LEVELS):
         start, name, beans, drops = level
-        y = 162 + row * 60
+        y = 162 + down + row * 60
         card.slot(36, y, 568, 54, GOLD if level is now else (0, 0, 0))
         card.text(52, y + 6, name, 20, HEAT[name])
         span = f"{start}% and up" if start else "Under 50%"
@@ -69,22 +127,26 @@ def draw_thermometer(cup):
         if not beans:
             card.text(196, y + 16, "No bonus", 18, GREY, "la", 2)
             continue
-        card.icon("kit/bean", 192, y + 12, 30)
-        card.text(228, y + 15, f"+{beans} Beans", 19)
-        lines = tokens(drops)
-        if lines:
-            card.icon("kit/token", 356, y + 12, 30)
-        for spot, text in enumerate(lines):
-            top = y + 17 + (spot * 2 - len(lines) + 1) * 10
-            assert card.measure(text, 16) <= 200
-            card.text(394, top, text, 16, WHITE, "la", 2)
+        card.icon("kit/bean", 172, y + 12, 30)
+        card.text(208, y + 15, f"+{beans} Beans", 19)
+        card.icon("kit/token", 330, y + 12, 30)
+        if len(drops) == 1:
+            card.text(368, y + 17, tokens(drops)[0], 16, WHITE, "la", 2)
+            continue
+        # Several kinds of drop: 'chance for amount' in two columns, commonest first.
+        for spot, (odds, amounts) in enumerate(reversed(drops)):
+            x = 368 + spot % 2 * 118
+            text = f"{percent(odds)} for {amounts[0]}"
+            card.text(x, y + 8 + spot // 2 * 20, text, 15, WHITE, "la", 2)
     frozen = cup.get("frozen")
     hint = (
         f"Frozen by {named(frozen[0])} for {frozen[1]} more minute{'s' * (frozen[1] != 1)}."
         if frozen
         else "Chat in the main channels to heat it up. It cools every minute."
     )
-    card.text(36, 406, card.fit(hint, 15, 568), 15, BLUE if frozen else GOLD, "la", 2)
+    card.text(
+        36, 406 + down, card.fit(hint, 15, 568), 15, BLUE if frozen else GOLD, "la", 2
+    )
     return card.jpg()
 
 

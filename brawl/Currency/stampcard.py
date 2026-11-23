@@ -12,6 +12,7 @@ from brawl.Currency.config import (
     STAMP_GOALS,
     STAMP_MONTHLY_LIMIT,
     STAMP_PRICE_RANGES,
+    STAMP_PRICE_STREAK,
 )
 from brawl.Currency.db import (
     g_stamp_redemptions,
@@ -68,10 +69,15 @@ def add(user_id, amount=1, day=None):
     return paid
 
 
+def streak(user_id):
+    return (u_daily_checkin_streaks(user_id).get() or {}).get("current_streak", 0)
+
+
 def price(user_id, tier):
-    streak = (u_daily_checkin_streaks(user_id).get() or {}).get("current_streak", 0)
     low, high = STAMP_PRICE_RANGES[tier]
-    return int(high - min(max(streak - 10, 0), 90) / 90 * (high - low))
+    start, lowest = STAMP_PRICE_STREAK
+    span = lowest - start
+    return int(high - min(max(streak(user_id) - start, 0), span) / span * (high - low))
 
 
 def redeemed(guild_id):
@@ -98,6 +104,7 @@ class StampCard(commands.Cog):
         return {
             "stamps": stamps(user.id),
             "redeemed": redeemed(guild.id),
+            "streak": streak(user.id),
             "done": sum(done for *_, done in tasks),
             "tasks": len(tasks),
             "stamped": (u_stamp_card(user.id).get() or {}).get("last_stamp")

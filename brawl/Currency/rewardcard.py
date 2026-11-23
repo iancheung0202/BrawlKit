@@ -16,6 +16,7 @@ from brawl.Currency.card import (
 from brawl.Currency.config import (
     DAILY_BEANS,
     ROAST_TYPES,
+    THERMOMETER_LEVELS,
     TUTORIAL_BEANS,
     TUTORIAL_TOKENS,
 )
@@ -208,7 +209,9 @@ def draw_paid(order):
 def draw_chat(reward):
     """A strip posted when chatting pays Beans: the gain and today's limit."""
     order = reward.get("order")
-    card = Card.strip(foot=bool(order), small=True)
+    done = reward["today"] >= reward["limit"]
+    heat = reward.get("heat") if done else None
+    card = Card.strip(foot=bool(order) + bool(heat), small=True)
     card.tag(32, 12, "CHAT BEANS", GOLD)
     card.avatar(reward["avatar"], 34, 40, 52)
     card.text(100, 40, card.fit(reward["name"], 16, 180), 16, MUTED, "la", 2)
@@ -217,7 +220,6 @@ def draw_chat(reward):
     card.text(134, 62, gain, 26, GOLD)
     if reward["boosted"]:
         card.icon("items/effect", 142 + card.measure(gain, 26), 64, 26)
-    done = reward["today"] >= reward["limit"]
     color = GREEN if done else GOLD
     left = max(0, int(reward["reset"] - time.time())) // 60
     card.icon("kit/icon_clock", 300, 44, 15)
@@ -229,6 +231,17 @@ def draw_chat(reward):
         label = done_label(order) if order["stamp"] else "Order task done"
         card.text(36, card.foot, label, 15, GREEN if order["stamp"] else GOLD, "la", 2)
         right(card, card.foot - 2, earned(order), 15)
+    if heat:
+        y = card.foot + 26 * bool(order)
+        pay = heat[2] or THERMOMETER_LEVELS[-2][2]
+        lead = "Limit reached. " + (
+            "The thermometer pays" if heat[2] else "When Warm, the thermometer pays"
+        )
+        card.icon("kit/icon_wasabi_power_hot", 34, y - 3, 22)
+        card.text(62, y, lead, 15, GOLD, "la", 2)
+        x = 68 + card.measure(lead, 15)
+        card.icon("kit/bean", x, y - 2, 20)
+        card.text(x + 24, y, f"+{pay} extra a message, no limit.", 15, GOLD, "la", 2)
     return card.jpg()
 
 

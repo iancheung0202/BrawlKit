@@ -15,7 +15,7 @@ from brawl.Currency.card import (
     named,
     roster,
 )
-from brawl.Currency.config import REFERRAL_STEPS
+from brawl.Currency.config import REFERRAL_MASTER_SELLS, REFERRAL_STEPS
 from brawl.Currency.db import (
     g_invites_member_data,
     g_invites_monthly,
@@ -43,6 +43,12 @@ def invited_by(guild_id, user_id):
     return months
 
 
+def days_left():
+    """Days until this month's invite rewards start over, today included."""
+    now = datetime.now(timezone.utc)
+    return calendar.monthrange(now.year, now.month)[1] - now.day + 1
+
+
 def summary(guild_id, user_id):
     key = get_current_month_key()
     counts = g_invites_monthly(guild_id, key, user_id).get() or {}
@@ -53,6 +59,7 @@ def summary(guild_id, user_id):
         "total": counts.get("total", 0),
         "left": counts.get("left", 0),
         "done": g_referral_milestones(guild_id, key, user_id).get() or {},
+        "days": days_left(),
     }
 
 
@@ -122,18 +129,29 @@ def draw_invites(invites):
     card.text(604, 70, f"{invites['left']} left", 13, left, "ra", 2)
     joined = 592 - card.measure(f"{invites['left']} left", 13)
     card.text(joined, 70, f"{invites['total']} joined", 13, MUTED, "ra", 2)
+    goal = next(
+        (key for key, *_ in REFERRAL_STEPS if not invites["done"].get(key)), None
+    )
     for row, (key, name, need, icon, reward) in enumerate(REFERRAL_STEPS):
         y = 106 + row * 56
         done = invites["done"].get(key, False)
-        card.slot(36, y, 568, 48, GREEN if done else (0, 0, 0))
+        # Only the step to go for next is lit.
+        card.slot(36, y, 568, 48, lit=key == goal)
         card.check(48, y + 10, done)
         card.text(90, y + 7, name, 17, GREEN if done else WHITE, "la", 2)
         card.text(90, y + 28, need, 12, MUTED, "la", 2)
-        card.text(588, y + 14, reward, 16, GOLD, "ra", 2)
+        if key == "master_done" and not done:
+            sells = min(invites["done"].get("sells", 0), REFERRAL_MASTER_SELLS)
+            count = f"{sells} / {REFERRAL_MASTER_SELLS}"
+            card.text(98 + card.measure(name, 17), y + 9, count, 14, GOLD, "la", 2)
+        card.text(588, y + 14, reward, 16, GREY if done else GOLD, "ra", 2)
         card.icon(icon, 556 - card.measure(reward, 16), y + 12, 24)
     card.icon("kit/icon_calendar", 36, 276, 20)
-    reset = "Starts over on the 1st of each month, so you can earn these again."
-    card.text(64, 279, reset, 13, MUTED, "la", 2)
+    days = invites["days"]
+    left = f"{days} day{'s' * (days != 1)} left" if goal else "All done"
+    card.text(64, 279, left, 13, RED if goal else GREEN, "la", 2)
+    reset = "Starts over on the 1st, so you can earn these again."
+    card.text(74 + card.measure(left, 13), 279, reset, 13, MUTED, "la", 2)
     return card.jpg()
 
 

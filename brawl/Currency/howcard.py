@@ -33,8 +33,6 @@ from brawl.Currency.config import (
     CHAT_WEEKEND_MULTIPLIER,
     DAILY_BEANS,
     DAILY_GAMBLING_LIMITS,
-    INVITEE_BREW_BEANS,
-    INVITEE_SELL_BEANS,
     ITEM_STATIONS,
     LADDER,
     LUCKY_DAILY_CHANCE,
@@ -45,8 +43,7 @@ from brawl.Currency.config import (
     QUEST_BONUS_BEANS,
     REFERRAL_ACCOUNT_DAYS,
     REFERRAL_BRIDGE_STAMPS,
-    REFERRAL_MASTER_SELLS,
-    REFERRAL_TRAINEE_BEANS,
+    REFERRAL_STEPS,
     REP_PAID_DAILY,
     REP_TOKENS,
     ROAST_TYPES,
@@ -736,6 +733,8 @@ def order_page():
     )
     levels = ORDER_TASK_LEVELS
     chat = ("kit/bean", "Earn your daily chat limit", "")
+    note = "Thermometer Beans are extra and not counted"
+    card.text(212 + pill_width(card, *chat), 298, note, 13, MUTED, "la", 2)
     table(
         card,
         288,
@@ -909,10 +908,10 @@ def stations_page():
     """The thermometer's heat levels and the boss's odds."""
     card = page(
         "THERMOMETER AND BOSS",
-        "Busy chat pays extra. The boss drops in with gifts.",
-        800,
+        "Thermometer Beans have no limit and do not count for the chat task.",
+        848,
     )
-    section(card, 124, 382, "THERMOMETER")
+    section(card, 124, 430, "THERMOMETER")
     card.icon("kit/icon_chat", 46, 148, 26)
     arrow(card, 92, 162, 9)
     heat = f"+{span(*THERMOMETER_MESSAGE_HEAT)} heat"
@@ -931,9 +930,10 @@ def stations_page():
     )
     tints = {"Cold": BLUE, "Warm": GOLD, "Hot": (255, 140, 40), "Boiling": RED}
     left, width = 190, 664
-    for row, name in enumerate(("Beans a message", "Token drop", "Cools a minute")):
+    for row, name in enumerate(("Beans a message", "Cools a minute", "Token drop")):
         rule(card, 256 + row * 40)
         card.text(46, 268 + row * 40, name, 16, MUTED, "la", 2)
+    card.text(46, 368, "chance for Tokens", 13, MUTED, "la", 2)
     card.text(46, 196, "Heat", 16, MUTED, "la", 2)
     for spot, (start, name, beans, tokens) in enumerate(levels):
         end = levels[spot + 1][0] if spot + 1 < len(levels) else THERMOMETER_MAX
@@ -951,22 +951,22 @@ def stations_page():
             mid, 265, f"+{beans}" if beans else "0", 20, GOLD if beans else MUTED, "ma"
         )
         if not tokens:
-            card.text(mid, 307, "none", 15, MUTED, "ma", 2)
+            card.text(mid, 348, "none", 15, MUTED, "ma", 2)
         for row, (odds, amounts) in enumerate(reversed(tokens)):
             amount = span(min(amounts), max(amounts))
-            at = 307 if len(tokens) == 1 else 298 + row * 18
+            at = 348 + row * 19
             card.text(mid, at, f"{percent(odds)} for {amount}", 15, GOLD, "ma", 2)
-        card.text(mid, 346, str(cooling[name]), 18, WHITE, "ma", 2)
-    item_heads(card, 390)
-    card.text(46, 390, "Items", 14, MUTED, "la", 2)
-    y = 410
+        card.text(mid, 306, str(cooling[name]), 18, WHITE, "ma", 2)
+    item_heads(card, 438)
+    card.text(46, 438, "Items", 14, MUTED, "la", 2)
+    y = 458
     for key, does in next(
         items for group, _, items in EFFECTS if group == "THERMOMETER"
     ):
         rule(card, y - 2)
         item_row(card, y, key, does)
         y += 40
-    top = 546
+    top = 594
     section(card, top, 204, "BOSS INSPECTION", RED, WHITE)
     card.icon("kit/icon_megaboss_big", 46, top + 26, 76)
     names = {"mega_box": "Mega Box", "star_drop": "Star Drop", "nothing": "Air"}
@@ -980,8 +980,8 @@ def stations_page():
         [
             (
                 "kit/icon_megaboss_big",
-                f"{span(*BOSS_VISITS)} visits",
-                "a day, any time",
+                f"{BOSS_VISITS} visits",
+                "each day, any time",
             ),
             ("kit/icon_clock", f"{BOSS_SECONDS // 60} minutes", "to press, once each"),
             ("kit/icon_xp", f"Level {LADDER['boss'][0]}", "to take part"),
@@ -1000,10 +1000,10 @@ def social_page():
         "TABLES AND INVITES", "Team up for a weekly goal. Bring friends for more.", 732
     )
     section(card, 124, 262, "TABLES")
-    card.text(46, 148, "Weekly quest", 15, GOLD, "la", 2)
-    card.text(46, 171, "Table earns", 15, MUTED, "la", 2)
-    card.text(46, 229, "Each member gets", 15, MUTED, "la", 2)
-    left, width = 106, 704
+    card.text(
+        46, 148, "Beans the table earns, and what each member gets", 15, MUTED, "la", 2
+    )
+    left, width = 56, 754
     card.bar(left, 198, width, 16, 0.5)
     for spot, (target, reward) in enumerate(zip(quest["targets"], quest["rewards"])):
         x = left + width * (spot + 1) / len(quest["targets"])
@@ -1039,46 +1039,18 @@ def social_page():
 
     top = 418
     section(card, top, 264, "INVITES", BLUE, WHITE)
-    steps = (
-        (
-            "brewing",
-            "They brew",
-            f"+{REFERRAL_TRAINEE_BEANS:,}",
-            "kit/bean",
-            f"+{INVITEE_BREW_BEANS}",
-            "Trainee Barista",
-        ),
-        (
-            "ready",
-            "They sell",
-            f"+{REFERRAL_BRIDGE_STAMPS}",
-            "kit/icon_ranked_round_token",
-            f"+{INVITEE_SELL_BEANS}",
-            "Bridge Barista",
-        ),
-        (
-            "kit/token",
-            f"{REFERRAL_MASTER_SELLS} sells in all",
-            "+50% a sale",
-            "kit/token",
-            "",
-            "Master Barista",
-        ),
-    )
-    for name, x in (("They get", 430), ("Role", 560), ("You get", 854)):
-        card.text(x, top + 24, name, 14, MUTED, "la" if name == "Role" else "ra", 2)
-    for spot, (picture, when, yours, coin, theirs, role) in enumerate(steps):
+    pictures = ("brewing", "ready", "kit/token")
+    card.text(854, top + 24, "You get", 14, MUTED, "ra", 2)
+    for spot, (_, role, need, coin, yours) in enumerate(REFERRAL_STEPS):
         y = top + 46 + spot * 44
         rule(card, y - 4)
-        fitted(card, picture, 46, y + 2, 32)
-        card.text(90, y + 7, when, 19, WHITE, "la", 2)
-        if theirs:
-            card.text(430, y + 7, theirs, 19, WHITE, "ra", 2)
-            card.icon("kit/bean", 402 - card.measure(theirs, 19), y + 8, 20)
-        card.text(560, y + 9, role, 16, MUTED, "la", 2)
-        card.text(854, y + 4, yours, 24, GOLD, "ra")
-        card.icon(coin, 820 - card.measure(yours, 24), y + 5, 26)
-    rule(card, top + 46 + len(steps) * 44 - 4)
+        fitted(card, pictures[spot], 46, y + 2, 32)
+        card.text(90, y, role, 18, WHITE, "la", 2)
+        card.text(90, y + 22, need, 12, MUTED, "la", 2)
+        size = 24 if len(yours) < 6 else 18
+        card.text(854, y + 28 - size, yours, size, GOLD, "ra")
+        card.icon(coin, 820 - card.measure(yours, size), y + 5, 26)
+    rule(card, top + 46 + len(REFERRAL_STEPS) * 44 - 4)
     checks = (
         "Joined by your link",
         "New to the server",

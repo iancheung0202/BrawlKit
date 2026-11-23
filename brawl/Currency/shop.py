@@ -11,7 +11,6 @@ from brawl.Currency.card import item_icon, plain, render
 from brawl.Currency.config import ITEM_STATIONS, SHOP
 from brawl.Currency.db import (
     g_shops,
-    g_thermometer,
     sync_sell_alarm,
     u_balance,
     u_customization,
@@ -1058,8 +1057,7 @@ class Shop(commands.Cog):
             current_heat = self.economy.thermometer_heat
             boost_amount = 30
             new_heat = min(130, current_heat + boost_amount)
-            self.economy.thermometer_heat = new_heat
-            g_thermometer(interaction.guild.id).update({"heat": new_heat})
+            await self.economy.set_heat(new_heat)
             effect_msg = f"The thermometer is now at {new_heat}."
 
         elif item_id == "instant_brew":

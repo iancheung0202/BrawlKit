@@ -85,6 +85,10 @@ def u_thermometer_cooldown(user_id: int):
     return db.reference(f"{U_ROOT}/{user_id}/progress/thermometer_cooldown")
 
 
+def u_thermometer_beans(user_id: int):
+    return db.reference(f"{U_ROOT}/{user_id}/progress/thermometer_beans")
+
+
 def u_welcome_cooldown(user_id: int):
     return db.reference(f"{U_ROOT}/{user_id}/progress/welcome_cooldown")
 

@@ -11,11 +11,14 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 ASSETS = "assets/"
 SCALE = 2
 WHITE, BLACK = (255, 255, 255), (0, 0, 0)
+# The widest a name is drawn in the header, so it stays clear of the balances.
+NAME_WIDTH = 300
 GOLD, GREEN, BLUE, RED = (255, 200, 30), (60, 215, 80), (40, 130, 255), (255, 70, 80)
 MUTED = (190, 205, 255)
 GREY = (160, 165, 185)
 GREY = (90, 96, 120)
 PANEL = (8, 18, 70, 185)
+LIT = (52, 50, 104)
 SLOT = (6, 12, 48)
 BACKGROUND = "gym"
 
@@ -113,10 +116,11 @@ class Card:
     def strip(cls, step=None, foot=False, small=False):
         """A one-panel strip, one line taller when it also says what to do next.
 
-        foot leaves that line empty for the caller to fill at card.foot. A small
-        strip is for one number: a 52 picture, a name over the value.
+        foot leaves that line empty for the caller to fill at card.foot, or that
+        many lines, 26 apart. A small strip is for one number: a 52 picture, a
+        name over the value.
         """
-        extra = 30 if step or foot else 0
+        extra = 30 + 26 * (int(foot) - 1) if step or foot else 0
         tall = 82 if small else 110
         card = cls(640, tall + 40 + extra)
         card.panel(16, 24, 608, tall + extra)
@@ -334,24 +338,33 @@ class Card:
                 self.icon(prize[1], cx - size / 2, cy - size / 2, size)
                 self.text(cx + radius, cy + 2, str(prize[2]), 15, WHITE, "ra", 2)
 
-    def header(self, name, avatar, level, xp, xp_needed, beans, tokens):
+    def header(self, name, avatar, level, xp, xp_needed, beans, tokens, stamps):
         self.avatar(avatar, 29, 25, 68)
-        self.text(116, 20, self.fit(name, 32, 380), 32)
+        self.text(116, 20, self.fit(name, 32, NAME_WIDTH), 32)
         self.icon("kit/icon_xp", 110, 58, 40)
         label = f"LEVEL {level}"
         self.text(158, 62, label, 20, GOLD)
+        pills = (
+            ("kit/bean", f"{beans:,}"),
+            ("kit/token", f"{tokens:,}"),
+            ("kit/icon_ranked_round_token", f"{stamps:,}"),
+        )
+        left = self.width - 26 + 34
+        left -= sum(self.measure(value, 24) + 96 for _, value in pills)
+        start = 170 + self.measure(label, 20)
         self.bar(
-            170 + self.measure(label, 20),
+            start,
             62,
-            230,
+            # Shorter when long balances reach this far left.
+            min(180, left - 62 - start),
             26,
             xp / xp_needed,
             BLUE,
             f"{xp:,} / {xp_needed:,}",
         )
-        beans, tokens = f"{beans:,}", f"{tokens:,}"
-        left = self.width - 122 - self.measure(beans, 24) - self.measure(tokens, 24)
-        self.pill(self.pill(left - 62, 38, "kit/bean", beans), 38, "kit/token", tokens)
+        for picture, value in pills:
+            left = self.pill(left, 38, picture, value)
+        return start
 
     def title(self, title, line):
         self.text(34, 22, title, 42)
@@ -366,9 +379,14 @@ class Card:
     def hint(self, text):
         self.text(36, self.height - 40, text, 18, GOLD, "la", 2)
 
-    def slot(self, x, y, w, h, outline=BLACK):
+    def slot(self, x, y, w, h, outline=BLACK, lit=False):
+        """A row's box; lit marks the one row to look at with a lighter fill."""
         self.draw.rounded_rectangle(
-            box(x, y, w, h), 10 * SCALE, fill=SLOT, outline=outline, width=3 * SCALE
+            box(x, y, w, h),
+            10 * SCALE,
+            fill=LIT if lit else SLOT,
+            outline=outline,
+            width=3 * SCALE,
         )
 
     def jpg(self):

@@ -327,12 +327,6 @@ class Brewing(commands.Cog):
                     f"<:Information:855023058255478794> Your inviter {inviter.mention} earned <@&{TRAINEE_ROLE_ID}> too!"
                 )
 
-        welcome_bonus_msg = await self.economy.process_invitee_welcome_bonus(
-            interaction, "brew", interaction.user
-        )
-        if welcome_bonus_msg:
-            lines.append(welcome_bonus_msg)
-            new_beans += 150
         title = f"{ROAST_TYPES[roast]['name']} brewing"
         if guide:
             title, step = hint(guide)
@@ -550,12 +544,6 @@ class Brewing(commands.Cog):
 
                 if earned_rewards:
                     lines.append(f"<:Information:855023058255478794> {earned_rewards}")
-
-            welcome_bonus_msg = await self.economy.process_invitee_welcome_bonus(
-                interaction, "sell", interaction.user
-            )
-            if welcome_bonus_msg:
-                lines.append(welcome_bonus_msg)
 
         guide = await self.economy.tutorial_manager.advance(user_id, "sell")
         title = f"{ROAST_TYPES[roast_type]['name']} {'sold' if tokens else 'burnt'}"

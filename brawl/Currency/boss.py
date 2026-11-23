@@ -5,7 +5,12 @@ import discord
 from discord.ui import View
 
 from brawl.Currency.card import render
-from brawl.Currency.config import BOSS_ODDS, BOSS_SECONDS
+from brawl.Currency.config import (
+    BOSS_GAP_HOURS,
+    BOSS_HALF_VISITS,
+    BOSS_ODDS,
+    BOSS_SECONDS,
+)
 from brawl.Currency.db import u_mega_boxes, u_star_drops
 from brawl.Currency.helper import BOSS_INSPECTION_ACTIONS, BOSS_INSPECTION_ROLE_ID
 from brawl.Currency.home import background
@@ -13,6 +18,27 @@ from brawl.Currency.ladder import locked
 from brawl.Currency.panel import notice
 from brawl.Currency.quests import report, update_quest
 from brawl.Currency.stationcard import draw_boss, draw_boss_result, draw_boss_results
+
+HOUR = 3600
+HALF = 12 * HOUR
+
+
+def plan(midnight):
+    """The day's visit times: the same number in each half of the UTC day,
+    each a random gap after the one before it."""
+    low, high = (hours * HOUR for hours in BOSS_GAP_HOURS)
+    times = []
+    for start in (midnight, midnight + HALF):
+        while True:
+            gaps = [random.uniform(low, high) for _ in range(BOSS_HALF_VISITS - 1)]
+            first = start + random.uniform(0, HALF - sum(gaps) - 1)
+            if sum(gaps) < HALF and (not times or first - times[-1] >= low):
+                break
+        times.append(first)
+        for gap in gaps:
+            times.append(times[-1] + gap)
+    return [int(moment) for moment in times]
+
 
 # Each outcome: where the reward is kept, the line of the action to show,
 # and how to use the reward.
@@ -118,7 +144,7 @@ class BossInspectionView(View):
         }
         try:
             await self.message.edit(
-                content=None,
+                content=f"<@&{BOSS_INSPECTION_ROLE_ID}> The boss has left.",
                 attachments=[await render(draw_boss_results, results, name="boss")],
                 embed=None,
                 view=None,

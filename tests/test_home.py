@@ -61,7 +61,7 @@ def test_every_background_draws_a_card(cafe):
         image = Image.open(
             io.BytesIO(home.draw_home({**data, "background": key}).read())
         )
-        assert image.size == (1800, 1080)
+        assert image.size == (1800, 1024)
 
 
 def test_home_shows_the_order_brew_and_stamps(cafe):
@@ -81,12 +81,6 @@ def test_next_unlock_walks_the_ladder():
     assert "Brewing unlocks at Level 1" in ladder.next_unlock(0)
     assert "Boss Inspection unlocks at Level 5" in ladder.next_unlock(4)
     assert ladder.next_unlock(99) == "Every station is unlocked"
-
-
-def test_stamp_goal_moves_to_plus_after_a_full_card():
-    assert home.goal(29)[0] == "brawl_pass"
-    assert home.goal(30)[0] == "brawl_pass_plus"
-    assert home.goal(99)[0] == "brawl_pass_plus"
 
 
 def test_customize_previews_but_cannot_confirm_without_a_credit(cafe):
