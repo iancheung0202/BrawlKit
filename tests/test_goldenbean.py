@@ -282,8 +282,12 @@ def test_cards_draw():
     assert goldenbean.draw_taken(take)
     assert goldenbean.draw_taken({**take, "boxes": 0, "stolen": False})
     assert goldenbean.draw_floor(None)
-    rows = [("Sam", 40, None), ("Kit", 12, None)]
-    assert goldenbean.draw_board({"rows": rows, "players": 2, "ends": "Draw in 3 days"})
+    rows = [("Sam", 40, None, 1, True), ("Kit", 12, None, 2, False)]
+    board = {"rows": rows, "players": 7, "ends": "Draw in 3 days"}
+    assert goldenbean.draw_board(board)
+    you = {"row": ("Me", 3, None, 7, False), "place": 7, "line": "You held it 3m 5s"}
+    assert goldenbean.draw_board({**board, "you": you})
+    assert goldenbean.draw_board({**board, "rows": [], "you": {**you, "row": None}})
     win = {"name": "Sam", "avatar": None, "tickets": 40, "total": 52}
     assert goldenbean.draw_winner(win)
 
@@ -296,3 +300,27 @@ def test_chat_beans_seeing_the_message_first_does_not_block_it(cafe, event):
     reply = said(B, 2, to=A)
     chat.last_messages[B] = "something else entirely"
     assert event.offer(reply) and chat.last_messages[B] == "something else entirely"
+
+
+def test_golden_shows_the_top_and_where_you_stand(cafe, event, clock):
+    event.seconds = {member: 600 * member for member in range(1, 7)} | {7: 59}
+    event.offer(said(1, 1))
+    clock[0] += 65
+    board = asyncio.run(event.standing(1))
+    assert [row[1] for row in board["rows"]] == [60, 50, 40, 30, 20]
+    mine = board["you"]["row"]
+    assert (mine[1], mine[3], mine[4]) == (11, 6, True)
+    assert board["you"]["line"] == "You held it 11m 5s" and board["players"] == 6
+    top = asyncio.run(event.standing(6))["you"]
+    assert (top["row"], top["place"]) == (None, 1)
+    assert asyncio.run(event.standing(7))["you"]["line"] == "You held it 59s"
+    assert asyncio.run(event.standing(8))["you"]["line"] == "You have not held it yet"
+    cafe.cogs["Leveling"].level_of.return_value = 1
+    event.seconds[9] = 300
+    low = asyncio.run(event.standing(9))["you"]
+    assert low["line"] == "You held it 5m 0s. Tickets start at Level 2"
+    assert low["row"] is None
+    interaction = cafe.interaction(1)
+    asyncio.run(event.golden.callback(event, interaction))
+    sent = interaction.followup.send.await_args.kwargs
+    assert sent["ephemeral"] and sent["file"].filename == "bean.png"

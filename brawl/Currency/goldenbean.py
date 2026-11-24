@@ -15,6 +15,7 @@ import time
 from datetime import datetime, timezone
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from firebase_admin import db
 
@@ -127,9 +128,18 @@ def draw_floor(_):
     return card.jpg()
 
 
+def clock(seconds):
+    seconds = int(seconds)
+    return f"{seconds // 60}m {seconds % 60}s" if seconds >= 60 else f"{seconds}s"
+
+
 def draw_board(board):
-    """Once a day: who has the most tickets, and how long until the draw."""
-    rows = board["rows"]
+    """Who has the most tickets and how long until the draw. `/golden` adds
+    the member who asked: their own row when they are not in the top."""
+    rows = list(board["rows"])
+    you = board.get("you")
+    if you and you["row"]:
+        rows.append(you["row"])
     card = Card(640, 132 + 46 * len(rows) + 46)
     card.panel(16, 24, 608, card.height - 40)
     card.tag(32, 12, "GOLDEN BEAN", GOLD)
@@ -138,15 +148,20 @@ def draw_board(board):
     x = 48 + wide(PRIZE[1], 40)
     card.text(x, 46, "Tickets", 26, GOLD)
     card.text(x, 80, RULE, 15, MUTED, "la", 2)
-    most = max((row[1] for row in rows), default=1)
-    for spot, (name, tickets, avatar) in enumerate(rows):
+    most = max((row[1] for row in rows), default=1) or 1
+    for spot, (name, tickets, avatar, place, holds) in enumerate(rows):
         y = 116 + spot * 46
         card.avatar(avatar, 36, y, 34, 8)
-        card.text(82, y - 2, card.fit(named(name), 15, 200), 15, WHITE, "la", 2)
+        if holds:
+            card.icon(BEAN, 58, y + 16, 20)
+        mine = you and place == you["place"]
+        name = card.fit(f"{place}. {named(name)}", 15, 360)
+        card.text(82, y - 2, name, 15, GOLD if mine else WHITE, "la", 2)
         card.bar(82, y + 18, 440, 14, tickets / most, GOLD)
         card.text(604, y + 6, f"{tickets:,}", 20, WHITE, "ra")
     foot = card.height - 44
-    card.text(36, foot, plural(board["players"], "member") + " in", 15, MUTED, "la", 2)
+    left = you["line"] if you else plural(board["players"], "member") + " in"
+    card.text(36, foot, left, 15, MUTED, "la", 2)
     card.text(604, foot, STEAL, 15, GOLD, "ra", 2)
     return card.jpg()
 
@@ -371,20 +386,59 @@ class GoldenBean(commands.Cog):
             if tickets and await self.levelled_up(user_id)
         }
 
-    async def board(self):
+    async def standing(self, viewer=None):
+        """The top of the board, and where the member who asked stands."""
         have = await self.counted()
-        top = sorted(have.items(), key=lambda row: -row[1])[:BOARD_ROWS]
-        if not top:
-            return
-        people = await self.people([user_id for user_id, _ in top])
-        days = max(1, round((self.ends - now()) / 86400))
-        await self.post(
-            draw_board,
-            {
-                "rows": [(n, t, a) for (n, a), (_, t) in zip(people, top)],
-                "players": len(have),
-                "ends": f"Draw in {plural(days, 'day')}",
-            },
+        order = sorted(have, key=lambda user_id: -have[user_id])
+        shown = order[:BOARD_ROWS]
+        extra = viewer in have and viewer not in shown
+        people = await self.people(shown + [viewer] * extra)
+        rows = [
+            (
+                name,
+                have[user_id],
+                avatar,
+                order.index(user_id) + 1,
+                user_id == self.holder,
+            )
+            for user_id, (name, avatar) in zip(shown + [viewer] * extra, people)
+        ]
+        left = self.ends - now()
+        if self.winner is not None or left <= 0:
+            ends = "Draw is over"
+        elif left < 86400:
+            ends = f"Draw in {plural(max(1, round(left / 3600)), 'hour')}"
+        else:
+            ends = f"Draw in {plural(round(left / 86400), 'day')}"
+        board = {"rows": rows[:BOARD_ROWS], "players": len(have), "ends": ends}
+        if viewer:
+            held = self.held(viewer)
+            if not held:
+                line = "You have not held it yet"
+            elif not await self.levelled_up(viewer):
+                line = f"You held it {clock(held)}. Tickets start at Level {MIN_LEVEL}"
+            else:
+                line = f"You held it {clock(held)}"
+            board["you"] = {
+                "row": rows[-1] if extra else None,
+                "place": order.index(viewer) + 1 if viewer in have else 0,
+                "line": line,
+            }
+        return board
+
+    async def board(self):
+        board = await self.standing()
+        if board["rows"]:
+            await self.post(draw_board, board)
+
+    @app_commands.command(
+        name="golden", description="Golden Bean: the top 5 and your own tickets"
+    )
+    async def golden(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        board = await self.standing(interaction.user.id)
+        await interaction.followup.send(
+            file=await render(draw_board, board, name="bean"), ephemeral=True
         )
 
     async def draw(self):
