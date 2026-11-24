@@ -227,9 +227,17 @@ class GoldenBean(commands.Cog):
         cafe = self.bot.get_cog("CurrencySystem")
         if cafe is None:
             return len(message.content.strip()) >= 5
-        return cafe.chat_system.is_effortful_message(
-            message.content, message.author.id
-        )[0]
+        chat, author = cafe.chat_system, message.author.id
+        # Chat Beans may have seen this message first and kept it as the
+        # member's last one, which would make it look like a repeat of itself.
+        last = chat.last_messages.get(author)
+        if last == message.content.strip():
+            chat.last_messages[author] = ""
+        try:
+            return chat.is_effortful_message(message.content, author)[0]
+        finally:
+            if last is not None:
+                chat.last_messages[author] = last
 
     def offer(self, message):
         """Whether this main chat message takes the bean. Never waits, so two

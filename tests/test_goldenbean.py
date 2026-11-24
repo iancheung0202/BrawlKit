@@ -286,3 +286,13 @@ def test_cards_draw():
     assert goldenbean.draw_board({"rows": rows, "players": 2, "ends": "Draw in 3 days"})
     win = {"name": "Sam", "avatar": None, "tickets": 40, "total": 52}
     assert goldenbean.draw_winner(win)
+
+
+def test_chat_beans_seeing_the_message_first_does_not_block_it(cafe, event):
+    chat = cafe.cogs["CurrencySystem"].chat_system
+    first = said(A, 1)
+    chat.last_messages[A] = first.content
+    assert event.offer(first) and chat.last_messages[A] == first.content
+    reply = said(B, 2, to=A)
+    chat.last_messages[B] = "something else entirely"
+    assert event.offer(reply) and chat.last_messages[B] == "something else entirely"
