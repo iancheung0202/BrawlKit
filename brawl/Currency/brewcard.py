@@ -25,7 +25,7 @@ def draw_brewing(brew):
     """A strip for a brew that just started."""
     roast = ROAST_TYPES[brew["roast"]]
     card = Card.strip(brew.get("next"))
-    card.tag(32, 12, "BREW STARTED", BLUE, WHITE)
+    card.tag(32, 12, "BREW STARTED")
     card.icon("brewing", 34, 44, 76)
     card.text(122, 44, roast["name"], 26)
     ready = f"Ready in {hours(brew['time'])}" if brew["time"] else "Ready now"

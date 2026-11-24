@@ -58,7 +58,7 @@ def test_the_menu_swaps_the_page_in_place(cafe):
 
     swapped = asyncio.run(pick())
     assert swapped["attachments"][0].filename == "brewing.jpg"
-    assert swapped["view"].children[0].options[4].default
+    assert swapped["view"].children[0].options[2].default
 
 
 def test_the_menu_only_works_for_the_member_who_asked(cafe):

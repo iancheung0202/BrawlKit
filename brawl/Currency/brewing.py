@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View
 
+from brawl.Currency import wallet
 from brawl.Currency.brewcard import draw_brewing, draw_sold
 from brawl.Currency.card import GOLD, GREEN, MUTED, RED, render
 from brawl.Currency.db import g_invites_member_data, sync_sell_alarm
@@ -58,8 +59,7 @@ class Brewing(commands.Cog):
             if beans < insurance_cost:
                 return False
 
-            new_beans = beans - insurance_cost
-            await self.economy.update_balance(user_id, beans=new_beans)
+            await wallet.change(user_id, beans=-insurance_cost, reason="brew")
 
         ref = self.economy._get_brew_ref(user_id)
         data = ref.get() or {}
@@ -253,8 +253,7 @@ class Brewing(commands.Cog):
 
         await interaction.response.defer(thinking=True)
 
-        new_beans = beans - cost
-        await self.economy.update_balance(user_id, beans=new_beans)
+        new_beans, _ = await wallet.change(user_id, beans=-cost, reason="brew")
 
         current_time = time.time()
         brew_time = ROAST_TYPES[roast]["time"]
@@ -441,7 +440,7 @@ class Brewing(commands.Cog):
             master_bonus = max(int(base_payout * 0.5), 1)
             tokens += master_bonus
 
-        new_tokens = await self.economy.add_tokens(user_id, tokens)
+        new_tokens = await self.economy.add_tokens(user_id, tokens, reason="brew")
         order = await update_quest(
             user_id, interaction.guild.id, {"brew_sells": 1}, self.bot
         )

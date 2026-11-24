@@ -650,7 +650,7 @@ class Daily(commands.Cog):
             beans_earned += ULTRA_DAILY_BONUS
 
         await interaction.response.defer(ephemeral=True, thinking=True)
-        await self.economy.add_beans(user_id, beans_earned)
+        await self.economy.add_beans(user_id, beans_earned, reason="clock_in")
         order = await update_quest(
             user_id,
             interaction.guild.id,
@@ -659,7 +659,7 @@ class Daily(commands.Cog):
             chat=(chat_today(user_id), chat_limit(interaction.user, active_effects)),
         )
         if tokens_earned:
-            await self.economy.add_tokens(user_id, tokens_earned)
+            await self.economy.add_tokens(user_id, tokens_earned, reason="clock_in")
 
         notes = []
         if is_booster:

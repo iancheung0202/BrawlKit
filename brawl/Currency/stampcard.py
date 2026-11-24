@@ -3,7 +3,7 @@ import time
 from discord import app_commands
 from discord.ext import commands
 
-from brawl.Currency import events, wallet
+from brawl.Currency import events, ledger, wallet
 from brawl.Currency.card import render
 from brawl.Currency.config import (
     LEGACY_STAMP_GOALS,
@@ -28,7 +28,7 @@ from brawl.Currency.helper import (
     get_current_date_key,
     get_current_month_key,
 )
-from brawl.Currency.home import background, draw_stamp_card
+from brawl.Currency.home import background
 from brawl.Currency.panel import framed, notice
 from brawl.Currency.quests import order_tasks, update_quest
 from brawl.Currency.rewardcard import draw_redeemed
@@ -57,12 +57,13 @@ def boxes(before, after):
     return max(steps, 0) * STAMP_BOXES
 
 
-def add(user_id, amount=1, day=None):
+def add(user_id, amount=1, day=None, source="other"):
     """Adds Stamps to a card and pays its Mega Boxes. Returns the boxes paid."""
     have = stamps(user_id)
     u_stamp_card(user_id).update(
         {"count": have + amount, **({"last_stamp": day} if day else {})}
     )
+    ledger.note(source, user_id, stamps=amount)
     paid = boxes(have, have + amount)
     if paid:
         u_mega_boxes(user_id).set((u_mega_boxes(user_id).get() or 0) + paid)
@@ -96,7 +97,7 @@ class StampCard(commands.Cog):
         card = u_stamp_card(user_id)
         if (card.get() or {}).get("last_stamp") == today:
             return
-        add(user_id, 1, today)
+        add(user_id, 1, today, source="order")
 
     async def summary(self, user, guild):
         await update_quest(user.id, guild.id, {}, self.bot, refresh_only=True)
@@ -106,17 +107,11 @@ class StampCard(commands.Cog):
             "redeemed": redeemed(guild.id),
             "streak": streak(user.id),
             "done": sum(done for *_, done in tasks),
-            "tasks": len(tasks),
+            "order": len(tasks),
             "stamped": (u_stamp_card(user.id).get() or {}).get("last_stamp")
             == get_current_date_key(),
             "prices": {tier: price(user.id, tier) for tier in TIERS},
-            "background": background(user.id),
         }
-
-    async def card(self, user, guild):
-        return await render(
-            draw_stamp_card, await self.summary(user, guild), name=f"balance_{user.id}"
-        )
 
     @app_commands.command(
         name="redeem",
@@ -157,7 +152,7 @@ class StampCard(commands.Cog):
             )
 
         cost = price(user_id, tier.value)
-        if not await wallet.pay(user_id, tokens=cost, reason="redeem"):
+        if not await wallet.pay(user_id, tokens=cost, reason="pass"):
             _, tokens = wallet.balance(user_id)
             return await interaction.response.send_message(
                 embed=notice(

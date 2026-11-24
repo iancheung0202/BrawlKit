@@ -144,6 +144,12 @@ def draw():
     return topic["text"], topic["user"]
 
 
+def approved_by(user_id: int) -> int:
+    """How many of this member's topics were approved."""
+    topics = (db.reference(APPROVED).get() or {}).values()
+    return sum(topic.get("user") == user_id for topic in topics)
+
+
 def topic_embed():
     text, user_id = draw()
     embed = discord.Embed(title=text, color=GOLD)

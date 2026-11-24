@@ -107,8 +107,8 @@ def test_sell_pays_tokens_and_clears_the_batch(cafe):
 def test_first_brew_completes_the_daily_brew_quest(cafe, monkeypatch):
     monkeypatch.setattr(
         quests,
-        "generate_quests",
-        lambda duration, level=0: {"brew_start": {"current": 0, "goal": 1}},
+        "generate_order",
+        lambda level=0: {"brew_start": {"current": 0, "goal": 1}},
     )
     user(cafe, "balance").set({"Beans": 5000})
     brew(cafe)

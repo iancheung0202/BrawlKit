@@ -29,6 +29,12 @@ def rep_of(user_id: int) -> int:
     return db.reference(REPS).child(str(user_id)).get() or 0
 
 
+def paid_today(user_id: int) -> int:
+    """How many of this member's reps paid Tokens today."""
+    day = db.reference(DAYS).child(str(user_id)).get() or {}
+    return day.get("paid", 0) if day.get("day") == today() else 0
+
+
 def today() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 

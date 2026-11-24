@@ -2,6 +2,7 @@ import io
 from functools import lru_cache
 
 from brawl.Currency.card import (
+    BLACK,
     BLUE,
     GOLD,
     MUTED,
@@ -108,34 +109,27 @@ def draw_star_drop(drop):
 
 
 def draw_mega_box(box):
-    """A grid with one tile per item, so the card grows with the box."""
+    """One item per spot, spread across the card, which grows with the box."""
     rewards, total = box["rewards"], box["total"]
     rows = -(-total // PER_ROW)
-    card = Card(640, 88 + rows * 96, box["background"])
+    card = Card(640, 78 + rows * 104, box["background"])
     left = total - len(rewards)
-    card.panel(16, 16, 608, 22 + rows * 96)
+    card.panel(16, 16, 608, 12 + rows * 104)
     for spot in range(total):
-        x, y = 30 + spot % PER_ROW * 117, 30 + spot // PER_ROW * 96
-        latest = left and spot == len(rewards) - 1
-        card.slot(x, y, 111, 86, GOLD if latest else (0, 0, 0))
+        across = min(PER_ROW, total - spot // PER_ROW * PER_ROW)
+        step = 584 / across
+        mid, y = 28 + step * (spot % PER_ROW + 0.5), 30 + spot // PER_ROW * 104
         if spot >= len(rewards):
-            card.text(x + 55, y + 43, "?", 36, MUTED, "mm")
+            card.text(mid, y + 26, "?", 44, (*MUTED, 110), "mm")
             continue
-        reward = rewards[spot]
-        image = icon(picture(reward), 38)
-        card.paste(image, x + 55 - image.width / SCALE / 2, y + 7)
-        lines = wrap(card, label(reward), 101)
+        image = icon(picture(rewards[spot]), 52)
+        card.paste(image, mid - image.width / SCALE / 2, y)
+        latest = left and spot == len(rewards) - 1
+        lines = wrap(card, label(rewards[spot]), min(step, 150) - 8)
+        size = 16 if len(lines) == 1 else 13
         for row, line in enumerate(lines):
-            size = 15 if len(lines) == 1 else 13
-            card.text(
-                x + 55,
-                y + 67 - (len(lines) - 1 - row * 2) * 7,
-                line,
-                size,
-                WHITE,
-                "mm",
-                2,
-            )
+            color = GOLD if latest else WHITE
+            card.text(mid, y + 58 + row * 15, line, size, color, "ma", 2)
     if left:
         hint = f"Press Tap to reveal {plural(left, 'more item')}."
     elif any(reward["kind"] == "effect" for reward in rewards):
@@ -171,10 +165,9 @@ def chip(card, x, y, name, amount, odds="", outline=(0, 0, 0)):
 
 
 @lru_cache
-def rates_image(background):
+def rates_image(card):
+    """The drop rates on a 900 by 828 page that already has its header."""
     rates, drops = STAR_DROP_RATES["rarity_rates"], STAR_DROP_RATES["drops"]
-    card = Card(900, 828, background)
-    card.title("DROP RATES", "What a Star Drop or a Mega Box can give you.")
     card.panel(26, 124, 848, 40 + len(rates) * 60)
     card.tag(42, 112, "STAR DROPS")
     for row, (rarity, chance) in enumerate(rates.items()):
@@ -202,14 +195,14 @@ def rates_image(background):
                 card,
                 x,
                 y + 6,
-                "items/effect",
+                "kit/icon_box",
                 "Effect item",
                 percent(DROP_BONUS[rarity]),
                 GOLD,
             )
     top = 196 + len(rates) * 60
     card.panel(26, top, 848, 210)
-    card.tag(42, top - 12, "MEGA BOXES", BLUE, WHITE)
+    card.tag(42, top - 12, "MEGA BOXES")
     card.icon("items/mega_box", 46, top + 30, 84)
     card.text(160, top + 22, "How many items a box holds", 15, MUTED, "la", 2)
     for spot, (count, odds) in enumerate(MEGA_BOX_ITEMS.items()):
@@ -227,7 +220,7 @@ def rates_image(background):
     for prize, odds in MEGA_BOX_EXTRA.items():
         if prize == "effect":
             x = chip(
-                card, x, top + 164, "items/effect", "Effect item", percent(odds), GOLD
+                card, x, top + 164, "kit/icon_box", "Effect item", percent(odds), GOLD
             )
         else:
             x = chip(card, x, top + 164, "kit/token", str(prize), percent(odds))

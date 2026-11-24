@@ -198,9 +198,13 @@ class Leveling(commands.Cog):
 
                     currency_cog = self.bot.get_cog("CurrencySystem")
                     if currency_cog:
-                        await currency_cog.add_beans(str(user_id), beans_earned)
+                        await currency_cog.add_beans(
+                            str(user_id), beans_earned, reason="level_up"
+                        )
                         if tokens_earned > 0:
-                            await currency_cog.add_tokens(str(user_id), tokens_earned)
+                            await currency_cog.add_tokens(
+                                str(user_id), tokens_earned, reason="level_up"
+                            )
 
                     if booster:
                         emoji = "<a:serverboost:1457471812731404450>"

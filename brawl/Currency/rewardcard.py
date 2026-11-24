@@ -16,7 +16,6 @@ from brawl.Currency.card import (
 from brawl.Currency.config import (
     DAILY_BEANS,
     ROAST_TYPES,
-    THERMOMETER_LEVELS,
     TUTORIAL_BEANS,
     TUTORIAL_TOKENS,
 )
@@ -131,8 +130,7 @@ def draw_shift(shift):
         32,
         12,
         "FIRST SHIFT DONE" if done else "YOUR FIRST SHIFT",
-        GREEN if done else BLUE,
-        BLACK if done else WHITE,
+        GREEN if done else GOLD,
     )
     for row, name in enumerate(SHIFT):
         y = 56 + row * 48
@@ -210,22 +208,22 @@ def draw_chat(reward):
     """A strip posted when chatting pays Beans: the gain and today's limit."""
     order = reward.get("order")
     done = reward["today"] >= reward["limit"]
-    heat = reward.get("heat") if done else None
-    card = Card.strip(foot=bool(order) + bool(heat), small=True)
+    extra = reward.get("extra")
+    card = Card.strip(foot=bool(order) + bool(extra), small=True)
     card.tag(32, 12, "CHAT BEANS", GOLD)
     card.avatar(reward["avatar"], 34, 40, 52)
-    if reward.get("bean"):  # this member holds the Golden Bean
-        card.icon("kit/golden_bean", 69, 72, 26)
     card.text(100, 40, card.fit(reward["name"], 16, 180), 16, MUTED, "la", 2)
     gain = f"+{reward['beans']:,}"
     card.icon("kit/bean", 98, 62, 30)
     card.text(134, 62, gain, 26, GOLD)
     if reward["boosted"]:
-        card.icon("items/effect", 142 + card.measure(gain, 26), 64, 26)
+        card.icon("kit/icon_box", 142 + card.measure(gain, 26), 64, 26)
     color = GREEN if done else GOLD
     left = max(0, int(reward["reset"] - time.time())) // 60
     card.icon("kit/icon_clock", 300, 44, 15)
-    card.text(322, 42, f"{left // 60}h {left % 60}m", 13, MUTED, "la", 2)
+    card.text(
+        322, 42, f"Daily cap resets in {left // 60}h {left % 60}m", 13, MUTED, "la", 2
+    )
     count = f"{reward['today']:,} / {reward['limit']:,}"
     card.text(604, 40, count, 17, color, "ra", 2)
     card.bar(300, 66, 304, 20, reward["today"] / reward["limit"], color)
@@ -233,25 +231,25 @@ def draw_chat(reward):
         label = done_label(order) if order["stamp"] else "Order task done"
         card.text(36, card.foot, label, 15, GREEN if order["stamp"] else GOLD, "la", 2)
         right(card, card.foot - 2, earned(order), 15)
-    if heat:
-        y = card.foot + 26 * bool(order)
-        pay = heat[2] or THERMOMETER_LEVELS[-2][2]
-        lead = "Limit reached. " + (
-            "The thermometer pays" if heat[2] else "When Warm, the thermometer pays"
-        )
-        card.icon("kit/icon_wasabi_power_hot", 34, y - 3, 22)
-        card.text(62, y, lead, 15, GOLD, "la", 2)
-        x = 68 + card.measure(lead, 15)
-        card.icon("kit/bean", x, y - 2, 20)
-        card.text(x + 24, y, f"+{pay} extra a message, no limit.", 15, GOLD, "la", 2)
+    if extra:
+        extras(card, 36, card.foot + 26 * bool(order), extra, 15)
     return card.jpg()
+
+
+def extras(card, x, y, beans, size):
+    """What the thermometer paid on top, in Beans."""
+    label = "Extra from the thermometer"
+    card.text(x, y, label, size, MUTED, "la", 2)
+    x += card.measure(label, size) + 8
+    card.icon("kit/bean", x, y - 2, size + 5)
+    card.text(x + size + 9, y, f"+{beans:,}", size, GOLD, "la", 2)
 
 
 def draw_level_up(member):
     """A strip posted in chat when a member levels up."""
     card = Card(640, 150)
     card.panel(16, 24, 608, 110)
-    card.tag(32, 12, "LEVEL UP", BLUE, WHITE)
+    card.tag(32, 12, "LEVEL UP")
     card.avatar(member["avatar"], 34, 44, 76)
     card.text(122, 42, card.fit(member["name"], 20, 280), 20, MUTED, "la", 2)
     card.icon("kit/icon_xp", 122, 68, 44)
@@ -261,9 +259,10 @@ def draw_level_up(member):
         rewards.append(("kit/token", member["tokens"]))
     right(card, 44, rewards, 22)
     for row, (label, name) in enumerate(member["unlocks"][:2]):
-        card.text(
-            604, 82 + row * 20, card.fit(f"{label} {name}", 15, 230), 15, GREEN, "ra", 2
-        )
+        y = 82 + row * 20
+        name = card.fit(name, 15, 180)
+        card.text(604, y, name, 15, GREEN, "ra", 2)
+        card.text(596 - card.measure(name, 15), y, label, 15, MUTED, "ra", 2)
     return card.jpg()
 
 

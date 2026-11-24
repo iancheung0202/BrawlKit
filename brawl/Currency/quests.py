@@ -74,10 +74,6 @@ def generate_order(level):
     return order
 
 
-def generate_quests(duration, level=0):
-    return generate_order(level)
-
-
 def label(task, goal):
     return ORDER_LABELS[task].format(goal=goal)
 
@@ -126,9 +122,7 @@ async def update_quest(
     data = ref.get() or {}
     if time.time() >= data.get("end_time", 0):
         data = {
-            "quests": generate_quests(
-                "daily", await order_level(bot, user_id, guild_id)
-            ),
+            "quests": generate_order(await order_level(bot, user_id, guild_id)),
             "end_time": get_next_daily_reset(),
             "completed": {},
         }
@@ -202,7 +196,7 @@ async def update_quest(
 
     currency = bot.get_cog("CurrencySystem")
     if beans and currency:
-        await currency.add_beans(user_id, beans, skip_quest_check=True, reason="quest")
+        await currency.add_beans(user_id, beans, skip_quest_check=True, reason="order")
     messages.beans = beans
     return messages
 

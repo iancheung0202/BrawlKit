@@ -29,13 +29,11 @@ from brawl.Currency.db import (
     g_thermometer,
     sync_sell_alarm,
     sync_shop_effects,
-    u_balance,
     u_brews,
     u_mega_boxes,
     u_star_drops,
 )
 from brawl.Currency.effects import EffectManager
-from brawl.Currency.goldenbean import GoldenBean, paid_today
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     BOT_COMMANDS,
@@ -71,7 +69,6 @@ class CurrencySystem(commands.Cog):
         self.heat_channel = None
         self.heat_told = {}
         self.heat_notice = None
-        self.bean = GoldenBean(self.bot, self)
         self.thermometer_decay_task = self.bot.loop.create_task(
             self.thermometer_decay_loop()
         )
@@ -95,8 +92,9 @@ class CurrencySystem(commands.Cog):
                 self.chat_system.thermo_bean_cache = {}
 
             for user_id, beans in cache.items():
-                await self.add_beans(user_id, beans)
+                await self.add_beans(user_id, beans, reason="thermometer")
                 heat.count_beans(user_id, beans, get_next_daily_reset())
+                self.chat_system.extra(user_id, beans)
 
     async def set_heat(self, heat_now, channel=None):
         """Moves the thermometer, and tells the chat when that changes its level.
@@ -117,7 +115,7 @@ class CurrencySystem(commands.Cog):
         try:
             card = await render(
                 draw_heat,
-                {"level": now, "rose": rose, "bean": await self.bean.who()},
+                {"level": now, "rose": rose},
                 name="thermometer",
             )
             told, self.heat_told[now[1]] = self.heat_told.get(now[1], 0), time.time()
@@ -131,23 +129,6 @@ class CurrencySystem(commands.Cog):
             self.heat_notice = None if rose else sent
         except Exception as e:
             print(f"Failed to post the thermometer level: {e}")
-
-    @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload):
-        await self.bean.fake(payload)
-
-    @commands.Cog.listener()
-    async def on_raw_message_delete(self, payload):
-        self.bean.deleted({payload.message_id})
-
-    @commands.Cog.listener()
-    async def on_raw_bulk_message_delete(self, payload):
-        self.bean.deleted(payload.message_ids)
-
-    @commands.Cog.listener()
-    async def on_member_remove(self, member):
-        if member.guild.id == MAIN_GUILD_ID:
-            self.bean.left(member.id)
 
     async def effect_cleanup_loop(self):
         """Clean up expired effects every minute"""
@@ -323,7 +304,7 @@ class CurrencySystem(commands.Cog):
                 channel = self.bot.get_channel(random.choice(MAIN_CHAT_CHANNELS))
                 # Counted before it is sent, so a failed visit is never retried in a loop.
                 ref.update({"done": day["done"] + 1})
-                await start_inspection(self, channel)
+                await start_inspection(self, channel, day["done"])
                 print(
                     f"Boss Inspection dropped in {channel.name} "
                     f"(visit {day['done'] + 1}/{len(day['times'])})"
@@ -331,9 +312,6 @@ class CurrencySystem(commands.Cog):
             except Exception as e:
                 print(f"Error in boss_inspection_loop: {e}")
                 await asyncio.sleep(600)
-
-    def _get_balance_ref(self, user_id: int):
-        return u_balance(user_id)
 
     async def add_beans(
         self,
@@ -380,16 +358,6 @@ class CurrencySystem(commands.Cog):
 
     async def get_balance(self, user_id: int):
         return wallet.balance(user_id)
-
-    async def update_balance(self, user_id: int, beans: int = None, tokens: int = None):
-        """Update user's Beans and/or Tokens balance."""
-        ref = self._get_balance_ref(user_id)
-        data = ref.get() or {}
-        if beans is not None:
-            data["Beans"] = beans
-        if tokens is not None:
-            data["Tokens"] = tokens
-        ref.set(data)
 
     def _get_brew_ref(self, user_id: int):
         return u_brews(user_id)
@@ -537,7 +505,7 @@ class CurrencySystem(commands.Cog):
             role_granted = TRAINEE_ROLE_ID
             from brawl.Currency.stampcard import add as add_stamps
 
-            boxes = add_stamps(inviter_id, REFERRAL_TRAINEE_STAMPS)
+            boxes = add_stamps(inviter_id, REFERRAL_TRAINEE_STAMPS, source="invites")
             extra = f" and `x{boxes}` Mega Boxes" if boxes else ""
             reward_message = f"🎉 Your invitee {invitee.mention} brewed their first coffee! You **earned {STAMP_EMOTE} `{REFERRAL_TRAINEE_STAMPS}` Stamp{extra}** and unlocked the `Trainee Barista` role!"
             log_entry = f"🎯 **Milestone Reached:** <@&{TRAINEE_ROLE_ID}>\n🎁 **Reward:** `+{REFERRAL_TRAINEE_STAMPS}` Stamp{extra} to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
@@ -552,7 +520,7 @@ class CurrencySystem(commands.Cog):
             role_granted = BRIDGE_ROLE_ID
             from brawl.Currency.stampcard import add as add_stamps
 
-            boxes = add_stamps(inviter_id, REFERRAL_BRIDGE_STAMPS)
+            boxes = add_stamps(inviter_id, REFERRAL_BRIDGE_STAMPS, source="invites")
             extra = f" and `x{boxes}` Mega Boxes" if boxes else ""
             reward_message = f"🎉 Your invitee {invitee.mention} sold their first coffee! You **earned {STAMP_EMOTE} `{REFERRAL_BRIDGE_STAMPS}` Stamp{extra}** and unlocked the `Bridge Barista` role!"
             log_entry = f"🎯 **Milestone Reached:** <@&{BRIDGE_ROLE_ID}>\n🎁 **Reward:** `+{REFERRAL_BRIDGE_STAMPS}` Stamp{extra} to {inviter.mention} (inviter)\n👤 **Invitee:** {invitee.mention}"
@@ -607,13 +575,13 @@ class CurrencySystem(commands.Cog):
         description="See how hot the chat is and what each message earns",
     )
     async def thermometer(self, interaction: discord.Interaction):
+        drops, resets = heat.drops(interaction.user.id)
         cup = {
             "background": background(interaction.user.id),
             "heat": self.thermometer_heat,
-            "drops": heat.drops_today(interaction.user.id),
+            "drops": drops,
+            "resets": resets,
             "beans": heat.beans_today(interaction.user.id),
-            "held": paid_today(interaction.user.id),
-            "bean": await self.bean.who(),
         }
         frozen = heat.freeze(interaction.guild.id)
         if frozen:
@@ -674,7 +642,7 @@ class CurrencySystem(commands.Cog):
             )
 
         if currency == "Tokens":
-            new_amount = await self.add_tokens(user.id, amount)
+            new_amount = await self.add_tokens(user.id, amount, reason="staff")
         elif currency == "StarDrops":
             ref = u_star_drops(user.id)
             current = ref.get() or 0
@@ -688,7 +656,7 @@ class CurrencySystem(commands.Cog):
             ref.set(new_amount)
             currency = "Mega Boxes"
         else:
-            new_amount = await self.add_beans(user.id, amount)
+            new_amount = await self.add_beans(user.id, amount, reason="staff")
 
         await interaction.response.send_message(
             embed=discord.Embed(

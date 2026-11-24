@@ -75,7 +75,9 @@ class TutorialManager:
         u_tutorial(user_id).set(DONE)
         if economy := self.bot.get_cog("CurrencySystem"):
             await economy.add_tokens(user_id, TUTORIAL_TOKENS, reason="tutorial")
-            await economy.add_beans(user_id, TUTORIAL_BEANS, skip_quest_check=True)
+            await economy.add_beans(
+                user_id, TUTORIAL_BEANS, skip_quest_check=True, reason="tutorial"
+            )
         return FINISHED
 
 

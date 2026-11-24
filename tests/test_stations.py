@@ -91,7 +91,7 @@ def test_token_rolls_follow_the_config(monkeypatch):
     assert heat.roll_tokens(boiling) == (5, True)
     assert heat.roll_tokens(hot) == (1, False)
     assert heat.roll_tokens(warm) == (1, False)
-    for roll, tokens in ((0.001, 3), (0.002, 2), (0.004, 1), (0.018, 1), (0.019, 0)):
+    for roll, tokens in ((0.001, 3), (0.002, 2), (0.004, 2), (0.018, 1), (0.021, 0)):
         monkeypatch.setattr(heat.random, "random", lambda: roll)
         assert heat.roll_tokens(boiling) == (tokens, False)
     monkeypatch.setattr(heat.random, "random", lambda: 0.006)
@@ -195,3 +195,14 @@ def test_the_ended_inspection_keeps_the_role_ping(cafe):
     view, channel = inspection(cafe)
     asyncio.run(view.end_inspection())
     assert "<@&" in view.message.edit.await_args.kwargs["content"]
+
+
+def test_each_token_drop_keeps_what_it_gave_until_the_day_ends(cafe, monkeypatch):
+    clock = [1_000_000.0]
+    monkeypatch.setattr(heat.time, "time", lambda: clock[0])
+    heat.take_drop(USER, 1)
+    clock[0] += 3600
+    heat.take_drop(USER, 5)
+    assert heat.drops(USER) == ([1, 5], 1_000_000.0 + heat.DAY)
+    clock[0] += heat.DAY
+    assert heat.drops(USER) == ([], None)

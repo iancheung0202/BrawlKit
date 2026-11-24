@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from brawl.Currency import invitecard
+from brawl.Currency import balancecard, invitecard
 from brawl.Currency.config import (
     REFERRAL_BRIDGE_STAMPS,
     REFERRAL_STEPS,
@@ -35,13 +35,17 @@ def test_the_summary_reads_this_months_counts_and_steps(cafe):
     assert (summary["valid"], summary["total"], summary["left"]) == (4, 6, 2)
     assert summary["done"] == {"trainee_done": True}
     assert 1 <= summary["days"] <= 31
-    assert invitecard.draw_invites(summary).read(2) == b"\xff\xd8"
+    assert community(summary).read(2) == b"\xff\xd8"
+
+
+def community(summary):
+    member = {"table": None, "invites": summary, "rep": 0, "rep_paid": 0, "topics": 0}
+    return balancecard.draw_community(member)
 
 
 def test_a_member_with_no_invites_still_gets_a_card(cafe):
     assert invitecard.invited_by(MAIN_GUILD_ID, ME) == {}
-    summary = invitecard.summary(MAIN_GUILD_ID, ME)
-    assert invitecard.draw_invites(summary).read(2) == b"\xff\xd8"
+    assert community(invitecard.summary(MAIN_GUILD_ID, ME)).read(2) == b"\xff\xd8"
 
 
 def test_the_card_rewards_are_the_ones_the_bot_pays():
@@ -121,18 +125,16 @@ def test_brew_status_is_short():
 
 
 def test_the_invites_button_fits_a_month_picker_on_home(cafe):
-    from brawl.Currency import balance
-
     invite(55, "2026-11")
     interaction = cafe.interaction(ME)
-    interaction.message.attachments = [MagicMock(filename=f"balance_{ME}.jpg")]
+    cog = cafe.cogs["Balance"]
 
-    async def press():
-        view = balance.BalanceInfoView()
-        button = next(b for b in view.children if b.custom_id == "balance_invites")
-        await button.callback(interaction)
-        return view
+    async def open_page():
+        return await cog.page(interaction.user, interaction.guild, "COMMUNITY")
 
-    view = asyncio.run(press())
-    assert interaction.response.edit_message.called
-    assert any(type(item).__name__ == "MonthSelect" for item in view.children)
+    view, files = asyncio.run(open_page())
+    assert [file.filename for file in files] == [
+        f"balance_{ME}_0.jpg",
+        f"balance_{ME}_1.jpg",
+    ]
+    assert any(type(item).__name__ == "MonthSelect" for item in view.walk_children())

@@ -38,35 +38,36 @@ from brawl.Currency.panel import framed, notice
 from brawl.Currency.tablecard import draw_table, draw_table_reward
 
 
-async def table_card(table, interaction, tag="TABLE", name="table"):
-    """The table as the member sees it: their own seat is outlined."""
+async def seated(table, guild, user_id):
+    """A table as its cards draw it, with the seat of the member looking marked."""
     shares = table.get("user_contributions") or {}
     ids = table.get("members", [])
-    members = await roster(interaction.guild, ids)
+    members = await roster(guild, ids)
     seats = [
         (
             member.display_name if member else "Member",
             shares.get(str(member_id), 0),
             member_id == table["host"],
-            member_id == interaction.user.id,
+            member_id == user_id,
             avatar,
         )
         for member_id, member, avatar in zip(ids, members, await faces(members))
     ]
-    return await render(
-        draw_table,
-        {
-            "background": background(interaction.user.id),
-            "tag": tag,
-            "name": table["name"],
-            "motto": table["motto"],
-            "color": table["color"],
-            "weekly_beans": table.get("weekly_beans", 0),
-            "tier": (table.get("quest") or {}).get("current_tier", 0),
-            "members": seats,
-        },
-        name=name,
-    )
+    return {
+        "name": table["name"],
+        "motto": table["motto"],
+        "color": table["color"],
+        "weekly_beans": table.get("weekly_beans", 0),
+        "tier": (table.get("quest") or {}).get("current_tier", 0),
+        "members": seats,
+    }
+
+
+async def table_card(table, interaction, tag="TABLE", name="table"):
+    """The table as the member sees it: their own seat is outlined."""
+    card = await seated(table, interaction.guild, interaction.user.id)
+    card.update(background=background(interaction.user.id), tag=tag)
+    return await render(draw_table, card, name=name)
 
 
 def week_start(now=None):
@@ -193,7 +194,10 @@ class TableSystem(commands.GroupCog, name="table"):
                     for member_id in members:
                         try:
                             await currency_cog.add_beans(
-                                member_id, reward_per_member, skip_quest_check=True
+                                member_id,
+                                reward_per_member,
+                                skip_quest_check=True,
+                                reason="table_goal",
                             )
                         except Exception as e:
                             print(f"Error rewarding quest to user {member_id}: {e}")
@@ -298,11 +302,13 @@ class TableSystem(commands.GroupCog, name="table"):
                     for member_id in top_table_members:
                         try:
                             await currency_cog.add_tokens(
-                                member_id, TABLE_WINNER_TOKENS
+                                member_id, TABLE_WINNER_TOKENS, reason="table_winner"
                             )
                             from brawl.Currency.stampcard import add as add_stamps
 
-                            boxes = add_stamps(member_id, TABLE_WINNER_STAMPS)
+                            boxes = add_stamps(
+                                member_id, TABLE_WINNER_STAMPS, source="table_winner"
+                            )
 
                             if await self.should_send_dm(member_id):
                                 user = self.bot.get_user(member_id)

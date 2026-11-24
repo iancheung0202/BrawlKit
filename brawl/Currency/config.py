@@ -97,7 +97,7 @@ STAMP_PRICE_RANGES = {
 }
 
 # The Clock In streak where a pass starts to cost fewer Tokens, and where it is cheapest.
-STAMP_PRICE_STREAK = (10, 100)
+STAMP_PRICE_STREAK = (0, 100)
 
 STAMP_MONTHLY_LIMIT = 5
 # Mega Boxes paid each time a card reaches another multiple of this many Stamps
@@ -268,7 +268,12 @@ async def setup(bot):
 # Thermometer: each row is the heat it starts at, its name, the Beans added to
 # every counted message, and the Token drops it can roll (odds, amounts).
 THERMOMETER_LEVELS = (
-    (100, "Boiling", 10, ((0.0005, (5,)), (0.001, (3,)), (0.002, (2,)), (0.015, (1,)))),
+    (
+        100,
+        "Boiling",
+        10,
+        ((0.0005, (5,)), (0.001, (3,)), (0.0035, (2,)), (0.015, (1,))),
+    ),
     (75, "Hot", 5, ((0.01, (1,)),)),
     (50, "Warm", 2, ((0.005, (1,)),)),
     (0, "Cold", 0, ()),
@@ -280,16 +285,6 @@ THERMOMETER_MAX = 130
 THERMOMETER_NEWS_SECONDS = 900
 # Heat lost each minute: (above this heat, points lost).
 THERMOMETER_COOLING = ((100, 20), (75, 10), (50, 5), (0, 2))
-
-# The Golden Bean pays its holder once in this long, at a random moment.
-GOLDEN_BEAN_BEANS = 5
-GOLDEN_BEAN_PAY_SECONDS = 60
-# One hold stops paying after this long; it pays again once someone else takes it.
-GOLDEN_BEAN_HOLD_SECONDS = 7200
-# The reaction moves at most once in this long, however fast the bean does.
-GOLDEN_BEAN_MOVE_SECONDS = 2
-# In a Cold chat a take is posted at most once in this long.
-GOLDEN_BEAN_NEWS_SECONDS = 60
 
 BOSS_SECONDS = 300
 # Visits in each half of the UTC day, and the hours between two of the same half.

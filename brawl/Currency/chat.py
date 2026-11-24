@@ -59,11 +59,16 @@ class ChatRewardSystem:
         self.user_cooldowns = {}
         self.message_counts = {}
         self.thermo_bean_cache = {}
+        self.thermo_bean_lock = asyncio.Lock()
+        # Thermometer Beans paid since the member's last strip.
+        self.extras = {}
         self.daily_thresholds = {}
         self.last_messages = {}
         self.first_message_times = {}
         self.earnings_cache = {}
-        self.thermo_bean_lock = asyncio.Lock()
+
+    def extra(self, user_id, beans):
+        self.extras[user_id] = self.extras.get(user_id, 0) + beans
 
     def is_effortful_message(self, message: str, user_id: int) -> tuple[bool, str]:
         content = message.strip()
@@ -152,7 +157,6 @@ class ChatRewardSystem:
         chat_boost_active = "chat_boost" in active_effects
         MAX_DAILY_CHAT_BEAN_LIMIT = chat_limit(message.author, active_effects)
 
-        stolen = cog.bean.holder is not None
         if message.channel.id in MAIN_CHAT_CHANNELS and not heat.freeze(
             message.guild.id
         ):
@@ -163,9 +167,6 @@ class ChatRewardSystem:
                 ),
                 message.channel,
             )
-
-        if cog.bean.offer(message):
-            await cog.bean.tell(message, stolen)
 
         level = heat.level_of(min(cog.thermometer_heat, 100))
         if level[2]:
@@ -179,9 +180,9 @@ class ChatRewardSystem:
         if bonus_tokens and await unlocked(
             self.bot, user_id, message.guild.id, "thermometer"
         ):
-            count = heat.take_drop(user_id)
+            count = heat.take_drop(user_id, bonus_tokens)
             if count:
-                await cog.add_tokens(user_id, bonus_tokens)
+                await cog.add_tokens(user_id, bonus_tokens, reason="thermometer")
                 dropped = await update_quest(
                     user_id, message.guild.id, {"thermometer_bonuses": 1}, self.bot
                 )
@@ -191,8 +192,7 @@ class ChatRewardSystem:
                         "background": background(user_id),
                         "amount": bonus_tokens,
                         "jackpot": jackpot,
-                        "level": level[1],
-                        "count": count,
+                        "drops": heat.drops(user_id)[0],
                         "tokens": (await cog.get_balance(user_id))[1],
                     },
                     name="tokens",
@@ -232,7 +232,7 @@ class ChatRewardSystem:
                 u_daily_chat_earnings(user_id).set(earnings_data)
                 self.earnings_cache[user_id] = earnings_data
 
-                await cog.add_beans(user_id, beans_earned)
+                await cog.add_beans(user_id, beans_earned, reason="chat")
                 order = await update_quest(
                     user_id,
                     message.guild.id,
@@ -262,6 +262,7 @@ class ChatRewardSystem:
                         name="order",
                     )
                     await message.channel.send(file=strip)
+                self.extras.pop(user_id, None)
 
         try:
             files = [drop] if drop else []
@@ -288,8 +289,7 @@ class ChatRewardSystem:
                         "limit": MAX_DAILY_CHAT_BEAN_LIMIT,
                         "reset": reset_time,
                         "order": order and paid(order),
-                        "heat": level,
-                        "bean": cog.bean.holder == user_id,
+                        "extra": self.extras.pop(user_id, None),
                     },
                     name="chat",
                 )

@@ -35,21 +35,38 @@ def roll_tokens(level):
     return 0, False
 
 
-def drops_today(user_id):
+def drops(user_id):
+    """Tokens each of today's drops gave, oldest first, and when the count resets.
+
+    The day runs 24 hours from the first drop. A drop saved before amounts
+    were kept is None.
+    """
     data = u_thermometer_cooldown(user_id).get() or {}
-    fresh = time.time() - data.get("first_reward_time", 0) < DAY
-    return data.get("count", 0) if fresh else 0
+    resets = data.get("first_reward_time", 0) + DAY
+    if time.time() >= resets:
+        return [], None
+    amounts = list(data.get("amounts") or [])
+    return [None] * (data.get("count", 0) - len(amounts)) + amounts, resets
 
 
-def take_drop(user_id):
+def drops_today(user_id):
+    return len(drops(user_id)[0])
+
+
+def take_drop(user_id, amount=None):
     """Counts one Token drop; returns its number today, or 0 at the limit."""
-    count = drops_today(user_id)
-    if count >= THERMOMETER_DAILY_TOKEN_DROPS:
+    amounts, resets = drops(user_id)
+    if len(amounts) >= THERMOMETER_DAILY_TOKEN_DROPS:
         return 0
-    ref = u_thermometer_cooldown(user_id)
-    start = (ref.get() or {}).get("first_reward_time") if count else None
-    ref.set({"count": count + 1, "first_reward_time": start or time.time()})
-    return count + 1
+    amounts.append(amount)
+    u_thermometer_cooldown(user_id).set(
+        {
+            "count": len(amounts),
+            "first_reward_time": resets - DAY if resets else time.time(),
+            "amounts": [given or 0 for given in amounts],
+        }
+    )
+    return len(amounts)
 
 
 def beans_today(user_id):

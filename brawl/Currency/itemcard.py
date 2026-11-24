@@ -55,61 +55,6 @@ def item_rows(card, top, rows):
         card.text(606, y + 9, state, 16, color, "ra", 2)
 
 
-def draw_inventory(member):
-    """Tiles for what the member holds, then the bag and the effect items running."""
-    held = member["held"]
-    sections = [
-        (name, color, rows)
-        for name, color, rows in (
-            (
-                "BAG",
-                GOLD,
-                [(item, "Start it with /use", GOLD) for item in member.get("bag", ())],
-            ),
-            (
-                "RUNNING",
-                GREEN,
-                [
-                    (effect["item"], ends(effect["expires_at"]), MUTED)
-                    for effect in member["effects"]
-                ],
-            ),
-        )
-        if rows
-    ]
-    height = sum(46 + len(rows) * 44 for _, _, rows in sections) or 64
-    card = Card(640, 218 + height, member["background"])
-    card.text(20, 12, "Inventory", 30)
-    for spot, (key, name, picture, command) in enumerate(HELD):
-        x, count = 16 + spot * 153, held.get(key) or 0
-        card.slot(x, 58, 147, 96)
-        image = icon(picture, 40)
-        card.paste(image, x + 73 - image.width / SCALE / 2, 65)
-        card.text(
-            x + 73, 120, plural(count, name), 16, WHITE if count else GREY, "mm", 2
-        )
-        card.text(x + 73, 140, command, 13, MUTED if count else GREY, "mm", 2)
-    top = 178
-    if not sections:
-        card.panel(16, 166, 608, 64)
-        card.text(
-            36,
-            186,
-            "No effect items yet. They boost your Beans and brews.",
-            18,
-            MUTED,
-            "la",
-            2,
-        )
-    for name, color, rows in sections:
-        card.panel(16, top, 608, 26 + len(rows) * 44)
-        card.tag(32, top - 12, name, color, BLACK)
-        item_rows(card, top + 16, rows)
-        top += 46 + len(rows) * 44
-    card.text(20, card.height - 38, "Find more items in /shop.", 16, GOLD, "la", 2)
-    return card.jpg()
-
-
 def draw_bag(bag):
     """What is waiting in the bag: each item, what it does and how long it lasts."""
     items = bag["items"]

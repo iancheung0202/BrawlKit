@@ -16,6 +16,7 @@ from brawl.Currency.tutorial import BREW_STEP, CLOCK_IN, DONE, SELL_STEP
 from tests.conftest import text
 
 USER = 1
+REAL_ORDER = quests.generate_order
 WORDS = "coffee beans brawl stars showdown trophies ranked gems skins maps".split()
 
 
@@ -50,9 +51,7 @@ def talk(cafe, monkeypatch, count):
 
 
 def test_a_new_member_reaches_a_pass(cafe, monkeypatch):
-    monkeypatch.setattr(
-        quests, "generate_quests", lambda _, level=0: quests.generate_order(level)
-    )
+    monkeypatch.setattr(quests, "generate_order", REAL_ORDER)
     monkeypatch.setattr(daily.random, "random", lambda: 1)
     economy = cafe.cogs["CurrencySystem"]
     level(cafe, 0)
@@ -90,15 +89,15 @@ def test_a_new_member_reaches_a_pass(cafe, monkeypatch):
     choice.name = "Brawl Pass"
     press(cafe, "StampCard", "redeem", choice)
     assert stampcard.stamps(USER) == 0
-    assert u_balance(USER).get()["Tokens"] == 0
+    assert u_balance(USER).get()["Tokens"] == 2  # a 1-day streak takes 2 Tokens off
     assert g_stamp_redemptions(MAIN_GUILD_ID, get_current_month_key()).get()
 
 
 def test_a_drop_that_moves_the_order_is_sent_with_the_order_card(cafe, monkeypatch):
     monkeypatch.setattr(
         quests,
-        "generate_quests",
-        lambda _, level=0: {
+        "generate_order",
+        lambda level=0: {
             "thermometer_bonuses": {"current": 0, "goal": 1},
             "chat_earnings": {"current": 0, "goal": 1000},
         },

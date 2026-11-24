@@ -4,15 +4,26 @@ import time
 import discord
 from discord.ui import View
 
+from brawl.Currency import ledger
 from brawl.Currency.card import render
 from brawl.Currency.config import (
     BOSS_GAP_HOURS,
     BOSS_HALF_VISITS,
     BOSS_ODDS,
     BOSS_SECONDS,
+    BOSS_VISITS,
 )
-from brawl.Currency.db import u_mega_boxes, u_star_drops
-from brawl.Currency.helper import BOSS_INSPECTION_ACTIONS, BOSS_INSPECTION_ROLE_ID
+from brawl.Currency.db import (
+    g_boss_inspection,
+    u_boss_visits,
+    u_mega_boxes,
+    u_star_drops,
+)
+from brawl.Currency.helper import (
+    BOSS_INSPECTION_ACTIONS,
+    BOSS_INSPECTION_ROLE_ID,
+    get_current_date_key,
+)
 from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import notice
@@ -62,9 +73,34 @@ def roll():
     return random.choices(outcomes, odds)[0]
 
 
-async def start_inspection(cog, channel):
-    """The boss walks into a channel with three things members can do."""
-    view = BossInspectionView(cog, random.sample(list(BOSS_INSPECTION_ACTIONS), 3))
+def visits(user_id, guild_id):
+    """Today's planned visits for one member: what each gave them, "missed"
+    for one that passed without them, None for one still to come."""
+    came = (g_boss_inspection(guild_id).get() or {}).get("done", 0)
+    mine = u_boss_visits(user_id).get() or {}
+    got = mine.get("got", {}) if mine.get("day") == get_current_date_key() else {}
+    return [
+        got.get(f"visit{spot}", "missed") if spot < came else None
+        for spot in range(BOSS_VISITS)
+    ]
+
+
+def keep(user_id, visit, outcome):
+    """Remembers what a planned visit gave a member, for the day."""
+    ref, today = u_boss_visits(user_id), get_current_date_key()
+    mine = ref.get() or {}
+    got = mine.get("got", {}) if mine.get("day") == today else {}
+    ref.set({"day": today, "got": {**got, f"visit{visit}": outcome}})
+
+
+async def start_inspection(cog, channel, visit=None):
+    """The boss walks into a channel with three things members can do.
+
+    visit is which of the day's planned visits this is; a visit started by
+    hand has none and is not kept."""
+    view = BossInspectionView(
+        cog, random.sample(list(BOSS_INSPECTION_ACTIONS), 3), visit
+    )
     view.message = await channel.send(
         f"<@&{BOSS_INSPECTION_ROLE_ID}> The boss is here for a surprise inspection.",
         file=await render(draw_boss, background(None), name="boss"),
@@ -74,9 +110,9 @@ async def start_inspection(cog, channel):
 
 
 class BossInspectionView(View):
-    def __init__(self, cog, action_keys):
+    def __init__(self, cog, action_keys, visit=None):
         super().__init__(timeout=BOSS_SECONDS)
-        self.cog = cog
+        self.cog, self.visit = cog, visit
         self.participants = {}
         self.message = None
         self.start_time = time.time()
@@ -106,7 +142,14 @@ class BossInspectionView(View):
                     ephemeral=True,
                 )
             outcome = roll()
-            self.participants[user.id] = (user.display_name, outcome)
+            try:
+                avatar = await user.display_avatar.replace(size=64).read()
+            except Exception:
+                avatar = b""
+            self.participants[user.id] = (user.display_name, outcome, avatar)
+            ledger.note("boss", user.id)
+            if self.visit is not None:
+                keep(user.id, self.visit, outcome)
             ref, line, how = OUTCOMES[outcome]
             if ref:
                 ref(user.id).set((ref(user.id).get() or 0) + 1)

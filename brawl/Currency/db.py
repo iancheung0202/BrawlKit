@@ -85,12 +85,12 @@ def u_thermometer_cooldown(user_id: int):
     return db.reference(f"{U_ROOT}/{user_id}/progress/thermometer_cooldown")
 
 
-def u_golden_bean(user_id: int):
-    return db.reference(f"{U_ROOT}/{user_id}/progress/golden_bean")
-
-
 def u_thermometer_beans(user_id: int):
     return db.reference(f"{U_ROOT}/{user_id}/progress/thermometer_beans")
+
+
+def u_boss_visits(user_id: int):
+    return db.reference(f"{U_ROOT}/{user_id}/progress/boss_visits")
 
 
 def u_welcome_cooldown(user_id: int):
@@ -205,8 +205,8 @@ def g_giveaways(guild_id: int, giveaway_id: str = None):
     return db.reference(f"{G_ROOT}/{guild_id}/giveaways")
 
 
-def g_golden_bean(guild_id: int):
-    return db.reference(f"{G_ROOT}/{guild_id}/golden_bean")
+def g_ledger(guild_id: int):
+    return db.reference(f"{G_ROOT}/{guild_id}/ledger")
 
 
 def g_thermometer(guild_id: int):

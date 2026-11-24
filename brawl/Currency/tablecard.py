@@ -1,4 +1,5 @@
 from brawl.Currency.card import (
+    BLACK,
     GOLD,
     GREEN,
     GREY,
@@ -28,6 +29,11 @@ def rgb(color):
     return tuple(int(color[spot : spot + 2], 16) for spot in (0, 2, 4))
 
 
+def ink(color):
+    """Text that reads on a tag of this color."""
+    return WHITE if sum(color) < 480 else BLACK
+
+
 def short(beans):
     return f"{beans // 1000}k" if beans % 1000 == 0 else f"{beans:,}"
 
@@ -36,16 +42,8 @@ def quest(card, y, table):
     """The weekly Bean quest as a timeline: a bar with a stop at each step."""
     beans, done = table["weekly_beans"], table["tier"]
     targets = QUEST["targets"]
-    card.text(36, y - 24, "Weekly quest", 13, GOLD, "la", 2)
-    card.text(
-        46 + card.measure("Weekly quest", 13),
-        y - 24,
-        "Beans the table earns, and what each member gets",
-        13,
-        MUTED,
-        "la",
-        2,
-    )
+    card.text(36, y + 2, "Table earns", 13, MUTED, "la", 2)
+    card.text(36, y + 62, "Each gets", 13, MUTED, "la", 2)
     left, width = 44, 524
     card.bar(left, y + 30, width, 16, beans / targets[-1])
     for step, (target, reward) in enumerate(zip(targets, QUEST["rewards"])):
@@ -82,10 +80,10 @@ def draw_table(table):
     seats = table["members"]
     rows = (len(seats) + 1) // 2
     recognized = len(seats) >= TABLE_SEATS_NEEDED
-    top = 276 if recognized else 318
+    top = 264 if recognized else 306
     card = Card(640, top + 30 + rows * 44 + 24, table["background"])
     card.panel(16, 24, 608, card.height - 40)
-    card.tag(32, 12, table.get("tag", "TABLE"), color, WHITE)
+    card.tag(32, 12, table.get("tag", "TABLE"), color, ink(color))
     card.text(36, 42, card.fit(plain(table["name"]), 30, 380), 30)
     motto = card.fit(f"\"{plain(table['motto'])}\"", 15, 380)
     card.text(36, 82, motto, 15, MUTED, "la", 2)
@@ -94,13 +92,13 @@ def draw_table(table):
     card.icon("kit/bean", 566 - card.measure(beans, 28), 46, 34)
     card.text(604, 84, "total this week", 13, MUTED, "ra", 2)
     if recognized:
-        quest(card, 136, table)
-        top_prize(card, 236)
+        quest(card, 124, table)
+        top_prize(card, 224)
     else:
         label = f"{len(seats)} / {TABLE_SEATS_NEEDED} seats to start the quest"
         card.bar(36, 112, 568, 24, len(seats) / TABLE_SEATS_NEEDED, color, label)
-        quest(card, 178, {"weekly_beans": 0, "tier": -1})
-        top_prize(card, 278)
+        quest(card, 166, {"weekly_beans": 0, "tier": -1})
+        top_prize(card, 266)
     card.text(36, top, "Seated", 17, WHITE, "la", 2)
     card.text(604, top + 2, f"{len(seats)} / {TABLE_SEATS}", 14, MUTED, "ra", 2)
     for spot, (name, share, host, you, avatar) in enumerate(seats):
@@ -123,33 +121,11 @@ def draw_table(table):
     return card.jpg()
 
 
-def draw_no_table(member):
-    """For a member with no seat: what a table pays and how to get one."""
-    card = Card(640, 318, member["background"])
-    card.panel(16, 24, 608, 278)
-    card.tag(32, 12, "TABLE", GOLD)
-    card.text(36, 42, "You have no table yet", 28)
-    line = f"Sit with {TABLE_SEATS_NEEDED} or more members. Beans you all earn in chat pay everyone."
-    card.text(36, 80, line, 14, MUTED, "la", 2)
-    quest(card, 136, {"weekly_beans": 0, "tier": 0})
-    top_prize(card, 236)
-    card.text(
-        36,
-        270,
-        "Join one with /table seat, or start one with /table reserve",
-        14,
-        GOLD,
-        "la",
-        2,
-    )
-    return card.jpg()
-
-
 def draw_table_reward(reward):
     """A strip sent to each member when their table is paid."""
     card = Card(640, 150)
     card.panel(16, 24, 608, 110)
-    card.tag(32, 12, reward["tag"], rgb(reward["color"]), WHITE)
+    card.tag(32, 12, reward["tag"], rgb(reward["color"]), ink(rgb(reward["color"])))
     card.icon(f"kit/{reward['currency']}", 34, 46, 72)
     card.text(122, 44, reward["headline"], 24, GOLD)
     x = 138 + card.measure(reward["headline"], 24)

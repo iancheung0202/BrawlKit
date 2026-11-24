@@ -66,7 +66,7 @@ COGS = {
     "stampcard": "StampCard",
     "gacha": "Gacha",
     "bag": "Bag",
-    "factions": "TableSystem",
+    "tables": "TableSystem",
 }
 
 
@@ -105,7 +105,7 @@ class Cafe:
         return interaction
 
 
-def chat_quests(duration, level=0):
+def chat_quests(level=0):
     return {"chat_earnings": {"current": 0, "goal": 100000}}
 
 
@@ -114,7 +114,7 @@ def cafe():
     tree = {}
     with (
         patch("firebase_admin.db.reference", lambda path="": Ref(tree, path)),
-        patch("brawl.Currency.quests.generate_quests", chat_quests),
+        patch("brawl.Currency.quests.generate_order", chat_quests),
     ):
         yield Cafe(tree)
 

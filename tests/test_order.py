@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from brawl.Currency import quests, rewardcard, stampcard
+from brawl.Currency import balancecard, quests, rewardcard, stampcard
 from brawl.Currency.config import (
     ORDER_CHAT_BEANS,
     ORDER_TASK_LEVELS,
@@ -17,16 +17,13 @@ from brawl.Currency.helper import MAIN_GUILD_ID, get_current_month_key
 from tests.conftest import text
 
 USER = 1
+# The real order; the cafe fixture swaps in a chat-only one.
+REAL_ORDER = quests.generate_order
 
 
 @pytest.fixture
 def order(cafe, monkeypatch):
-    def generate(duration, level=0):
-        if duration == "daily":
-            return quests.generate_order(level)
-        return {"brew_start": {"current": 0, "goal": 9}}
-
-    monkeypatch.setattr(quests, "generate_quests", generate)
+    monkeypatch.setattr(quests, "generate_order", REAL_ORDER)
     level(cafe, 0)
     return cafe
 
@@ -111,7 +108,9 @@ def test_price_falls_with_the_streak(cafe):
     from brawl.Currency.db import u_daily_checkin_streaks
 
     assert stampcard.price(USER, "brawl_pass") == 400
-    u_daily_checkin_streaks(USER).set({"current_streak": 55})
+    u_daily_checkin_streaks(USER).set({"current_streak": 1})
+    assert stampcard.price(USER, "brawl_pass") == 398
+    u_daily_checkin_streaks(USER).set({"current_streak": 50})
     assert stampcard.price(USER, "brawl_pass") == 300
     u_daily_checkin_streaks(USER).set({"current_streak": 500})
     assert stampcard.price(USER, "brawl_pass") == 200
@@ -168,9 +167,10 @@ def test_stamp_card_shows_progress_and_prices(order):
     cog = order.cogs["StampCard"]
     user, guild = MagicMock(id=USER), MagicMock(id=MAIN_GUILD_ID)
     summary = asyncio.run(cog.summary(user, guild))
-    assert (summary["stamps"], summary["done"], summary["tasks"]) == (31, 0, 3)
+    assert (summary["stamps"], summary["done"], summary["order"]) == (31, 0, 3)
     assert summary["prices"] == {"brawl_pass": 400, "brawl_pass_plus": 500}
-    assert asyncio.run(cog.card(user, guild)).filename == f"balance_{USER}.jpg"
+    member = {**summary, "tokens": 500, "background": "gym"}
+    assert balancecard.draw_stamps(member).read(2) == b"\xff\xd8"
 
 
 @pytest.mark.before_clock_in

@@ -6,6 +6,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from brawl.Currency import wallet
 from brawl.Currency.bag import UseNow, held, keep, note
 from brawl.Currency.card import item_icon, plain, render
 from brawl.Currency.config import ITEM_STATIONS, SHOP
@@ -872,13 +873,13 @@ class Shop(commands.Cog):
                 )
 
         if currency_type.lower() == "beans":
-            new_beans = beans - cost
-            await self.economy.update_balance(user_id, beans=new_beans)
-            new_tokens = tokens
+            new_beans, new_tokens = await wallet.change(
+                user_id, beans=-cost, reason="shop"
+            )
         else:
-            new_tokens = tokens - cost
-            await self.economy.update_balance(user_id, tokens=new_tokens)
-            new_beans = beans
+            new_beans, new_tokens = await wallet.change(
+                user_id, tokens=-cost, reason="shop"
+            )
 
         if stock > 0:
             await self.update_shop_stock(guild_id, name, stock - 1)
@@ -1031,13 +1032,13 @@ class Shop(commands.Cog):
             )
 
         if currency == "beans":
-            new_beans = beans - cost
-            new_tokens = tokens
-            await self.economy.update_balance(user_id, beans=new_beans)
+            new_beans, new_tokens = await wallet.change(
+                user_id, beans=-cost, reason="shop"
+            )
         else:
-            new_beans = beans
-            new_tokens = tokens - cost
-            await self.economy.update_balance(user_id, tokens=new_tokens)
+            new_beans, new_tokens = await wallet.change(
+                user_id, tokens=-cost, reason="shop"
+            )
 
         order = await update_quest(
             user_id, interaction.guild.id, {"shop_purchases": 1}, self.bot
@@ -1093,7 +1094,7 @@ class Shop(commands.Cog):
                     is_perfect = True
                     tokens_earned += random.randint(3, 8)
 
-            await self.economy.add_tokens(user_id, tokens_earned)
+            await self.economy.add_tokens(user_id, tokens_earned, reason="brew")
             order += await update_quest(
                 user_id, interaction.guild.id, {"brew_sells": 1}, self.bot
             )

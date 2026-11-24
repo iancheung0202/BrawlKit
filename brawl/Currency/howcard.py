@@ -10,6 +10,7 @@ from brawl.Currency.card import (
     GOLD,
     GREEN,
     MUTED,
+    PLACES,
     RED,
     SCALE,
     SLOT,
@@ -33,8 +34,6 @@ from brawl.Currency.config import (
     CHAT_WEEKEND_MULTIPLIER,
     DAILY_BEANS,
     DAILY_GAMBLING_LIMITS,
-    GOLDEN_BEAN_BEANS,
-    GOLDEN_BEAN_HOLD_SECONDS,
     ITEM_STATIONS,
     LADDER,
     LUCKY_DAILY_CHANCE,
@@ -54,6 +53,7 @@ from brawl.Currency.config import (
     STAMP_GOALS,
     STAMP_MONTHLY_LIMIT,
     STAMP_PRICE_RANGES,
+    STAMP_PRICE_STREAK,
     STREAK_BEAN_MULTIPLIER,
     STREAK_DAYS,
     STREAK_TOKENS,
@@ -81,6 +81,7 @@ from brawl.Currency.dropcard import rates_image
 from brawl.Currency.gambling import MAX_BET, MIN_BET, ULTRA_MAX_BET
 from brawl.Currency.helper import STORE_ITEMS
 from brawl.Currency.levels import LEVEL_REWARDS, level_up_reward, xp_for_level
+from brawl.Currency.stationcard import outcomes
 
 WIDTH = 900
 BACKGROUND = "gym"
@@ -191,9 +192,49 @@ def flow(card, y, steps, size=70, arrows=True):
             arrow(card, x - gap / 2, y + size / 2)
 
 
-def page(title, line, height):
-    card = Card(WIDTH, height, BACKGROUND)
-    card.title(title, line)
+# What a member finds in each place, as the /balance pages show it.
+PLACE_HOLDS = {
+    "COUNTER": [
+        ("kit/icon_quest", "Today's Order", ""),
+        ("brewing", "Brew Station", ""),
+        ("kit/icon_xp", "Level", ""),
+        ("kit/icon_ranked_round_token", "Stamp Card", ""),
+    ],
+    "CHAT": [
+        ("kit/bean", "Chat Beans", ""),
+        ("kit/icon_wasabi_power", "Thermometer", ""),
+        ("kit/icon_megaboss_big", "Boss Inspection", ""),
+    ],
+    "INVENTORY": [
+        ("items/star_drop", "Star Drops", ""),
+        ("items/mega_box", "Mega Boxes", ""),
+        ("kit/icon_box", "Effect items", ""),
+    ],
+    "COMMUNITY": [
+        ("kit/icon_trophy", "Table", ""),
+        ("kit/icon_inbox", "Invites", ""),
+        ("game/3v3", "Team Finder", ""),
+        ("kit/icon_chat", "Topics", ""),
+    ],
+}
+
+
+def page(place, title, height, picture=None):
+    """A page under its place's sign: the place's icon and name, then the title.
+
+    A page that belongs to no place has its own picture, or none, and the title.
+    """
+    if place is None:
+        card = Card(WIDTH, height, BACKGROUND)
+        if picture:
+            fitted(card, picture, 34, 28, 64)
+        card.text(112 if picture else 34, 36, title, 42)
+        return card
+    color, scene, picture = PLACES[place]
+    card = Card(WIDTH, height, scene)
+    fitted(card, picture, 34, 28, 64)
+    card.text(112, 24, place, 18, color)
+    card.text(112, 48, title, 38)
     return card
 
 
@@ -308,12 +349,23 @@ def panel_banner(flow):
 @lru_cache
 def start_page(title="HOW THE CAFE WORKS"):
     """The whole cafe on one card: the loop, what each currency buys, a day."""
-    card = page(title, "Chat for Beans, brew them into Tokens, spend both.", 782)
+    card = page(None, title, 1030)
     section(card, 124, 162, "THE LOOP")
     flow(card, 146, loop())
 
     top = 318
-    section(card, top, 230, "WHAT EACH ONE IS FOR", BLUE, WHITE)
+    section(card, top, 216, "FOUR PLACES IN /BALANCE")
+    for row, (place, row_pills) in enumerate(PLACE_HOLDS.items()):
+        y = top + 24 + row * 48
+        if row:
+            rule(card, y - 6)
+        color, _, picture = PLACES[place]
+        fitted(card, picture, 46, y, 36)
+        card.text(92, y + 5, place.title(), 22, color)
+        pills(card, 248, y, row_pills)
+
+    top = 566
+    section(card, top, 230, "WHAT EACH ONE IS FOR")
     uses = [
         (
             "kit/icon_xp",
@@ -340,7 +392,7 @@ def start_page(title="HOW THE CAFE WORKS"):
             GOLD,
             [
                 ("kit/icon_shop", "Shop rewards", ""),
-                ("items/effect", "Effect items", ""),
+                ("kit/icon_box", "Effect items", ""),
                 ("items/mega_box", "Mega Boxes", ""),
             ],
         ),
@@ -367,8 +419,8 @@ def start_page(title="HOW THE CAFE WORKS"):
         arrow(card, 204, y + 18, 9)
         pills(card, 228, y, row_pills)
 
-    top = 580
-    section(card, top, 150, "EVERY DAY, FROM 00:00 UTC", GREEN)
+    top = 828
+    section(card, top, 150, "EVERY DAY, FROM 00:00 UTC")
     flow(
         card,
         top + 22,
@@ -421,12 +473,9 @@ def brewing_page():
     """Every roast side by side, then everything that changes a brew."""
     row = 118
     top = 144 + len(ROAST_TYPES) * row
-    card = page(
-        "BREWING",
-        "Pay Beans, wait, then sell for Tokens. One brew at a time.",
-        top + 342,
-    )
+    card = page("COUNTER", "BREWING", top + 342)
     section(card, 124, len(ROAST_TYPES) * row + 24, "ROASTS")
+    card.note(124, "One brew at a time", 858)
     card.text(372, 142, "Tokens you can get, by chance", 14, MUTED, "la", 2)
     for spot, (key, roast) in enumerate(ROAST_TYPES.items()):
         y = 164 + spot * row
@@ -463,7 +512,7 @@ def brewing_page():
         card.text(854, y + 26, average, 26, GOLD, "ra")
         card.icon("kit/token", 818 - card.measure(average, 26), y + 28, 28)
 
-    section(card, top + 22, 272, "WHAT CHANGES A BREW", BLUE, WHITE)
+    section(card, top + 22, 272, "WHAT CHANGES A BREW")
     columns = [530 + spot * 108 for spot in range(len(ROAST_TYPES))]
     for x, (key, roast) in zip(columns, ROAST_TYPES.items()):
         card.text(x, top + 44, roast["name"].split()[0], 16, TINTS[key], "ra", 2)
@@ -531,7 +580,7 @@ def brewing_page():
 @lru_cache
 def beans_page():
     """Where Beans come from: chat, its daily limit, Clock In and the rest."""
-    card = page("BEANS", "Chat and clock in every day. Beans pay for brews.", 990)
+    card = page("CHAT", "BEANS", 990)
     section(card, 124, 382, "CHAT")
     for spot in range(10):
         card.icon("kit/icon_chat", 46 + spot * 30, 156, 24)
@@ -563,7 +612,7 @@ def beans_page():
         item_row(card, 364 + row * 40, key, does)
 
     top = 538
-    section(card, top, 236, "CLOCK IN", GREEN)
+    section(card, top, 236, "CLOCK IN")
     for day in range(1, STREAK_DAYS + 1):
         last = day == STREAK_DAYS
         x = 46 + (day - 1) * 86
@@ -611,7 +660,7 @@ def beans_page():
     top = 806
     steps = TABLE_QUEST_TYPES["bean_collector"]["rewards"]
     heat = [level[2] for level in THERMOMETER_LEVELS if level[2]]
-    section(card, top, 134, "MORE BEANS", BLUE, WHITE)
+    section(card, top, 134, "MORE BEANS")
     first, last = level_up_reward(1)[0], level_up_reward(max(LEVEL_REWARDS))[0]
     flow(
         card,
@@ -622,7 +671,7 @@ def beans_page():
             (
                 "kit/icon_wasabi_power_hot",
                 f"+{span(min(heat), max(heat))}",
-                "a message, hot chat",
+                "per message, hot chat",
                 GOLD,
             ),
             (
@@ -647,7 +696,7 @@ STATION_ICONS = {
     "thermometer": "kit/icon_wasabi_power_hot",
     "tables": "kit/icon_trophy",
     "games": "kit/coin_pile_03",
-    "effects": "items/effect",
+    "effects": "kit/icon_box",
     "boxes": "items/mega_box",
     "style": "items/custom_credit",
 }
@@ -660,7 +709,7 @@ def total_xp(level):
 @lru_cache
 def levels_page():
     """XP in, the ladder of stations, and what each level pays."""
-    card = page("LEVELS", "Chat to earn XP. Each level opens something new.", 806)
+    card = page("COUNTER", "LEVELS", 806)
     section(card, 124, 132, "XP")
     card.icon("kit/icon_chat", 46, 150, 34)
     arrow(card, 104, 168)
@@ -681,7 +730,7 @@ def levels_page():
     card.text(854, 218, "Next level needs 100 x level + 75 XP", 15, MUTED, "ra", 2)
 
     top = 288
-    section(card, top, 262, "WHAT EACH LEVEL OPENS", BLUE, WHITE)
+    section(card, top, 262, "WHAT EACH LEVEL OPENS")
     stations = sorted(LADDER.items(), key=lambda station: station[1][0])
     w = (816 - 8 * 4) / 5
     for spot, (key, (level, name, _)) in enumerate(stations):
@@ -694,7 +743,7 @@ def levels_page():
         card.text(x + 12, y + 83, f"{total_xp(level):,} XP", 13, MUTED, "la", 2)
 
     top = 582
-    section(card, top, 174, "WHEN YOU LEVEL UP", GREEN)
+    section(card, top, 174, "WHEN YOU LEVEL UP")
     highest = max(LEVEL_REWARDS)
     left, width = 136, 700
     card.text(46, top + 30, "Roles", 17, WHITE, "la", 2)
@@ -719,7 +768,7 @@ def levels_page():
 def order_page():
     """The daily order, the Stamp it gives, and what Stamps buy."""
     each, bonus = QUEST_BEAN_REWARDS["daily"], QUEST_BONUS_BEANS["daily"]
-    card = page("TODAY'S ORDER", "Clock in to get it. Finish it for a Stamp.", 796)
+    card = page("COUNTER", "TODAY'S ORDER", 732)
     section(card, 124, 304, "THE ORDER")
     flow(
         card,
@@ -771,40 +820,53 @@ def order_page():
     card.text(46, 372, f"{ORDER_STATION_TASKS} picked each day", 15, MUTED, "la", 2)
 
     top = 460
-    section(card, top, 286, "STAMPS AND PASSES", GREEN)
+    section(card, top, 222, "STAMPS AND PASSES")
+    card.note(top, f"{STAMP_MONTHLY_LIMIT} passes a month for the whole server", 858)
     passes = (
-        ("brawl_pass", "kit/icon_brawl_pass", "Brawl Pass"),
-        ("brawl_pass_plus", "kit/icon_brawl_pass_plus", "Brawl Pass Plus"),
+        ("brawl_pass", "Brawl Pass", (20, 60, 170, 200)),
+        ("brawl_pass_plus", "Brawl Pass Plus", (90, 40, 170, 200)),
     )
-    for row, (key, picture, name) in enumerate(passes):
-        y = top + 28 + row * 104
+    for spot, (key, name, fill) in enumerate(passes):
+        x = 42 + spot * 414
         goal, (low, high) = STAMP_GOALS[key], STAMP_PRICE_RANGES[key]
-        card.slot(42, y, 816, 96)
-        card.icon(picture, 56, y + 24, 44)
-        card.text(140, y + 10, name, 22, GOLD)
-        card.icon("kit/icon_ranked_round_token", 138, y + 46, 34)
-        card.text(180, y + 50, f"{goal} Stamps", 22, GREEN)
-        card.text(420, y + 12, "Price by Clock In streak", 14, MUTED, "la", 2)
-        prices = ((10, high), (55, (high + low) // 2), (100, low))
-        for spot, (days, price) in enumerate(prices):
-            x = 420 + spot * 142
-            card.text(x, y + 34, f"{days}{'+' * (spot == 2)} days", 15, WHITE, "la", 2)
-            card.icon("kit/token", x, y + 56, 24)
-            card.text(x + 30, y + 57, f"{price}", 20, GOLD)
-            if spot:
-                arrow(card, x - 22, y + 62, 8)
-    card.icon("items/mega_box", 46, top + 242, 26)
+        card.panel(x, top + 28, 402, 96, fill)
+        card.icon(f"kit/icon_{key}", x + 14, top + 46, 60)
+        card.text(x + 126, top + 42, name, 24)
+        card.icon("kit/icon_ranked_round_token", x + 126, top + 82, 24)
+        card.text(x + 156, top + 83, str(goal), 20, GREEN)
+        at = x + 172 + card.measure(str(goal), 20)
+        card.icon("kit/token", at, top + 82, 24)
+        card.text(at + 30, top + 83, str(high), 20, GOLD)
+        at += 40 + card.measure(str(high), 20)
+        card.text(
+            at, top + 87, f"{low} at Day {STAMP_PRICE_STREAK[1]}", 14, MUTED, "la", 2
+        )
+    y = top + 138
+    card.icon("kit/icon_calendar", 46, y, 28)
+    card.text(84, y + 4, "Clock In streak", 18, GOLD)
+    x = 98 + card.measure("Clock In streak", 18)
+    card.text(x, y + 7, "saves", 15, WHITE, "la", 2)
+    x += card.measure("saves", 15) + 8
+    card.icon("kit/token", x, y + 4, 22)
+    saves = (
+        STAMP_PRICE_RANGES["brawl_pass"][1] - STAMP_PRICE_RANGES["brawl_pass"][0]
+    ) // STAMP_PRICE_STREAK[1]
+    each = f"{saves} a pass each day"
+    card.text(x + 28, y + 7, each, 15, GOLD, "la", 2)
+    x += 46 + card.measure(each, 15)
+    end = f"Day {STAMP_PRICE_STREAK[1]}"
+    card.text(854, y + 7, end, 14, MUTED, "ra", 2)
+    card.bar(x, y + 8, 842 - card.measure(end, 14) - x, 14, 1, GREEN)
+    card.icon("items/mega_box", 46, top + 182, 26)
     card.text(
         80,
-        top + 246,
+        top + 186,
         f"x{STAMP_BOXES} Mega Boxes on every {STAMP_BOX_EVERY}th Stamp",
         16,
         GREEN,
         "la",
         2,
     )
-    month = f"{STAMP_MONTHLY_LIMIT} passes a month for the whole server"
-    card.text(854, top + 246, month, 16, MUTED, "ra", 2)
     return card.jpg().getvalue()
 
 
@@ -886,17 +948,13 @@ def effects_page():
     count = sum(len(items) for _, _, items in EFFECTS)
     level = LADDER["effects"][0]
     height = 240 + count * 40 + len(EFFECTS) * 34
-    card = page(
-        "EFFECT ITEMS",
-        f"Boosts from the shop and drops. Most open at Level {level}.",
-        height,
-    )
+    card = page("INVENTORY", "EFFECT ITEMS", height)
     section(card, 124, height - 172, "ITEMS")
     item_heads(card, 142)
     y = 166
     for group, color, items in EFFECTS:
-        card.draw.rectangle(box(46, y + 6, 808, 22), fill=(*shade(color, 0.5), 150))
-        card.text(56, y + 8, group, 14, WHITE, "la", 2)
+        rule(card, y + 2)
+        card.text(46, y + 10, group, 13, color, "la", 2)
         y += 34
         for key, does in items:
             item_row(card, y, key, does)
@@ -908,12 +966,8 @@ def effects_page():
 @lru_cache
 def stations_page():
     """The thermometer's heat levels and the boss's odds."""
-    card = page(
-        "THERMOMETER AND BOSS",
-        "Thermometer Beans have no limit and do not count for the chat task.",
-        996,
-    )
-    section(card, 124, 430, "THERMOMETER")
+    card = page("CHAT", "THERMOMETER AND BOSS", 786)
+    section(card, 124, 454, "THERMOMETER")
     card.icon("kit/icon_chat", 46, 148, 26)
     arrow(card, 92, 162, 9)
     heat = f"+{span(*THERMOMETER_MESSAGE_HEAT)} heat"
@@ -921,8 +975,11 @@ def stations_page():
     card.text(
         120 + card.measure(heat, 20), 154, "each main chat message", 15, MUTED, "la", 2
     )
-    drops = f"{THERMOMETER_DAILY_TOKEN_DROPS} Token drops a day, from Level {LADDER['thermometer'][0]}"
-    card.text(854, 154, drops, 15, MUTED, "ra", 2)
+    drops = (
+        f"No Bean limit, {THERMOMETER_DAILY_TOKEN_DROPS} Token drops a day"
+        f" from Level {LADDER['thermometer'][0]}"
+    )
+    card.note(124, drops, 858)
     levels = sorted(THERMOMETER_LEVELS)
     cooling = dict(
         zip(
@@ -932,11 +989,16 @@ def stations_page():
     )
     tints = {"Cold": BLUE, "Warm": GOLD, "Hot": (255, 140, 40), "Boiling": RED}
     left, width = 190, 664
-    for row, name in enumerate(("Beans a message", "Cools a minute", "Token drop")):
+    rows = (
+        ("EXTRA BEANS", "per message"),
+        ("COOLS", "per minute"),
+        ("TOKEN DROPS", "per message"),
+    )
+    for row, (name, each) in enumerate(rows):
         rule(card, 256 + row * 40)
-        card.text(46, 268 + row * 40, name, 16, MUTED, "la", 2)
-    card.text(46, 368, "chance for Tokens", 13, MUTED, "la", 2)
-    card.text(46, 196, "Heat", 16, MUTED, "la", 2)
+        card.text(46, 262 + row * 40, name, 13, WHITE, "la", 2)
+        card.text(46, 278 + row * 40, each, 12, MUTED, "la", 2)
+    card.text(46, 198, "HEAT", 13, WHITE, "la", 2)
     for spot, (start, name, beans, tokens) in enumerate(levels):
         end = levels[spot + 1][0] if spot + 1 < len(levels) else THERMOMETER_MAX
         x = left + width * start / THERMOMETER_MAX
@@ -949,68 +1011,34 @@ def stations_page():
             x + 4, 222, f"{start}{'+' * (spot + 1 == len(levels))}", 14, MUTED, "la", 2
         )
         mid = x + w / 2
-        card.text(
-            mid, 265, f"+{beans}" if beans else "0", 20, GOLD if beans else MUTED, "ma"
-        )
-        if not tokens:
-            card.text(mid, 348, "none", 15, MUTED, "ma", 2)
+        card.text(mid, 265, f"+{beans}", 20, GOLD if beans else MUTED, "ma")
+        total = percent(sum(odds for odds, _ in tokens))
+        card.text(mid, 345, total, 20, GOLD if tokens else MUTED, "ma")
         for row, (odds, amounts) in enumerate(reversed(tokens)):
-            amount = span(min(amounts), max(amounts))
-            at = 348 + row * 19
-            card.text(mid, at, f"{percent(odds)} for {amount}", 15, GOLD, "ma", 2)
+            if len(tokens) == 1:
+                break
+            at = 376 + row * 18
+            text = f"{percent(odds)} for {amounts[0]}"
+            card.text(mid, at, text, 13, MUTED, "ma", 2)
         card.text(mid, 306, str(cooling[name]), 18, WHITE, "ma", 2)
-    item_heads(card, 438)
-    card.text(46, 438, "Items", 14, MUTED, "la", 2)
-    y = 458
+    item_heads(card, 462)
+    card.text(46, 462, "Items", 14, MUTED, "la", 2)
+    y = 482
     for key, does in next(
         items for group, _, items in EFFECTS if group == "THERMOMETER"
     ):
         rule(card, y - 2)
         item_row(card, y, key, does)
         y += 40
-    top = 594
-    section(card, top, 128, "GOLDEN BEAN")
-    line = "One member holds it, shown as a reaction on their message. It pays at every heat."
-    card.text(46, top + 22, line, 15, MUTED, "la", 2)
-    hours = GOLDEN_BEAN_HOLD_SECONDS // 3600
-    flow(
-        card,
-        top + 52,
-        [
-            ("kit/golden_bean", "Reply to steal", "any message of the holder"),
-            (
-                "kit/bean",
-                f"+{GOLDEN_BEAN_BEANS} Beans",
-                "once a minute, at a random moment",
-            ),
-            ("kit/icon_clock", f"{hours} hours", "one hold pays, then steal it again"),
-        ],
-        size=0,
-        arrows=False,
+    top = 618
+    section(card, top, 118, "BOSS INSPECTION", RED, WHITE)
+    facts = (
+        f"{BOSS_VISITS} visits a day at any time, {BOSS_SECONDS // 60} minutes"
+        f" to press one button, from Level {LADDER['boss'][0]}"
     )
-    top += 148
-    section(card, top, 204, "BOSS INSPECTION", RED, WHITE)
-    card.icon("kit/icon_megaboss_big", 46, top + 26, 76)
-    names = {"mega_box": "Mega Box", "star_drop": "Star Drop", "nothing": "Air"}
-    colors = {"mega_box": GREEN, "star_drop": GOLD, "nothing": RED}
-    card.text(150, top + 22, "Press one button. What you get", 15, MUTED, "la", 2)
-    parts = [(odds, names[key], shade(colors[key], 0.6)) for key, odds in BOSS_ODDS]
-    split(card, 150, top + 46, 704, parts)
-    flow(
-        card,
-        top + 116,
-        [
-            (
-                "kit/icon_megaboss_big",
-                f"{BOSS_VISITS} visits",
-                "each day, any time",
-            ),
-            ("kit/icon_clock", f"{BOSS_SECONDS // 60} minutes", "to press, once each"),
-            ("kit/icon_xp", f"Level {LADDER['boss'][0]}", "to take part"),
-        ],
-        size=0,
-        arrows=False,
-    )
+    card.note(top, facts, 858)
+    card.icon("kit/icon_megaboss_big", 46, top + 24, 70)
+    outcomes(card, 170, top + 38, 684)
     return card.jpg().getvalue()
 
 
@@ -1018,14 +1046,12 @@ def stations_page():
 def social_page():
     """Tables: the weekly quest. Invites: what each step pays both sides."""
     quest = TABLE_QUEST_TYPES["bean_collector"]
-    card = page(
-        "TABLES AND INVITES", "Team up for a weekly goal. Bring friends for more.", 732
-    )
+    card = page("COMMUNITY", "TABLES AND INVITES", 704)
     section(card, 124, 262, "TABLES")
-    card.text(
-        46, 148, "Beans the table earns, and what each member gets", 15, MUTED, "la", 2
-    )
-    left, width = 56, 754
+    card.note(124, "New week on Sunday, 00:00 UTC", 858)
+    card.text(46, 170, "Table earns", 15, MUTED, "la", 2)
+    card.text(46, 228, "Each gets", 15, MUTED, "la", 2)
+    left, width = 150, 660
     card.bar(left, 198, width, 16, 0.5)
     for spot, (target, reward) in enumerate(zip(quest["targets"], quest["rewards"])):
         x = left + width * (spot + 1) / len(quest["targets"])
@@ -1057,10 +1083,9 @@ def social_page():
         card.icon(picture, x, 308, 28)
         x -= 18
     card.icon("kit/icon_trophy", x - 44, 304, 36)
-    card.text(854, 348, "New week on Sunday, 00:00 UTC", 15, MUTED, "ra", 2)
 
     top = 418
-    section(card, top, 264, "INVITES", BLUE, WHITE)
+    section(card, top, 236, "INVITES")
     pictures = ("brewing", "ready", "kit/token")
     card.text(854, top + 24, "You get", 14, MUTED, "ra", 2)
     for spot, (_, role, need, coin, yours) in enumerate(REFERRAL_STEPS):
@@ -1083,25 +1108,16 @@ def social_page():
         card.tick(x + 2, top + 192, 22)
         card.text(x + 34, top + 194, line, 16, WHITE, "la", 2)
         x += 34 + card.measure(line, 16) + 34
-    card.text(
-        46,
-        top + 232,
-        "Roles and the sell count start over on the 1st of each month.",
-        15,
-        MUTED,
-        "la",
-        2,
-    )
+    card.note(top, "Starts over on the 1st of each month", 858)
     return card.jpg().getvalue()
 
 
 @lru_cache
 def games_page():
     """Bets, limits and what each result pays."""
-    card = page(
-        "GAMES", f"Bet Beans for fun. Games open at Level {LADDER['games'][0]}.", 738
-    )
+    card = page(None, "GAMES", 738, "kit/coin_pile_03")
     section(card, 124, 118, "COIN FLIP")
+    card.note(124, "Games pay Beans only", 858)
     card.text(46, 148, "Call heads or tails", 15, MUTED, "la", 2)
     sides = [
         (0.5, "Win: bet x2", shade(GREEN, 0.6)),
@@ -1110,7 +1126,7 @@ def games_page():
     split(card, 46, 172, 808, sides)
 
     top = 274
-    section(card, top, 250, "BLACKJACK", BLUE, WHITE)
+    section(card, top, 250, "BLACKJACK")
     results = (
         ("21 on two cards", 2.5, GOLD),
         ("Win", 2, GREEN),
@@ -1135,7 +1151,7 @@ def games_page():
     )
 
     top = 556
-    section(card, top, 134, "LIMITS", GREEN)
+    section(card, top, 134, "LIMITS")
     plays = DAILY_GAMBLING_LIMITS
     card.text(560, top + 24, "Member", 15, MUTED, "ra", 2)
     card.text(854, top + 24, "Ultra Tier", 15, MUTED, "ra", 2)
@@ -1162,7 +1178,7 @@ def games_page():
 @lru_cache
 def teams_page():
     """The team finder, what rep pays, and what adding a topic costs."""
-    card = page("TEAM FINDER AND TOPICS", "Find teammates. Start a conversation.", 640)
+    card = page("COMMUNITY", "TEAM FINDER AND TOPICS", 640)
     section(card, 124, 176, "TEAM FINDER")
     steps = (
         ("kit/icon_event", "Request", "Pick a region and what you play"),
@@ -1172,7 +1188,7 @@ def teams_page():
     flow(card, 150, steps, 64)
 
     top = 332
-    section(card, top, 146, "REP", BLUE, WHITE)
+    section(card, top, 146, "REP")
     rows = (
         ("kit/icon_like", "Play with a host who selects you", "+1 rep"),
         (
@@ -1201,7 +1217,7 @@ def teams_page():
     )
 
     top = 510
-    section(card, top, 104, "TOPICS", GREEN)
+    section(card, top, 104, "TOPICS")
     fitted(card, "kit/icon_chat", 46, top + 28, 28)
     card.text(86, top + 32, "/topic gives the chat a question", 18, WHITE, "la", 2)
     card.text(854, top + 29, "Free", 22, GOLD, "ra")
@@ -1222,21 +1238,22 @@ def teams_page():
 
 
 def rates_page():
-    return rates_image(BACKGROUND)
+    return rates_image(page("INVENTORY", "DROP RATES", 828))
 
 
+# In the order of the places: Counter, Chat, Inventory, Community, then games.
 PAGES = {
     "start": ("Start here", start_page),
-    "levels": ("Levels", levels_page),
-    "beans": ("Beans", beans_page),
     "order": ("Today's Order", order_page),
     "brewing": ("Brewing", brewing_page),
+    "levels": ("Levels", levels_page),
+    "beans": ("Beans", beans_page),
+    "stations": ("Thermometer and Boss", stations_page),
     "effects": ("Effect items", effects_page),
     "rates": ("Drop rates", rates_page),
-    "stations": ("Thermometer and Boss", stations_page),
     "social": ("Tables and Invites", social_page),
-    "games": ("Games", games_page),
     "teams": ("Team Finder and Topics", teams_page),
+    "games": ("Games", games_page),
 }
 
 

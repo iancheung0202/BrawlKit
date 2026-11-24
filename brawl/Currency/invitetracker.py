@@ -81,11 +81,16 @@ class WelcomeView(discord.ui.View):
             currency_cog = self.bot.get_cog("CurrencySystem")
             if currency_cog:
                 await currency_cog.add_beans(
-                    interaction.user.id, WELCOME_BUTTON_REWARD, skip_quest_check=True
+                    interaction.user.id,
+                    WELCOME_BUTTON_REWARD,
+                    skip_quest_check=True,
+                    reason="welcome",
                 )
                 lucky = ""
                 if random.random() < WELCOME_TOKEN_CHANCE:
-                    await currency_cog.add_tokens(interaction.user.id, 1)
+                    await currency_cog.add_tokens(
+                        interaction.user.id, 1, reason="welcome"
+                    )
                     lucky = f" and a lucky {TOKEN_EMOTE} **1 Token**"
                 await interaction.response.send_message(
                     embed=discord.Embed(

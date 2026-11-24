@@ -114,47 +114,6 @@ def brewing(brew):
 SHOWN = 10
 
 
-def draw_invites(invites):
-    """This month's invites and the three referral steps."""
-    card = Card(640, 330, invites["background"])
-    card.panel(16, 24, 608, 290)
-    card.tag(32, 12, "INVITES", GOLD)
-    card.icon("kit/icon_inbox", 36, 50, 40)
-    count = f"{invites['valid']}"
-    card.text(100, 44, count, 34, GOLD)
-    unit = "invite" if invites["valid"] == 1 else "invites"
-    card.text(110 + card.measure(count, 34), 60, unit, 17, WHITE, "la", 2)
-    card.text(604, 48, invites["month"], 15, WHITE, "ra", 2)
-    left = RED if invites["left"] else MUTED
-    card.text(604, 70, f"{invites['left']} left", 13, left, "ra", 2)
-    joined = 592 - card.measure(f"{invites['left']} left", 13)
-    card.text(joined, 70, f"{invites['total']} joined", 13, MUTED, "ra", 2)
-    goal = next(
-        (key for key, *_ in REFERRAL_STEPS if not invites["done"].get(key)), None
-    )
-    for row, (key, name, need, icon, reward) in enumerate(REFERRAL_STEPS):
-        y = 106 + row * 56
-        done = invites["done"].get(key, False)
-        # Only the step to go for next is lit.
-        card.slot(36, y, 568, 48, lit=key == goal)
-        card.check(48, y + 10, done)
-        card.text(90, y + 7, name, 17, GREEN if done else WHITE, "la", 2)
-        card.text(90, y + 28, need, 12, MUTED, "la", 2)
-        if key == "master_done" and not done:
-            sells = min(invites["done"].get("sells", 0), REFERRAL_MASTER_SELLS)
-            count = f"{sells} / {REFERRAL_MASTER_SELLS}"
-            card.text(98 + card.measure(name, 17), y + 9, count, 14, GOLD, "la", 2)
-        card.text(588, y + 14, reward, 16, GREY if done else GOLD, "ra", 2)
-        card.icon(icon, 556 - card.measure(reward, 16), y + 12, 24)
-    card.icon("kit/icon_calendar", 36, 276, 20)
-    days = invites["days"]
-    left = f"{days} day{'s' * (days != 1)} left" if goal else "All done"
-    card.text(64, 279, left, 13, RED if goal else GREEN, "la", 2)
-    reset = "Starts over on the 1st, so you can earn these again."
-    card.text(74 + card.measure(left, 13), 279, reset, 13, MUTED, "la", 2)
-    return card.jpg()
-
-
 def draw_invitees(month):
     """Who a member invited in one month and how far each has got."""
     people = month["people"]

@@ -156,14 +156,14 @@ def test_a_missed_sunday_still_resets_the_week(cafe):
     import time
     from datetime import datetime, timezone
 
-    from brawl.Currency import factions
+    from brawl.Currency import tables
     from brawl.Currency.db import g_table_reset, g_tables
     from brawl.Currency.helper import MAIN_GUILD_ID
 
     wednesday = datetime(2026, 11, 25, 15, 30, tzinfo=timezone.utc)
-    assert factions.week_start(wednesday) == datetime(2026, 11, 22, tzinfo=timezone.utc)
+    assert tables.week_start(wednesday) == datetime(2026, 11, 22, tzinfo=timezone.utc)
     sunday = datetime(2026, 11, 22, 0, 0, tzinfo=timezone.utc)
-    assert factions.week_start(sunday) == sunday
+    assert tables.week_start(sunday) == sunday
 
     cog = cafe.cogs["TableSystem"]
     cog.bot.get_channel = lambda _: None
