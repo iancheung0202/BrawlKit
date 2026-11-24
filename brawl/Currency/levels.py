@@ -22,40 +22,10 @@ from brawl.Currency.config import (
     XP_PER_MESSAGE,
     XP_ULTRA_MULTIPLIER,
 )
+from brawl.Currency.guide import guide
 from brawl.Currency.ladder import lessons
 from brawl.Currency.panel import framed, notice
 from brawl.Currency.rewardcard import draw_level_up
-
-
-class LevelRewardInfoView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.grey,
-        custom_id="level_info",
-        emoji="<:information:855023058255478794>",
-    )
-    async def level_info(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        from brawl.Currency.how import HowView, page_file
-
-        await interaction.response.send_message(
-            file=await page_file("levels"), view=HowView("levels"), ephemeral=True
-        )
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.grey,
-        disabled=True,
-        label="Use /balance to view card",
-        custom_id="level_card",
-    )
-    async def level_card(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        pass
-
 
 LEVEL_REWARDS = {
     5: 866947914286759957,
@@ -243,7 +213,11 @@ class Leveling(commands.Cog):
                                 tone="gold",
                             ),
                             **(
-                                {"view": LevelRewardInfoView()}
+                                {
+                                    "view": guide(
+                                        "levels", "Use /balance to view your level"
+                                    )
+                                }
                                 if new_level <= 20
                                 else {}
                             ),

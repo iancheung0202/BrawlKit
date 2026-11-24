@@ -198,6 +198,23 @@ def after(item):
     return f"Active for {count} {unit}{'s' * (count != 1)}."
 
 
+NEXT = {
+    "message_pin": "Use /pin to pin a message",
+    "reset_chat_cap": "Use /balance to view today's Beans",
+    "thermometer_boost": "Use /thermometer to view the heat",
+    "instant_brew": "Use /brew to start another",
+}
+
+
+def bought(item):
+    """The `/how` page and the command to run next for an item just bought."""
+    if item.startswith("star_drop"):
+        return "rates", "Use /stardrop to open it"
+    if item.startswith("mega_box"):
+        return "rates", "Use /megabox to open it"
+    return "effects", NEXT.get(item, "Use /use to start it")
+
+
 def draw_purchase(sale):
     """A strip: what was bought, what to do next, what it cost, what is left."""
     card = Card(640, 150)

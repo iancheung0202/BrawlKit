@@ -250,7 +250,7 @@ def draw_boss(background):
 def draw_boss_result(result):
     """A strip only the member sees: how the boss took it and what they got."""
     picture, name, headline, color = BOSS[result["outcome"]]
-    card = Card.strip(result.get("next"))
+    card = Card.strip()
     card.tag(32, 12, "BOSS INSPECTION", RED, WHITE)
     card.icon(picture, 34, 48, 64)
     card.text(118, 42, headline, 24, color)

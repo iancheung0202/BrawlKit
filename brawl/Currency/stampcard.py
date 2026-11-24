@@ -20,6 +20,7 @@ from brawl.Currency.db import (
     u_mega_boxes,
     u_stamp_card,
 )
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import (
     MAIN_GUILD_ID,
     NO_EMOTE,
@@ -201,6 +202,7 @@ class StampCard(commands.Cog):
                 "message and the server owner will deliver your pass.",
                 tone="good",
             ),
+            view=guide("order", "Use /balance to view your Stamp Card"),
         )
 
     @redeem.error

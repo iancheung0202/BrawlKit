@@ -34,6 +34,7 @@ from brawl.Currency.db import (
     u_star_drops,
 )
 from brawl.Currency.effects import EffectManager
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     BOT_COMMANDS,
@@ -49,7 +50,7 @@ from brawl.Currency.helper import (
     TRAINEE_ROLE_ID,
     get_current_month_key,
 )
-from brawl.Currency.panel import DRAWN, notice
+from brawl.Currency.panel import notice
 from brawl.Currency.quests import get_next_daily_reset
 from brawl.Currency.rewardcard import draw_ready
 from brawl.Currency.stationcard import draw_heat, draw_thermometer
@@ -124,7 +125,10 @@ class CurrencySystem(commands.Cog):
             if time.time() - told < THERMOMETER_NEWS_SECONDS:
                 self.heat_told[now[1]] = told
                 return
-            sent = await channel.send(file=card)
+            sent = await channel.send(
+                file=card,
+                view=guide("stations", "Use /thermometer to view the heat"),
+            )
             self.heat_notice = None if rose else sent
         except Exception as e:
             print(f"Failed to post the thermometer level: {e}")
@@ -235,7 +239,6 @@ class CurrencySystem(commands.Cog):
                                 ready = {
                                     "roast": alarm_data.get("roast_type", "light"),
                                     "background": BACKGROUND,
-                                    "next": DRAWN["ready"],
                                 }
 
                                 view = discord.ui.View()
@@ -249,7 +252,7 @@ class CurrencySystem(commands.Cog):
 
                                 await user.send(
                                     file=await render(draw_ready, ready, name="ready"),
-                                    **({"view": view} if bot_channel else {}),
+                                    view=guide("brewing", view=view),
                                 )
                                 sync_sell_alarm(
                                     user_id, "update", {"notified": True}, MAIN_GUILD_ID

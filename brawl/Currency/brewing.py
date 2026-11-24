@@ -11,6 +11,7 @@ from brawl.Currency import wallet
 from brawl.Currency.brewcard import draw_brewing, draw_sold
 from brawl.Currency.card import BACKGROUND, GOLD, GREEN, MUTED, RED, render
 from brawl.Currency.db import g_invites_member_data, sync_sell_alarm
+from brawl.Currency.guide import guide as buttons
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     BRIDGE_ROLE_ID,
@@ -25,7 +26,7 @@ from brawl.Currency.helper import (
     UNLOCK_REQ,
 )
 from brawl.Currency.ladder import locked
-from brawl.Currency.panel import DRAWN, framed, notice, reframed
+from brawl.Currency.panel import framed, notice, reframed
 from brawl.Currency.quests import report, update_quest
 from brawl.Currency.tutorial import BREW_STEP, hint, step_of
 
@@ -156,7 +157,6 @@ class Brewing(commands.Cog):
             }
             old = message.embeds[0] if message.embeds else None
             guided = bool(old and (old.title or "").startswith("Step"))
-            started["next"] = None if guided else DRAWN["sell"]
             said = (old.description if old else message.content) or ""
             lines = [line for line in said.split("\n") if "nsur" not in line]
             await interaction.response.edit_message(
@@ -170,7 +170,7 @@ class Brewing(commands.Cog):
                     "\n".join(lines),
                 ),
                 content=None,
-                view=None,
+                view=buttons("brewing", "Use /sell when it is ready"),
             )
 
     @app_commands.command(
@@ -331,7 +331,6 @@ class Brewing(commands.Cog):
             lines.append(("\n" if lines else "") + step)
 
         started = {
-            "next": None if guide else DRAWN["sell"],
             "roast": roast,
             "time": brew_time,
             "insurance": insurance,
@@ -339,7 +338,7 @@ class Brewing(commands.Cog):
             "beans": new_beans,
             "background": BACKGROUND,
         }
-        sent = {"view": view} if view else {}
+        sent = {"view": view or buttons("brewing", "Use /sell when it is ready")}
         await interaction.followup.send(
             **framed(
                 await render(
@@ -549,7 +548,6 @@ class Brewing(commands.Cog):
             title, step = hint(guide)
             lines.append(("\n" if lines else "") + step)
         sale = {
-            "next": None if guide else DRAWN["brew"],
             "roast": roast_type,
             "tokens": tokens,
             "perfect": perfect or burnt_to_perfect,
@@ -563,7 +561,8 @@ class Brewing(commands.Cog):
                 title,
                 *lines,
                 tone="good" if tokens else "bad",
-            )
+            ),
+            view=buttons("brewing", "Use /brew to start another"),
         )
         await report(interaction, order)
 

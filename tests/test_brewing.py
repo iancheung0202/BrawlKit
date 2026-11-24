@@ -10,6 +10,8 @@ from tests.conftest import text
 USER = 1
 LIGHT = app_commands.Choice(name="Light Roast", value="light")
 
+SELL = "Use /sell when it is ready"
+
 
 def user(cafe, path):
     return cafe.ref(f"Cafe Economy/{USER}/{path}")
@@ -68,7 +70,8 @@ def test_insurance_button_charges_and_marks_the_batch(cafe):
     view = sent["view"]
     press = pressing(cafe, sent)
     asyncio.run(view.children[0].callback(press))
-    assert press.response.edit_message.call_args.kwargs["view"] is None
+    after = press.response.edit_message.call_args.kwargs["view"]
+    assert after.children[-1].label == SELL
     cost = ROAST_TYPES["light"]["cost"] + ROAST_TYPES["light"]["insurance_cost"]
     assert user(cafe, "balance/Beans").get() == 5000 - cost
     assert user(cafe, "inventory/brews/active_brew/insured").get() is True
@@ -129,7 +132,8 @@ def test_the_first_tutorial_brew_is_free_ready_and_insured(cafe):
     active = user(cafe, "inventory/brews/active_brew").get()
     assert active["insured"] and active["end_time"] <= active["start_time"]
     assert user(cafe, "balance").get()["Beans"] == 0
-    assert "view" not in sent.followup.send.call_args_list[0].kwargs
+    first = sent.followup.send.call_args_list[0].kwargs["view"]
+    assert first.children[-1].label == SELL
     assert u_tutorial(USER).get() == tutorial.SELL_STEP
 
     assert "need" in brew_again(cafe)

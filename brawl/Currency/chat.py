@@ -19,6 +19,7 @@ from brawl.Currency.config import (
     THERMOMETER_MESSAGE_HEAT,
 )
 from brawl.Currency.db import u_daily_chat_earnings
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import (
     MAIN_CHAT_CHANNELS,
     NO_EMOTE,
@@ -26,7 +27,12 @@ from brawl.Currency.helper import (
     YES_EMOTE,
 )
 from brawl.Currency.ladder import unlocked
-from brawl.Currency.quests import get_next_daily_reset, order_card, update_quest
+from brawl.Currency.quests import (
+    get_next_daily_reset,
+    order_card,
+    order_guide,
+    update_quest,
+)
 from brawl.Currency.rewardcard import draw_chat, draw_paid
 from brawl.Currency.stationcard import draw_token_drop
 
@@ -260,11 +266,13 @@ class ChatRewardSystem:
                         },
                         name="order",
                     )
-                    await message.channel.send(file=strip)
+                    await message.channel.send(file=strip, view=order_guide(done))
                 self.extras.pop(user_id, None)
 
         try:
-            files = [drop] if drop else []
+            files = (
+                [(drop, guide("stations", "Use /shop to spend Tokens"))] if drop else []
+            )
             if dropped:
                 # The drop was a task of this member's order: show the order too,
                 # with anything the chat reward added to it in this same message.
@@ -274,7 +282,7 @@ class ChatRewardSystem:
                     dropped.boxes = dropped.boxes or order.boxes
                     dropped.redeem = dropped.redeem or order.redeem
                     order = None
-                files.append(await order_card(user_id, dropped))
+                files.append((await order_card(user_id, dropped), order_guide(dropped)))
             if reward_triggered:
                 avatar = await face(message.author)
                 strip = await render(
@@ -292,11 +300,13 @@ class ChatRewardSystem:
                     },
                     name="chat",
                 )
-                files.insert(0, strip)
+                files.insert(
+                    0, (strip, guide("beans", "Use /balance to view today's Beans"))
+                )
             # One picture a message: Discord crops several into small squares.
-            for spot, file in enumerate(files):
+            for spot, (file, view) in enumerate(files):
                 mention = None if spot or reward_triggered else message.author.mention
-                await message.channel.send(mention, file=file)
+                await message.channel.send(mention, file=file, view=view)
         except Exception as e:
             print(f"Failed to send bean reward message: {e}")
 

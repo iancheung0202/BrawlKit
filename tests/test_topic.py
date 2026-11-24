@@ -9,7 +9,9 @@ from tests.conftest import text
 MEMBER, STAFF, REVIEW = 1, 2, 55
 
 
-def send_in(cafe, question="Which brawler would run the best cafe?"):
+def send_in(cafe, question="Which brawler would run the best cafe?", rested=True):
+    if rested:
+        cafe.ref(topic.SENT).delete()
     interaction = cafe.interaction(MEMBER)
     interaction.guild.get_channel.return_value.send = AsyncMock(
         return_value=MagicMock(id=REVIEW)
@@ -121,3 +123,76 @@ def test_member_the_bot_has_not_seen_is_fetched_for_the_card(cafe):
     asyncio.run(run())
     interaction.guild.fetch_member.assert_awaited_once_with(MEMBER)
     assert interaction.guild.fetch_member.return_value.send.call_count == 1
+
+
+def test_review_shows_how_many_topics_the_member_had_approved(cafe, monkeypatch):
+    now = 1_800_000_000
+
+    def key(age):
+        stamp, out = int((now - age) * 1000), ""
+        for _ in range(8):
+            stamp, out = stamp // 64, topic.PUSH[stamp % 64] + out
+        return out + "abcdefghijkl"
+
+    monkeypatch.setattr(topic.time, "time", lambda: now)
+    for age in (3600, 3 * 86400, 20 * 86400, 90 * 86400):
+        cafe.ref(topic.APPROVED).child(key(age)).set({"user": MEMBER, "text": "x"})
+    cafe.ref(topic.APPROVED).child(key(60)).set({"user": STAFF, "text": "x"})
+    embed = send_in(cafe).guild.get_channel.return_value.send.call_args.kwargs["embed"]
+    assert "4 approved topics all-time" in embed.description
+    assert [(field.name, field.value) for field in embed.fields] == [
+        ("Last 30 days", "`3` approved"),
+        ("Last 7 days", "`2` approved"),
+        ("Last 24 hours", "`1` approved"),
+    ]
+
+
+def test_one_suggestion_an_hour_whatever_staff_decided(cafe, monkeypatch):
+    now = [1_800_000_000]
+    monkeypatch.setattr(topic.time, "time", lambda: now[0])
+    send_in(cafe)
+    review(cafe, False)
+    now[0] += topic.COOLDOWN - 5
+    refused = send_in(cafe, rested=False).response.send_message.call_args
+    assert "one topic an hour" in text(refused) and not cafe.ref(topic.PENDING).get()
+    now[0] += 5
+    send_in(cafe, rested=False)
+    assert len(cafe.ref(topic.PENDING).get()) == 1
+
+
+def test_review_lists_the_topics_devin_finds_similar(cafe, monkeypatch):
+    monkeypatch.setattr(topic.topicmatch, "ready", lambda: True)
+    close = [("What's your favorite map to play on?", "Same question")]
+    monkeypatch.setattr(topic.topicmatch, "similar", AsyncMock(return_value=close))
+    embed = topic.review_embed(MagicMock(id=MEMBER), "Best map?")
+    assert embed.fields[-1].value == "-# Checking"
+    message = MagicMock()
+    message.channel.fetch_message = AsyncMock(return_value=message)
+    message.embeds, message.edit = [embed], AsyncMock()
+    asyncio.run(topic.check(message, "Best map?"))
+    shown = message.edit.call_args.kwargs["embed"].fields[-1].value
+    assert shown == "1. What's your favorite map to play on?\n-# Same question"
+    asked = topic.topicmatch.similar.call_args.args[1]
+    assert asked[: len(topic.ICEBREAKERS)] == topic.ICEBREAKERS
+    down = AsyncMock(side_effect=topic.topicmatch.Unavailable("down"))
+    monkeypatch.setattr(topic.topicmatch, "similar", down)
+    asyncio.run(topic.check(message, "Best map?"))
+    assert message.edit.call_args.kwargs["embed"].fields[-1].value == (
+        "-# Check unavailable"
+    )
+    assert topic.close_lines([]) == "-# None found"
+
+
+def test_the_answer_is_read_from_devins_reply_to_this_question():
+    from brawl.Utility import topicmatch
+
+    topics = ["Best map?", "Best brawler?"]
+    reply = '{"id": "ab12", "similar": [{"n": 2, "why": "same"}, {"n": 9}]}'
+    messages = [
+        {"source": "user", "message": reply.replace("2,", "1,")},
+        {"source": "devin", "message": '{"id": "old", "similar": [{"n": 1}]}'},
+        {"source": "devin", "message": "Here: " + reply},
+    ]
+    assert topicmatch.answer(messages, "ab12", topics) == [("Best brawler?", "same")]
+    assert topicmatch.answer(messages[:2], "ab12", topics) is None
+    assert "2. Best brawler?" in topicmatch.question("x", topics, "ab12")

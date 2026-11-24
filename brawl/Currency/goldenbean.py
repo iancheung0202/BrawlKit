@@ -182,6 +182,17 @@ def draw_winner(win):
     return card.jpg()
 
 
+def guide():
+    """The buttons under a chat strip: the standings, and how to see them."""
+    view = discord.ui.View(timeout=None)
+    for more in (
+        {"emoji": "<:information:855023058255478794>", "custom_id": "golden_info"},
+        {"label": "Use /golden to view tickets", "disabled": True},
+    ):
+        view.add_item(discord.ui.Button(style=discord.ButtonStyle.grey, **more))
+    return view
+
+
 class GoldenBean(commands.Cog):
     """The holder lives here and in the database. The reaction only shows it:
     one task moves it to the message that last took the bean, so a burst of
@@ -360,7 +371,8 @@ class GoldenBean(commands.Cog):
                     await old.delete()
                 except discord.HTTPException:
                     pass
-            self.strip, self.between = await channel.send(file=file), 0
+            sent = await channel.send(file=file, view=guide())
+            self.strip, self.between = sent, 0
         except Exception as e:
             print(f"Failed to post the Golden Bean: {e}")
 
@@ -440,6 +452,12 @@ class GoldenBean(commands.Cog):
         await interaction.followup.send(
             file=await render(draw_board, board, name="bean"), ephemeral=True
         )
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        """The info button under a strip shows what /golden shows."""
+        if (interaction.data or {}).get("custom_id") == "golden_info":
+            await self.golden.callback(self, interaction)
 
     async def draw(self):
         """The event is over: one ticket is picked, and the bean goes away."""

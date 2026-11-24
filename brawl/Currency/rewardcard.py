@@ -188,10 +188,7 @@ def right(card, y, rewards, size):
 
 def draw_paid(order):
     """A strip for an order that finished with no other card to carry it."""
-    pass_name = order.get("redeem")
-    card = Card.strip(
-        pass_name and f"Redeem your {pass_name} with /redeem.", small=True
-    )
+    card = Card.strip(small=True)
     card.tag(32, 12, "TODAY'S ORDER")
     card.avatar(order["avatar"], 34, 40, 52)
     card.text(100, 40, card.fit(order["name"], 16, 260), 16, MUTED, "la", 2)
@@ -307,7 +304,7 @@ def draw_redeemed(sale):
 def draw_ready(brew):
     """The Sell Alarm strip sent when a brew finishes."""
     roast = ROAST_TYPES.get(brew["roast"], ROAST_TYPES["light"])
-    card = Card.strip(brew.get("next"), small=True)
+    card = Card.strip(small=True)
     card.tag(32, 12, "BREW READY", GREEN)
     card.icon("ready", 34, 40, 52)
     card.text(100, 40, "From your Sell Alarm", 16, MUTED, "la", 2)
@@ -322,11 +319,7 @@ def draw_ready(brew):
 def draw_topic(topic):
     """The strip a member is sent when staff approve or turn down their topic."""
     approved = topic["approved"]
-    card = Card.strip(
-        "It now shows up in /topic with your name."
-        if approved
-        else "Suggest another one from /topic."
-    )
+    card = Card.strip()
     card.tag(
         32,
         12,

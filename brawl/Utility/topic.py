@@ -1,4 +1,6 @@
+import asyncio
 import random
+import time
 
 import discord
 from discord import app_commands
@@ -8,13 +10,19 @@ from firebase_admin import db
 
 from brawl.Currency import wallet
 from brawl.Currency.config import TOPIC_BEANS
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import BEAN_EMOTE, MAIN_GUILD_ID, TOPIC_REVIEW
 from brawl.Currency.panel import notice
 from brawl.Currency.rewardcard import draw_topic
+from brawl.Utility import topicmatch
 from brawl.Utility.style import BLUE, GOLD, GREEN, NO, RED, YES
 
 PENDING = "/Cafe Topics/Pending"
 APPROVED = "/Cafe Topics/Approved"
+SENT = "/Cafe Topics/Sent"
+COOLDOWN = 3600
+SIMILAR = "Similar topics"
+checks = set()  # running checks, held so they are not dropped half way
 
 ICEBREAKERS = [
     "What's your favorite Brawl Stars brawler and why?",
@@ -144,10 +152,76 @@ def draw():
     return topic["text"], topic["user"]
 
 
+PUSH = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+SPANS = (("Last 30 days", 30), ("Last 7 days", 7), ("Last 24 hours", 1))
+
+
+def pushed(key: str) -> float:
+    """When a pushed database key was made, which its first 8 characters hold."""
+    stamp = 0
+    for letter in key[:8]:
+        stamp = stamp * 64 + max(PUSH.find(letter), 0)
+    return stamp / 1000
+
+
+def approvals(user_id: int) -> list:
+    """When each of this member's approved topics was approved."""
+    topics = db.reference(APPROVED).get() or {}
+    return [
+        pushed(key) for key, topic in topics.items() if topic.get("user") == user_id
+    ]
+
+
 def approved_by(user_id: int) -> int:
     """How many of this member's topics were approved."""
-    topics = (db.reference(APPROVED).get() or {}).values()
-    return sum(topic.get("user") == user_id for topic in topics)
+    return len(approvals(user_id))
+
+
+def review_embed(member, text: str) -> discord.Embed:
+    """What staff see: the topic, who sent it, and their approved topics so far."""
+    times, now = approvals(member.id), time.time()
+    embed = discord.Embed(title=text, color=BLUE)
+    embed.description = (
+        f"Topic suggested by {member.mention}\n"
+        f"-# {len(times)} approved topic{'s' * (len(times) != 1)} all-time"
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    for span, days in SPANS:
+        count = sum(now - at <= days * 86400 for at in times)
+        embed.add_field(name=span, value=f"`{count}` approved")
+    if topicmatch.ready():
+        embed.add_field(name=SIMILAR, value="-# Checking", inline=False)
+    return embed
+
+
+def every_topic() -> list:
+    sent = (db.reference(APPROVED).get() or {}).values()
+    return ICEBREAKERS + [topic["text"] for topic in sent]
+
+
+def close_lines(close) -> str:
+    if not close:
+        return "-# None found"
+    return "\n".join(
+        f"{spot}. {topic}" + (f"\n-# {why}" if why else "")
+        for spot, (topic, why) in enumerate(close, 1)
+    )[:1024]
+
+
+async def check(message, text: str):
+    """Fill in the review's similar topics once Devin has answered."""
+    try:
+        found = close_lines(await topicmatch.similar(text, every_topic()))
+    except topicmatch.Unavailable:
+        found = "-# Check unavailable"
+    try:
+        message = await message.channel.fetch_message(message.id)
+        embed = message.embeds[0]
+        spot = [field.name for field in embed.fields].index(SIMILAR)
+        embed.set_field_at(spot, name=SIMILAR, value=found, inline=False)
+        await message.edit(embed=embed)
+    except (discord.HTTPException, ValueError, IndexError):
+        pass
 
 
 def topic_embed():
@@ -178,15 +252,31 @@ class AddModal(Modal, title="Suggest a topic"):
                 ephemeral=True,
             )
             return
+        last = db.reference(SENT).child(str(interaction.user.id))
+        ready = (last.get() or 0) + COOLDOWN
+        if time.time() < ready:
+            await interaction.response.send_message(
+                embed=notice(
+                    f"{NO} You can suggest one topic an hour. "
+                    f"Suggest another <t:{int(ready) + 1}:R>.",
+                    "bad",
+                ),
+                ephemeral=True,
+            )
+            return
         text = self.text.value.strip()
-        review = discord.Embed(title=text, color=BLUE)
-        review.description = f"Topic suggested by {interaction.user.mention}"
+        review = review_embed(interaction.user, text)
         sent = await interaction.guild.get_channel(TOPIC_REVIEW).send(
             embed=review, view=ReviewView()
         )
         db.reference(PENDING).child(str(sent.id)).set(
             {"user": interaction.user.id, "text": text}
         )
+        last.set(time.time())
+        if topicmatch.ready():
+            task = asyncio.create_task(check(sent, text))
+            checks.add(task)
+            task.add_done_callback(checks.discard)
         await interaction.response.send_message(
             embed=notice(
                 f"{YES} Sent to staff. If they approve it, it joins `/topic` with "
@@ -230,7 +320,10 @@ async def tell(interaction: discord.Interaction, topic: dict, approved: bool):
         member = guild.get_member(topic["user"]) or await guild.fetch_member(
             topic["user"]
         )
-        await member.send(file=discord.File(card, "topic.jpg"))
+        await member.send(
+            file=discord.File(card, "topic.jpg"),
+            view=guide("teams", "Use /topic to suggest another"),
+        )
     except discord.HTTPException:
         pass
 
@@ -298,10 +391,6 @@ class TopicView(View):
                 await self.message.edit(view=None)
             except discord.HTTPException:
                 pass
-
-    @discord.ui.button(label="Another topic", style=discord.ButtonStyle.blurple)
-    async def another(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.edit_message(embed=topic_embed())
 
     @discord.ui.button(label="Suggest a topic", style=discord.ButtonStyle.grey)
     async def add(self, interaction: discord.Interaction, button: Button):

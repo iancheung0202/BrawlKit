@@ -324,3 +324,14 @@ def test_golden_shows_the_top_and_where_you_stand(cafe, event, clock):
     asyncio.run(event.golden.callback(event, interaction))
     sent = interaction.followup.send.await_args.kwargs
     assert sent["ephemeral"] and sent["file"].filename == "bean.png"
+    pressed = cafe.interaction(1)
+    pressed.data = {"custom_id": "golden_info"}
+    asyncio.run(event.on_interaction(pressed))
+    assert pressed.followup.send.await_args.kwargs["ephemeral"]
+
+    async def buttons():
+        return goldenbean.guide().children
+
+    info, label = asyncio.run(buttons())
+    assert info.custom_id == "golden_info" and label.disabled
+    assert label.label == "Use /golden to view tickets"

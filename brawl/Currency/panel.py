@@ -31,13 +31,6 @@ def panel(station, headline, body="", next=None, tone="info"):
 
 
 # The same steps as they are drawn on a strip, where a command cannot be a link.
-DRAWN = {
-    "brew": "Start another brew with /brew",
-    "sell": "Sell it with /sell when it is ready",
-    "ready": "Sell it with /sell in the bot channel",
-}
-
-
 def notice(text, tone="info"):
     """A one-line answer: a refusal, a confirmation, a short notice."""
     return discord.Embed(description=text, color=COLORS[tone])

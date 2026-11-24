@@ -27,6 +27,7 @@ from brawl.Currency.config import (
     ULTRA_DAILY_BONUS,
 )
 from brawl.Currency.db import sync_shop_effects, u_daily_checkin_streaks
+from brawl.Currency.guide import guide as buttons
 from brawl.Currency.helper import (
     AUTORESPONSE_MAP,
     BEAN_EMOTE,
@@ -694,6 +695,7 @@ class Daily(commands.Cog):
                 *(hint(guide) if guide else ()),
                 tone="good",
             ),
+            view=buttons("beans", "Use /balance to view your Stamp Card"),
             ephemeral=True,
         )
 

@@ -24,7 +24,7 @@ def chip(card, x, y, label, odds, fill=WHITE):
 def draw_brewing(brew):
     """A strip for a brew that just started."""
     roast = ROAST_TYPES[brew["roast"]]
-    card = Card.strip(brew.get("next"))
+    card = Card.strip()
     card.tag(32, 12, "BREW STARTED")
     card.icon("brewing", 34, 44, 76)
     card.text(122, 44, roast["name"], 26)
@@ -51,7 +51,7 @@ def draw_sold(sale):
     """A strip for a sold brew: what it paid and why."""
     roast = ROAST_TYPES[sale["roast"]]
     tokens = sale["tokens"]
-    card = Card.strip(sale.get("next"))
+    card = Card.strip()
     label, fill, color = (
         ("BURNT", RED, WHITE)
         if not tokens

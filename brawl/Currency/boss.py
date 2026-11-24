@@ -19,6 +19,7 @@ from brawl.Currency.db import (
     u_mega_boxes,
     u_star_drops,
 )
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import (
     BOSS_INSPECTION_ACTIONS,
     BOSS_INSPECTION_ROLE_ID,
@@ -56,12 +57,12 @@ OUTCOMES = {
     "mega_box": (
         u_mega_boxes,
         "success",
-        "Open it with /megabox",
+        "Use /megabox to open it",
     ),
     "star_drop": (
         u_star_drops,
         "nothing",
-        "Open it with /stardrop",
+        "Use /stardrop to open it",
     ),
     "nothing": (None, "fail", None),
 }
@@ -156,10 +157,10 @@ class BossInspectionView(View):
                 "background": BACKGROUND,
                 "outcome": outcome,
                 "line": BOSS_INSPECTION_ACTIONS[key][line],
-                "next": how,
             }
             await interaction.response.send_message(
                 file=await render(draw_boss_result, result, name="boss"),
+                view=guide("rates" if how else "stations", how),
                 ephemeral=True,
             )
             await report(

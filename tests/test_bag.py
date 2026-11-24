@@ -41,7 +41,8 @@ def test_an_item_already_held_cannot_be_bought_again(cafe):
 def test_an_instant_item_still_acts_when_bought(cafe):
     cafe.cogs["CurrencySystem"].thermometer_heat = 10
     reply = buy(cafe, "thermometer_boost")
-    assert reply["view"] is None and bag.held(USER) == []
+    assert reply["view"].children[1].label == "Use /thermometer to view the heat"
+    assert bag.held(USER) == []
     assert cafe.cogs["CurrencySystem"].thermometer_heat == 40
 
 

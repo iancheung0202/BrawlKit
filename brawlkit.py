@@ -14,7 +14,6 @@ from firebase_admin import credentials, db
 load_dotenv()
 
 from brawl.Currency.daily import ClockInView
-from brawl.Currency.levels import LevelRewardInfoView
 from brawl.Currency.staff import AcceptRejectView, StaffInfoView
 from brawl.Milestone.milestone import IconChangeView, VerificationEmbedView
 from brawl.Partnership.partnershipSystem import RequestView as PartnerRequestView
@@ -92,7 +91,6 @@ class BrawlProfile(commands.Bot):
             IconChangeView,
             StaffInfoView,
             AcceptRejectView,
-            LevelRewardInfoView,
             ClockInView,
             ticket.CloseTicketButton,
             ticket.TicketAdminButtons,

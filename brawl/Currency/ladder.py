@@ -46,7 +46,7 @@ def next_unlock(level):
 
 def lessons(old, new):
     return [
-        f"{name}: {lesson}"
+        f"**Unlocked {name}:** {lesson}"
         for need, name, lesson in LADDER.values()
         if old < need <= new
     ]

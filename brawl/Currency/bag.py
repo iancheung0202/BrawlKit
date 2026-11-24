@@ -7,6 +7,7 @@ from discord.ext import commands
 from brawl.Currency import heat
 from brawl.Currency.card import BACKGROUND, item_icon, render
 from brawl.Currency.db import sync_sell_alarm, sync_shop_effects, u_bag, u_shop_effects
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE, STORE_ITEMS
 from brawl.Currency.itemcard import draw_bag, draw_started, lasts
 from brawl.Currency.panel import notice
@@ -106,7 +107,7 @@ async def use(interaction, item):
     await interaction.response.edit_message(
         attachments=[await render(draw_started, started, name="started")],
         embed=None,
-        view=None,
+        view=guide("effects", "Use /balance to view active items"),
     )
 
 

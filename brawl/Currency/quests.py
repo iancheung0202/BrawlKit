@@ -19,6 +19,7 @@ from brawl.Currency.config import (
     STAMP_GOALS,
 )
 from brawl.Currency.db import u_daily_checkin_streaks, u_quests, u_veteran
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     MAIN_GUILD_ID,
@@ -225,11 +226,26 @@ async def order_card(user_id, messages):
     return await render(draw_order, progress, name="order")
 
 
+def order_guide(messages):
+    """The buttons under an order strip: redeem when a pass is ready."""
+    name = getattr(messages, "redeem", None)
+    return guide(
+        "order",
+        (
+            f"Use /redeem to claim your {name}"
+            if name
+            else "Use /balance to view your Stamp Card"
+        ),
+    )
+
+
 async def report(interaction, messages):
     """After a station reply: Today's Order, if the reply moved it."""
     if messages:
         await interaction.followup.send(
-            file=await order_card(interaction.user.id, messages), ephemeral=True
+            file=await order_card(interaction.user.id, messages),
+            view=order_guide(messages),
+            ephemeral=True,
         )
 
 

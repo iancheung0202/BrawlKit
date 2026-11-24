@@ -22,6 +22,7 @@ from brawl.Currency.db import (
     g_user_tables,
     u_table_notifications,
 )
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     MAIN_GUILD_ID,
@@ -223,6 +224,9 @@ class TableSystem(commands.GroupCog, name="table"):
                                         "Table quest step reached",
                                         tone="gold",
                                     ),
+                                    view=guide(
+                                        "social", "Use /table mine to view your table"
+                                    ),
                                 )
                         except Exception as e:
                             print(
@@ -341,6 +345,10 @@ class TableSystem(commands.GroupCog, name="table"):
                                                 ),
                                                 "Top table this week",
                                                 tone="gold",
+                                            ),
+                                            view=guide(
+                                                "social",
+                                                "Use /table mine to view your table",
                                             ),
                                         )
                                     except discord.Forbidden:

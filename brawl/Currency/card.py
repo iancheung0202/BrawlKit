@@ -121,14 +121,14 @@ class Card:
         self.draw = ImageDraw.Draw(self.image, "RGBA")
 
     @classmethod
-    def strip(cls, step=None, foot=False, small=False):
-        """A one-panel strip, one line taller when it also says what to do next.
+    def strip(cls, foot=False, small=False):
+        """A one-panel strip.
 
-        foot leaves that line empty for the caller to fill at card.foot, or that
-        many lines, 26 apart. A small strip is for one number: a 52 picture, a
-        name over the value.
+        foot adds an empty line under a rule for the caller to fill at
+        card.foot, or that many lines, 26 apart. A small strip is for one
+        number: a 52 picture, a name over the value.
         """
-        extra = 30 + 26 * (max(int(foot), 1) - 1) if step or foot else 0
+        extra = 30 + 26 * (int(foot) - 1) if foot else 0
         tall = 82 if small else 110
         card = cls(640, tall + 40 + extra)
         card.panel(16, 24, 608, tall + extra)
@@ -139,11 +139,6 @@ class Card:
                 [(34 * SCALE, y), (606 * SCALE, y)],
                 fill=(255, 255, 255, 40),
                 width=SCALE,
-            )
-        if step:
-            card.text(36, card.foot, "Next", 15, GOLD, "la", 2)
-            card.text(
-                44 + card.measure("Next", 15), card.foot, step, 15, MUTED, "la", 2
             )
         return card
 

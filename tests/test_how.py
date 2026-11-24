@@ -76,13 +76,16 @@ def test_the_menu_only_works_for_the_member_who_asked(cafe):
 
 
 def test_the_level_up_info_button_opens_the_levels_page():
-    from brawl.Currency.levels import LevelRewardInfoView
+    from brawl.Currency.guide import Info, guide
 
     async def press():
         interaction = MagicMock()
         interaction.response.send_message = AsyncMock()
-        view = LevelRewardInfoView()
-        await view.level_info.callback(interaction)
+        view = guide("levels", "Use /balance to view your level")
+        info, label = view.children
+        assert label.disabled and label.label.startswith("Use /balance")
+        old = Info.__discord_ui_compiled_template__.fullmatch("level_info")
+        await (await Info.from_custom_id(interaction, None, old)).callback(interaction)
         return interaction.response.send_message.call_args.kwargs
 
     sent = asyncio.run(press())

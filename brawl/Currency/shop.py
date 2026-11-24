@@ -26,6 +26,7 @@ from brawl.Currency.db import (
     u_star_drops,
     u_star_drops_purchases,
 )
+from brawl.Currency.guide import guide
 from brawl.Currency.helper import (
     BEAN_EMOTE,
     MAIN_GUILD_ID,
@@ -50,6 +51,7 @@ from brawl.Currency.shopcard import (
     SORTS,
     SUPERCELL,
     after,
+    bought,
     buyable,
     draw_purchase,
     listing,
@@ -980,6 +982,7 @@ class Shop(commands.Cog):
                 ),
                 tone="good",
             ),
+            view=guide("beans"),
         )
         await report(interaction, order)
 
@@ -1176,9 +1179,7 @@ class Shop(commands.Cog):
             current_count = inventory_ref.get() or 0
             inventory_ref.set(current_count + amount_to_buy)
 
-            effect_msg = (
-                f"You have {current_count + amount_to_buy} to open with /stardrop."
-            )
+            effect_msg = f"You have {current_count + amount_to_buy} Star Drops now."
 
         elif item_id == "mega_box" or item_id == "mega_box_10":
             amount_to_buy = 10 if item_id == "mega_box_10" else 1
@@ -1190,24 +1191,22 @@ class Shop(commands.Cog):
             inventory_ref = u_mega_boxes(user_id)
             current_count = inventory_ref.get() or 0
             inventory_ref.set(current_count + amount_to_buy)
-            effect_msg = (
-                f"You have {current_count + amount_to_buy} to open with /megabox."
-            )
+            effect_msg = f"You have {current_count + amount_to_buy} Mega Boxes now."
 
         elif item_id == "message_pin":
             await item_data["effect"](user_id)
             pin_ref = u_pin_message(user_id)
             pin_data = pin_ref.get() or {"count": 0}
             pin_count = pin_data.get("count", 0)
-            effect_msg = f"You have {pin_count} to use with /pin."
+            effect_msg = f"You have {pin_count} Message Pins now."
 
         else:
             keep(user_id, item_id)
             use_now = UseNow(user_id, item_id)
             effect_msg = (
-                f"{note(self.bot, item_id)}. Start it with /use."
+                f"{note(self.bot, item_id)}."
                 if item_id == "freeze_thermometer"
-                else "Start it now or later with /use."
+                else "Kept in your Inventory."
             )
 
         await self.economy.effect_manager.set_user_cooldown(user_id, item_id)
@@ -1229,7 +1228,7 @@ class Shop(commands.Cog):
                 "Purchase complete",
                 tone="good",
             ),
-            view=use_now,
+            view=guide(*bought(item_id), view=use_now),
         )
         await report(interaction, order)
 
