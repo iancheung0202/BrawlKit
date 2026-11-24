@@ -138,13 +138,23 @@ def test_review_shows_how_many_topics_the_member_had_approved(cafe, monkeypatch)
     for age in (3600, 3 * 86400, 20 * 86400, 90 * 86400):
         cafe.ref(topic.APPROVED).child(key(age)).set({"user": MEMBER, "text": "x"})
     cafe.ref(topic.APPROVED).child(key(60)).set({"user": STAFF, "text": "x"})
+    for age in (60, 2 * 86400):
+        cafe.ref(topic.REJECTED).child(key(age)).set({"user": MEMBER})
     embed = send_in(cafe).guild.get_channel.return_value.send.call_args.kwargs["embed"]
-    assert "4 approved topics all-time" in embed.description
+    yes, no = topic.YES, topic.NO
     assert [(field.name, field.value) for field in embed.fields] == [
-        ("Last 30 days", "`3` approved"),
-        ("Last 7 days", "`2` approved"),
-        ("Last 24 hours", "`1` approved"),
+        ("Last 7 days", f"{yes} `2` / {no} `2`"),
+        ("Last 24 hours", f"{yes} `1` / {no} `1`"),
+        ("All-time", f"{yes} `4` / {no} `2`"),
     ]
+    review(cafe, False)
+    assert len(topic.settled(topic.REJECTED, MEMBER)) == 3
+
+    async def buttons():
+        return [button.label for button in topic.ReviewView().children]
+
+    labels = asyncio.run(buttons())
+    assert labels == ["Approve", "Turn down", "Edit"]
 
 
 def test_one_suggestion_an_hour_whatever_staff_decided(cafe, monkeypatch):
@@ -171,7 +181,10 @@ def test_review_lists_the_topics_devin_finds_similar(cafe, monkeypatch):
     message.embeds, message.edit = [embed], AsyncMock()
     asyncio.run(topic.check(message, "Best map?"))
     shown = message.edit.call_args.kwargs["embed"].fields[-1].value
-    assert shown == "1. What's your favorite map to play on?\n-# Same question"
+    assert (
+        shown
+        == f"1. What's your favorite map to play on?\n-# {topic.REPLY_EMOTE} Same question"
+    )
     asked = topic.topicmatch.similar.call_args.args[1]
     assert asked[: len(topic.ICEBREAKERS)] == topic.ICEBREAKERS
     down = AsyncMock(side_effect=topic.topicmatch.Unavailable("down"))

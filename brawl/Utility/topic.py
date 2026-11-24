@@ -11,7 +11,12 @@ from firebase_admin import db
 from brawl.Currency import wallet
 from brawl.Currency.config import TOPIC_BEANS
 from brawl.Currency.guide import guide
-from brawl.Currency.helper import BEAN_EMOTE, MAIN_GUILD_ID, TOPIC_REVIEW
+from brawl.Currency.helper import (
+    BEAN_EMOTE,
+    MAIN_GUILD_ID,
+    REPLY_EMOTE,
+    TOPIC_REVIEW,
+)
 from brawl.Currency.panel import notice
 from brawl.Currency.rewardcard import draw_topic
 from brawl.Utility import topicmatch
@@ -19,6 +24,7 @@ from brawl.Utility.style import BLUE, GOLD, GREEN, NO, RED, YES
 
 PENDING = "/Cafe Topics/Pending"
 APPROVED = "/Cafe Topics/Approved"
+REJECTED = "/Cafe Topics/Rejected"
 SENT = "/Cafe Topics/Sent"
 COOLDOWN = 3600
 SIMILAR = "Similar topics"
@@ -153,7 +159,7 @@ def draw():
 
 
 PUSH = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
-SPANS = (("Last 30 days", 30), ("Last 7 days", 7), ("Last 24 hours", 1))
+SPANS = (("Last 7 days", 7), ("Last 24 hours", 1), ("All-time", None))
 
 
 def pushed(key: str) -> float:
@@ -164,9 +170,9 @@ def pushed(key: str) -> float:
     return stamp / 1000
 
 
-def approvals(user_id: int) -> list:
-    """When each of this member's approved topics was approved."""
-    topics = db.reference(APPROVED).get() or {}
+def settled(path: str, user_id: int) -> list:
+    """When each of this member's topics kept at path was approved or turned down."""
+    topics = db.reference(path).get() or {}
     return [
         pushed(key) for key, topic in topics.items() if topic.get("user") == user_id
     ]
@@ -174,21 +180,27 @@ def approvals(user_id: int) -> list:
 
 def approved_by(user_id: int) -> int:
     """How many of this member's topics were approved."""
-    return len(approvals(user_id))
+    return len(settled(APPROVED, user_id))
 
 
 def review_embed(member, text: str) -> discord.Embed:
-    """What staff see: the topic, who sent it, and their approved topics so far."""
-    times, now = approvals(member.id), time.time()
+    """What staff see: the topic, who sent it, and how their earlier ones went."""
+    now = time.time()
     embed = discord.Embed(title=text, color=BLUE)
-    embed.description = (
-        f"Topic suggested by {member.mention}\n"
-        f"-# {len(times)} approved topic{'s' * (len(times) != 1)} all-time"
-    )
+    embed.description = f"Topic suggested by {member.mention}"
     embed.set_thumbnail(url=member.display_avatar.url)
+    sides = [(YES, settled(APPROVED, member.id)), (NO, settled(REJECTED, member.id))]
     for span, days in SPANS:
-        count = sum(now - at <= days * 86400 for at in times)
-        embed.add_field(name=span, value=f"`{count}` approved")
+        counts = (
+            sum(days is None or now - at <= days * 86400 for at in times)
+            for _, times in sides
+        )
+        embed.add_field(
+            name=span,
+            value=" / ".join(
+                f"{mark} `{count}`" for (mark, _), count in zip(sides, counts)
+            ),
+        )
     if topicmatch.ready():
         embed.add_field(name=SIMILAR, value="-# Checking", inline=False)
     return embed
@@ -203,7 +215,7 @@ def close_lines(close) -> str:
     if not close:
         return "-# None found"
     return "\n".join(
-        f"{spot}. {topic}" + (f"\n-# {why}" if why else "")
+        f"{spot}. {topic}" + (f"\n-# {REPLY_EMOTE} {why}" if why else "")
         for spot, (topic, why) in enumerate(close, 1)
     )[:1024]
 
@@ -351,6 +363,7 @@ class ReviewView(View):
                 f"paid {BEAN_EMOTE} `{TOPIC_BEANS}`"
             )
         else:
+            db.reference(REJECTED).push().set({"user": topic["user"]})
             embed.description += f"\n{NO} Turned down by {interaction.user.mention}"
         await interaction.response.edit_message(embed=embed, view=None)
         await tell(interaction, topic, approved)
@@ -362,6 +375,12 @@ class ReviewView(View):
         await self.settle(interaction, True)
 
     @discord.ui.button(
+        label="Turn down", style=discord.ButtonStyle.red, custom_id="topic_reject"
+    )
+    async def reject(self, interaction: discord.Interaction, button: Button):
+        await self.settle(interaction, False)
+
+    @discord.ui.button(
         label="Edit", style=discord.ButtonStyle.grey, custom_id="topic_edit"
     )
     async def edit(self, interaction: discord.Interaction, button: Button):
@@ -370,12 +389,6 @@ class ReviewView(View):
             await interaction.response.edit_message(view=None)
             return
         await interaction.response.send_modal(EditModal(topic["text"]))
-
-    @discord.ui.button(
-        label="Turn down", style=discord.ButtonStyle.red, custom_id="topic_reject"
-    )
-    async def reject(self, interaction: discord.Interaction, button: Button):
-        await self.settle(interaction, False)
 
 
 class TopicView(View):
