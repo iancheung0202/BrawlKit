@@ -19,7 +19,7 @@ from discord import app_commands
 from discord.ext import commands
 from firebase_admin import db
 
-from brawl.Currency import ladder
+from brawl.Currency import ladder, ledger
 from brawl.Currency.card import (
     ASSETS,
     GOLD,
@@ -344,6 +344,7 @@ class GoldenBean(commands.Cog):
             self.ref.child("boxes").child(str(user_id)).set(today())
             held = u_mega_boxes(user_id)
             held.set((held.get() or 0) + boxes)
+            ledger.item("mega_box", dropped=boxes)
         if not boxes and stolen:
             return
         try:

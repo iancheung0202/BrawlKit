@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
-from brawl.Currency import wallet
+from brawl.Currency import ledger, wallet
 from brawl.Currency.config import REP_PAID_DAILY, REP_TOKENS
 from brawl.TeamFinder import reputationSystem as reputation
 from brawl.TeamFinder import teamFind
@@ -112,6 +112,7 @@ def test_rep_is_once_a_day_per_host_and_tokens_stop_at_the_cap(cafe):
         asyncio.run(reputation.thank(helper, host))
     assert reputation.rep_of(HELPER) == REP_PAID_DAILY + 1
     assert wallet.balance(HELPER)[1] == REP_TOKENS * REP_PAID_DAILY
+    assert ledger.waiting[ledger.week_key()]["rep"]["uses"] >= 1
 
 
 def test_rep_unlocks_the_reward_role(cafe):

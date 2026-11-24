@@ -4,7 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from brawl.Currency import heat
+from brawl.Currency import heat, ledger
 from brawl.Currency.card import BACKGROUND, item_icon, render
 from brawl.Currency.db import sync_sell_alarm, sync_shop_effects, u_bag, u_shop_effects
 from brawl.Currency.guide import guide
@@ -55,6 +55,7 @@ async def start(bot, user_id, guild_id, item):
     """Takes the item out of the bag and starts its timer."""
     await STORE_ITEMS[item]["effect"](user_id)
     u_bag(user_id, item).delete()
+    ledger.item(item, used=1)
     economy = bot.get_cog("CurrencySystem")
     if item == "sell_alarm":
         brew = await economy.get_active_brew(user_id)

@@ -1,7 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock
 
-from brawl.Currency import bag, gacha
+from brawl.Currency import bag, gacha, ledger
 from brawl.Currency.db import u_balance, u_shop_cooldowns, u_shop_effects
 from brawl.Currency.helper import MAIN_GUILD_ID
 from tests.conftest import text
@@ -16,6 +16,11 @@ def buy(cafe, item):
     return interaction.edit_original_response.call_args.kwargs
 
 
+def counted(item):
+    row = ledger.items[ledger.week_key()][item]
+    return [row[column] for column in ledger.COLUMNS]
+
+
 def press(cafe, callback):
     interaction = cafe.interaction(USER)
     asyncio.run(callback(interaction))
@@ -23,7 +28,9 @@ def press(cafe, callback):
 
 
 def test_a_bought_timed_item_waits_in_the_bag(cafe):
+    ledger.items.clear()
     reply = buy(cafe, "chat_boost")
+    assert counted("chat_boost") == [1, 0, 0]
     assert bag.held(USER) == ["chat_boost"]
     assert not u_shop_effects(USER, "chat_boost").get()
     assert u_shop_cooldowns(USER, "chat_boost").get()
@@ -40,15 +47,19 @@ def test_an_item_already_held_cannot_be_bought_again(cafe):
 
 def test_an_instant_item_still_acts_when_bought(cafe):
     cafe.cogs["CurrencySystem"].thermometer_heat = 10
+    ledger.items.clear()
     reply = buy(cafe, "thermometer_boost")
+    assert counted("thermometer_boost") == [1, 0, 1]
     assert reply["view"].children[1].label == "Use /thermometer to view the heat"
     assert bag.held(USER) == []
     assert cafe.cogs["CurrencySystem"].thermometer_heat == 40
 
 
 def test_use_now_starts_the_item_once(cafe):
+    ledger.items.clear()
     view = buy(cafe, "chat_boost")["view"]
     first = press(cafe, lambda i: view.use_now.callback(i))
+    assert counted("chat_boost") == [1, 0, 1]
     assert first.response.edit_message.call_args.kwargs["attachments"][0].filename == (
         "started.png"
     )
@@ -93,6 +104,7 @@ def test_an_empty_bag_says_where_items_come_from(cafe):
 def test_a_dropped_item_goes_to_the_bag_and_is_not_dropped_twice(cafe, monkeypatch):
     monkeypatch.setattr(gacha, "pay", AsyncMock(return_value={"kind": "tokens"}))
     got = set()
+    ledger.items.clear()
     for _ in bag.TIMED:
         reward = asyncio.run(gacha.give_effect(USER, MAIN_GUILD_ID))
         assert reward["note"] == "Start it with /use"
@@ -101,3 +113,4 @@ def test_a_dropped_item_goes_to_the_bag_and_is_not_dropped_twice(cafe, monkeypat
     assert not u_shop_effects(USER).get()
     spare = asyncio.run(gacha.give_effect(USER, MAIN_GUILD_ID))
     assert spare["note"] == "in place of an effect item"
+    assert all(counted(item) == [0, 1, 0] for item in bag.TIMED)

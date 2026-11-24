@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from brawl.Currency import heat, wallet
+from brawl.Currency import heat, ledger, wallet
 from brawl.Currency.boss import plan, start_inspection
 from brawl.Currency.card import BACKGROUND, render, roster
 from brawl.Currency.chat import ChatRewardSystem
@@ -650,12 +650,14 @@ class CurrencySystem(commands.Cog):
             current = ref.get() or 0
             new_amount = current + amount
             ref.set(new_amount)
+            ledger.item("star_drop", dropped=amount)
             currency = "Star Drops"
         elif currency == "MegaBoxes":
             ref = u_mega_boxes(user.id)
             current = ref.get() or 0
             new_amount = current + amount
             ref.set(new_amount)
+            ledger.item("mega_box", dropped=amount)
             currency = "Mega Boxes"
         else:
             new_amount = await self.add_beans(user.id, amount, reason="staff")

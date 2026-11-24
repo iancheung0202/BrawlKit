@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import Modal, TextInput
 
+from brawl.Currency import events
 from brawl.Currency.card import BACKGROUND, faces, plain, render, roster
 from brawl.Currency.config import (
     TABLE_SEATS,
@@ -34,6 +35,7 @@ from brawl.Currency.helper import (
     YES_EMOTE,
 )
 from brawl.Currency.ladder import locked
+from brawl.Currency.ledger import until_next_week, week_key, week_start
 from brawl.Currency.panel import framed, notice
 from brawl.Currency.tablecard import draw_table, draw_table_reward
 
@@ -70,11 +72,13 @@ async def table_card(table, interaction, tag="TABLE", name="table"):
     return await render(draw_table, card, name=name)
 
 
-def week_start(now=None):
-    """The Sunday 00:00 UTC that began the current table week."""
-    now = now or datetime.now(timezone.utc)
-    day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return day - timedelta(days=(now.weekday() + 1) % 7)
+# The top table is paid this long before the week ends, so the pay counts in that week.
+EARLY = timedelta(minutes=1)
+
+
+def payday(now=None):
+    """The Saturday 23:59 UTC that last passed, when the top table was due its pay."""
+    return week_start((now or datetime.now(timezone.utc)) + EARLY) - EARLY
 
 
 class TableConfigModal(Modal, title="Configure Table"):
@@ -256,7 +260,7 @@ class TableSystem(commands.GroupCog, name="table"):
         return None
 
     def reset_due(self):
-        """True once a Sunday 00:00 UTC has passed since the last weekly reset."""
+        """True once a Saturday 23:59 UTC has passed since the last weekly reset."""
         last = g_table_reset(MAIN_GUILD_ID).get()
         if last is None:
             tables = self._get_table_ref(MAIN_GUILD_ID).get() or {}
@@ -264,7 +268,7 @@ class TableSystem(commands.GroupCog, name="table"):
                 ((t.get("quest") or {}).get("start_time", 0) for t in tables.values()),
                 default=0,
             )
-        return last < week_start().timestamp()
+        return last < payday().timestamp()
 
     async def weekly_bean_reset(self):
         await self.bot.wait_until_ready()
@@ -272,13 +276,19 @@ class TableSystem(commands.GroupCog, name="table"):
             try:
                 if self.reset_due():
                     g_table_reset(MAIN_GUILD_ID).set(time.time())
-                    await self.reset_week()
+                    await self.end_week()
             except Exception as error:
                 print(f"Weekly table reset failed: {error}")
-            await asyncio.sleep(300)
+            await asyncio.sleep(min(300, until_next_week(EARLY) + 1))
+
+    async def end_week(self):
+        """Pays and resets, and lets the week's report go out if everyone was paid."""
+        if await self.reset_week():
+            await events.emit("top_table_paid", 0, week=week_key(payday()))
 
     async def reset_week(self):
-        """Pays the top table, then starts every table's week again."""
+        """Pays the top table, then starts every table's week again. True if all were paid."""
+        owed, paid = [], []
         all_tables = self._get_table_ref(MAIN_GUILD_ID).get() or {}
 
         formalized_tables = {
@@ -299,6 +309,7 @@ class TableSystem(commands.GroupCog, name="table"):
             top_table_beans = top_table_data.get("weekly_beans", 0)
 
             if top_table_members and top_table_beans > 0:
+                owed = top_table_members
                 currency_cog = self.bot.get_cog("CurrencySystem")
 
                 if currency_cog:
@@ -312,6 +323,7 @@ class TableSystem(commands.GroupCog, name="table"):
                             boxes = add_stamps(
                                 member_id, TABLE_WINNER_STAMPS, source="table_winner"
                             )
+                            paid.append(member_id)
 
                             if await self.should_send_dm(member_id):
                                 user = self.bot.get_user(member_id)
@@ -384,6 +396,7 @@ class TableSystem(commands.GroupCog, name="table"):
                     color=discord.Color.green(),
                 )
             )
+        return len(paid) == len(owed)
 
     async def update_table_formalization(self, guild_id, table_name):
         table_ref = self._get_table_ref(guild_id, table_name)

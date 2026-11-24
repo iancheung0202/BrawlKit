@@ -1048,7 +1048,7 @@ def social_page():
     quest = TABLE_QUEST_TYPES["bean_collector"]
     card = page("COMMUNITY", "TABLES AND INVITES", 704)
     section(card, 124, 262, "TABLES")
-    card.note(124, "New week on Sunday, 00:00 UTC", 858)
+    card.note(124, "New week on Saturday, 23:59 UTC", 858)
     card.text(46, 170, "Table earns", 15, MUTED, "la", 2)
     card.text(46, 228, "Each gets", 15, MUTED, "la", 2)
     left, width = 150, 660

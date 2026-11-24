@@ -5,7 +5,7 @@ from discord.ext import commands
 from discord.ui import Modal, TextInput, View
 from firebase_admin import db
 
-from brawl.Currency import wallet
+from brawl.Currency import ledger, wallet
 from brawl.Currency.config import REP_PAID_DAILY, REP_TOKENS
 from brawl.Currency.helper import MAIN_GUILD_ID, TOKEN_EMOTE
 from brawl.Utility.style import NO
@@ -91,6 +91,8 @@ async def thank(member: discord.Member, host_id: int):
     roles = await add_rep(member, 1)
     if tokens:
         await wallet.change(member.id, tokens=tokens, reason="rep")
+    else:
+        ledger.note("rep", member.id)
     return tokens, roles
 
 

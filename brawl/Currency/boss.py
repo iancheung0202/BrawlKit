@@ -153,6 +153,7 @@ class BossInspectionView(View):
             ref, line, how = OUTCOMES[outcome]
             if ref:
                 ref(user.id).set((ref(user.id).get() or 0) + 1)
+                ledger.item(outcome, dropped=1)
             result = {
                 "background": BACKGROUND,
                 "outcome": outcome,

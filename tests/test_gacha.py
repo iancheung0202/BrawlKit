@@ -1,6 +1,6 @@
 import asyncio
 
-from brawl.Currency import gacha
+from brawl.Currency import gacha, ledger
 from brawl.Currency.config import MEGA_BOX_ITEMS, STAR_DROP_RATES
 from brawl.Currency.db import (
     u_balance,
@@ -41,7 +41,9 @@ def test_star_drop_takes_one_and_pays_after_four_upgrades(cafe, monkeypatch):
     monkeypatch.setattr(gacha.random, "random", lambda: 1)
     u_star_drops(USER).set(2)
     u_balance(USER).set({"Beans": 0, "Tokens": 0})
+    ledger.items.clear()
     interaction = open_with(cafe, "stardrop")
+    assert ledger.items[ledger.week_key()]["star_drop"]["used"] == 1
     view = sent(interaction).kwargs["view"]
     assert u_star_drops(USER).get() == 1
     assert u_star_drops_pending(USER).get()["final_rarity"] == "rare"
@@ -63,12 +65,14 @@ def test_star_drop_takes_one_and_pays_after_four_upgrades(cafe, monkeypatch):
 
 
 def test_mega_box_takes_one_and_opens_every_item(cafe, monkeypatch):
+    ledger.items.clear()
     monkeypatch.setattr(gacha, "roll_items", lambda: 5)
     u_mega_boxes(USER).set(1)
     u_balance(USER).set({"Beans": 0, "Tokens": 0})
     interaction = open_with(cafe, "megabox")
     view = sent(interaction).kwargs["view"]
     assert u_mega_boxes(USER).get() == 0
+    assert ledger.items[ledger.week_key()]["mega_box"]["used"] == 1
     assert u_mega_boxes_pending(USER).get()["items_remaining"] == 4
     press = cafe.interaction(USER)
     press.user.id = USER

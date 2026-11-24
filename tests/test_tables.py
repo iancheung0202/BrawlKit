@@ -154,9 +154,10 @@ def test_members_the_bot_has_not_loaded_are_asked_for():
 def test_a_missed_sunday_still_resets_the_week(cafe):
     import asyncio
     import time
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import AsyncMock, call, patch
 
-    from brawl.Currency import tables
+    from brawl.Currency import events, ledger, tables
     from brawl.Currency.db import g_table_reset, g_tables
     from brawl.Currency.helper import MAIN_GUILD_ID
 
@@ -164,6 +165,9 @@ def test_a_missed_sunday_still_resets_the_week(cafe):
     assert tables.week_start(wednesday) == datetime(2026, 11, 22, tzinfo=timezone.utc)
     sunday = datetime(2026, 11, 22, 0, 0, tzinfo=timezone.utc)
     assert tables.week_start(sunday) == sunday
+    minute = timedelta(minutes=1)
+    assert tables.payday(sunday - minute) == tables.payday(wednesday) == sunday - minute
+    assert tables.payday(sunday - 2 * minute) == sunday - timedelta(days=7) - minute
 
     cog = cafe.cogs["TableSystem"]
     cog.bot.get_channel = lambda _: None
@@ -181,7 +185,12 @@ def test_a_missed_sunday_still_resets_the_week(cafe):
     )
     assert cog.reset_due()
     g_table_reset(MAIN_GUILD_ID).set(time.time())
-    asyncio.run(cog.reset_week())
+    ledger.waiting.clear()
+    with patch.object(events, "emit", AsyncMock(wraps=events.emit)) as emit:
+        asyncio.run(cog.end_week())
+    paid = ledger.week_key(tables.payday())
+    assert emit.await_args_list[-1] == call("top_table_paid", 0, week=paid)
+    assert ledger.waiting[ledger.week_key()]["table_winner"]["stamps"] == 1
     table = g_tables(MAIN_GUILD_ID, "owls").get()
     assert table["weekly_beans"] == 0 and table["quest"]["current_tier"] == 0
     from brawl.Currency import stampcard
@@ -189,3 +198,24 @@ def test_a_missed_sunday_still_resets_the_week(cafe):
     assert u_balance(7).get()["Tokens"] == TABLE_WINNER_TOKENS
     assert stampcard.stamps(7) == TABLE_WINNER_STAMPS
     assert not cog.reset_due()
+
+
+def test_a_failed_payout_holds_the_report_back(cafe):
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from brawl.Currency import events
+    from brawl.Currency.db import g_tables
+    from brawl.Currency.helper import MAIN_GUILD_ID
+
+    cog = cafe.cogs["TableSystem"]
+    cog.bot.get_channel = lambda _: None
+    g_tables(MAIN_GUILD_ID, "owls").set(
+        {"name": "Owls", "formalized": True, "members": [7], "weekly_beans": 900}
+    )
+    broken = AsyncMock(side_effect=RuntimeError("down"))
+    with patch.object(cafe.cogs["CurrencySystem"], "add_tokens", broken):
+        with patch.object(events, "emit", AsyncMock()) as emit:
+            asyncio.run(cog.end_week())
+    emit.assert_not_awaited()
+    assert g_tables(MAIN_GUILD_ID, "owls").get()["weekly_beans"] == 0

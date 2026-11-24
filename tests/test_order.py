@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from brawl.Currency import balancecard, quests, rewardcard, stampcard
+from brawl.Currency import balancecard, ledger, quests, rewardcard, stampcard
 from brawl.Currency.config import (
     ORDER_CHAT_BEANS,
     ORDER_TASK_LEVELS,
@@ -349,7 +349,9 @@ def test_every_fifth_stamp_pays_mega_boxes_up_to_the_top_goal(cafe):
     assert stampcard.boxes(44, 45) == STAMP_BOXES
     assert stampcard.boxes(45, 50) == 0
     u_stamp_card(USER).set({"count": 4})
+    ledger.items.clear()
     assert stampcard.add(USER) == STAMP_BOXES
+    assert ledger.items[ledger.week_key()]["mega_box"]["dropped"] == STAMP_BOXES
     assert stampcard.add(USER) == 0
     assert stampcard.stamps(USER) == 6
     assert u_mega_boxes(USER).get() == STAMP_BOXES

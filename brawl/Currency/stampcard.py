@@ -67,6 +67,7 @@ def add(user_id, amount=1, day=None, source="other"):
     paid = boxes(have, have + amount)
     if paid:
         u_mega_boxes(user_id).set((u_mega_boxes(user_id).get() or 0) + paid)
+        ledger.item("mega_box", dropped=paid)
     return paid
 
 

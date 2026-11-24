@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from brawl.Currency import ledger
 from brawl.Currency.db import g_shops, u_balance
 from brawl.Currency.helper import MAIN_GUILD_ID
 from brawl.Currency.shop import PurchaseRequest
@@ -22,7 +23,9 @@ def buy(cafe, item, rows, beans=5000, tokens=10):
 
 
 def test_buy_takes_beans_and_one_stock(cafe):
+    ledger.items.clear()
     reply = buy(cafe, "nitro", [["Nitro", "A month", 3000, "Beans", True, 2]])
+    assert ledger.items[ledger.week_key()]["Nitro"]["bought"] == 1
     assert reply["attachments"][0].filename == "purchase.png"
     assert "ticket" in text(reply)
     assert u_balance(USER).get() == {"Beans": 2000, "Tokens": 10}

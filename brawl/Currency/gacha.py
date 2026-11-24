@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 from firebase_admin import db
 
-from brawl.Currency import wallet
+from brawl.Currency import ledger, wallet
 from brawl.Currency.bag import TIMED, held, keep, running
 from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import (
@@ -114,6 +114,7 @@ async def give_effect(user_id, guild_id, skip=()):
         return {**reward, "note": "in place of an effect item"}
     item = random.choice(free)
     keep(user_id, item)
+    ledger.item(item, dropped=1)
     return {
         "kind": "effect",
         "item": item,
@@ -302,6 +303,7 @@ class StarDropView(OpenView):
             }
         )
         self.unopened = held - 1
+        ledger.item("star_drop", used=1)
         self.load(pending)
         await self.show(interaction)
 
@@ -397,6 +399,7 @@ class MegaBoxView(OpenView):
             self.unopened = max(held, 0)
             return await self.show(interaction)
         u_mega_boxes(self.user.id).set(held - 1)
+        ledger.item("mega_box", used=1)
         self.unopened = held - 1
         self.load(new_box(roll_items()))
         await self.reveal(interaction.guild.id)
@@ -467,6 +470,7 @@ class Gacha(commands.Cog):
                 rarity = random.choice(RARITIES[-3:])
             pending = new_drop(rarity)
             held -= 1
+            ledger.item("star_drop", used=1)
             db.reference().update(
                 {
                     u_star_drops_pending(user.id).path: pending,
@@ -494,6 +498,7 @@ class Gacha(commands.Cog):
         items = random.randint(7, 10) if user.id == OWNER else roll_items()
         held -= 1
         u_mega_boxes(user.id).set(held)
+        ledger.item("mega_box", used=1)
         view = MegaBoxView(user, held, new_box(items))
         await view.reveal(interaction.guild.id)
         view.refresh()

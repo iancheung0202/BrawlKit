@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from brawl.Currency import wallet
+from brawl.Currency import ledger, wallet
 from brawl.Currency.bag import UseNow, held, keep, note
 from brawl.Currency.balancecard import draw_header
 from brawl.Currency.card import BACKGROUND
@@ -64,6 +64,9 @@ LOADING = "<a:loading_circle:1393439258886537352>"
 # The shop's sign on its header: color, scene and icon.
 SIGN = ((255, 140, 40), BACKGROUND, "kit/icon_shop")
 EMOTES = {}
+
+# Items that do their work the moment they are bought.
+INSTANT = ("reset_chat_cap", "thermometer_boost", "instant_brew")
 
 
 class ShopSelect(discord.ui.Select):
@@ -719,6 +722,7 @@ class Shop(commands.Cog):
 
             data["count"] = pin_count - 1
             ref.set(data)
+            ledger.item("message_pin", used=1)
 
             embed = discord.Embed(
                 title="📌 Message Pinned!",
@@ -960,6 +964,9 @@ class Shop(commands.Cog):
                         embed=notice(f"{NO_EMOTE} Error assigning role: {e}", "bad"),
                     )
 
+        ledger.item(
+            role.name if name.isdigit() and role else plain(display_name), bought=1
+        )
         sale = {
             "background": BACKGROUND,
             "icon": reward_icon(name, SUPERCELL in name),
@@ -1210,6 +1217,11 @@ class Shop(commands.Cog):
             )
 
         await self.economy.effect_manager.set_user_cooldown(user_id, item_id)
+        ledger.item(
+            item_id.removesuffix("_10"),
+            bought=10 if item_id.endswith("_10") else 1,
+            used=item_id in INSTANT,
+        )
 
         sale = {
             "background": BACKGROUND,
