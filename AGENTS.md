@@ -162,7 +162,6 @@ Files ending in `card.py` only draw. They take data and return a picture, and th
 | `TeamFinder/reputationSystem.py` | Rep, rep roles, Tokens for rep |
 | `Milestone/milestone.py` | Account linking and milestone roles |
 | `Partnership/partnershipSystem.py` | Partner servers, panels and threads |
-| `scripts/` | One-off maintenance scripts, run by hand |
 
 ### Where data lives
 

@@ -36,6 +36,16 @@ SOURCES = {
     "other": "Untagged",
 }
 AMOUNTS = ("beans", "tokens", "stamps", "beans_spent", "tokens_spent")
+WIDTHS = (10, 8, 8, 11, 11)
+SORTS = {
+    "Most members": "members",
+    "Most uses": "uses",
+    "Most Beans paid": "beans",
+    "Most Tokens paid": "tokens",
+    "Most Stamps paid": "stamps",
+    "Most Beans taken": "beans_spent",
+    "Most Tokens taken": "tokens_spent",
+}
 SAVE_SECONDS = 300
 
 waiting = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
@@ -83,44 +93,105 @@ def save():
         ref.set(saved)
 
 
-def report(week):
-    """The saved week as lines of text, busiest system first."""
-    saved = g_ledger(MAIN_GUILD_ID).child(week).get() or {}
-    if not saved:
-        return f"Week of {week}: nothing counted."
+def line(name, members, row):
+    return f"{name:<26}{members:>8,}{row.get('uses', 0):>8,}" + "".join(
+        f"{row.get(name, 0):>{width},}" for name, width in zip(AMOUNTS, WIDTHS)
+    )
+
+
+def grid(saved, sort="members"):
+    """The week as lines of fixed-width text, ending with the whole cafe."""
+    people = {source: len(row.get("members", {})) for source, row in saved.items()}
+    order = sorted(
+        saved,
+        key=lambda source: -{**saved[source], "members": people[source]}.get(sort, 0),
+    )
     everyone = {user for row in saved.values() for user in row.get("members", {})}
-    lines = [
-        f"Week of {week}: {len(everyone)} members used the cafe.",
-        "",
+    whole = {
+        name: sum(row.get(name, 0) for row in saved.values())
+        for name in ("uses", *AMOUNTS)
+    }
+    head = (
         f"{'System':<26}{'Members':>8}{'Uses':>8}{'Beans':>10}{'Tokens':>8}"
-        f"{'Stamps':>8}{'Beans out':>11}{'Tokens out':>11}",
+        f"{'Stamps':>8}{'Beans out':>11}{'Tokens out':>11}"
+    )
+    return [
+        head,
+        *(
+            line(SOURCES.get(source, source), people[source], saved[source])
+            for source in order
+        ),
+        "-" * len(head),
+        line("Whole cafe", len(everyone), whole),
     ]
-    order = sorted(saved, key=lambda source: -len(saved[source].get("members", {})))
-    for source in order:
-        row = saved[source]
-        lines.append(
-            f"{SOURCES.get(source, source):<26}{len(row.get('members', {})):>8}"
-            f"{row.get('uses', 0):>8}"
-            + "".join(
-                f"{row.get(name, 0):>{width},}"
-                for name, width in zip(AMOUNTS, (10, 8, 8, 11, 11))
-            )
+
+
+class Sort(discord.ui.Select):
+    def __init__(self, chosen):
+        super().__init__(
+            options=[
+                discord.SelectOption(label=label, default=label == chosen)
+                for label in SORTS
+            ]
         )
-    unused = [name for source, name in SOURCES.items() if source not in saved]
-    if unused:
-        lines += ["", "Not used: " + ", ".join(unused)]
-    return "\n".join(lines)
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.sort = self.values[0]
+        await self.view.turn(interaction)
 
 
-def pages(text, size=1900):
-    page = ""
-    for line in text.split("\n"):
-        if len(page) + len(line) + 1 > size:
-            yield page
-            page = ""
-        page += line + "\n"
-    if page:
-        yield page
+class EconomyView(discord.ui.LayoutView):
+    """One week of the ledger as a table, with a sort menu and week buttons."""
+
+    def __init__(self, weeks_ago=0, turns=True):
+        super().__init__(timeout=600)
+        self.weeks_ago, self.turns, self.sort = weeks_ago, turns, next(iter(SORTS))
+        self.lay_out()
+
+    async def turn(self, interaction):
+        save()
+        self.lay_out()
+        await interaction.response.edit_message(view=self)
+
+    def turner(self, label, weeks_ago):
+        button = discord.ui.Button(
+            label=label, style=discord.ButtonStyle.grey, disabled=weeks_ago < 0
+        )
+
+        async def go(interaction: discord.Interaction):
+            self.weeks_ago = weeks_ago
+            await self.turn(interaction)
+
+        button.callback = go
+        return button
+
+    def lay_out(self):
+        self.clear_items()
+        week = week_key(datetime.now(timezone.utc) - timedelta(weeks=self.weeks_ago))
+        saved = g_ledger(MAIN_GUILD_ID).child(week).get() or {}
+        day = datetime.strptime(week, "%Y-%m-%d")
+        ui = discord.ui
+        box = ui.Container(
+            ui.TextDisplay(f"## Cafe economy\n-# Week of {day:%B} {day.day}")
+        )
+        if saved:
+            table = "\n".join(grid(saved, SORTS[self.sort]))
+            box.add_item(ui.TextDisplay(f"```\n{table}```"))
+        else:
+            box.add_item(ui.TextDisplay("Nothing was counted this week."))
+        unused = [name for source, name in SOURCES.items() if source not in saved]
+        if unused and saved:
+            box.add_item(ui.TextDisplay("-# Not used: " + ", ".join(unused)))
+        if self.turns:
+            box.add_item(ui.Separator())
+            box.add_item(ui.ActionRow(Sort(self.sort)))
+            box.add_item(
+                ui.ActionRow(
+                    self.turner("Earlier week", self.weeks_ago + 1),
+                    self.turner("Later week", self.weeks_ago - 1),
+                )
+            )
+        self.add_item(box)
 
 
 class Ledger(commands.Cog):
@@ -131,6 +202,7 @@ class Ledger(commands.Cog):
 
     def cog_unload(self):
         self.task.cancel()
+        save()
 
     async def owner(self):
         app = await self.bot.application_info()
@@ -155,8 +227,7 @@ class Ledger(commands.Cog):
             return
         sent.set(last)
         owner = await self.owner()
-        for page in pages(report(last)):
-            await owner.send(f"```\n{page}```")
+        await owner.send(view=EconomyView(1, turns=False))
 
     @app_commands.command(
         name="economy", description="What each cafe system paid this week (Admin only)"
@@ -169,11 +240,9 @@ class Ledger(commands.Cog):
                 "Admins only.", ephemeral=True
             )
         save()
-        week = week_key(datetime.now(timezone.utc) - timedelta(days=7 * weeks_ago))
-        texts = list(pages(report(week)))
-        await interaction.response.send_message(f"```\n{texts[0]}```", ephemeral=True)
-        for text in texts[1:]:
-            await interaction.followup.send(f"```\n{text}```", ephemeral=True)
+        await interaction.response.send_message(
+            view=EconomyView(max(weeks_ago, 0)), ephemeral=True
+        )
 
 
 async def setup(bot):

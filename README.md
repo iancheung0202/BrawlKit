@@ -97,7 +97,6 @@ brawl/TeamFinder/    team finder and reputation
 brawl/Milestone/     milestone roles from linked accounts
 brawl/Partnership/   partner servers
 assets/              pictures and the font the cards are drawn with
-scripts/             one-off maintenance scripts
 tests/               pytest suite, run against an in-memory database
 ```
 

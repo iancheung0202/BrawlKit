@@ -62,17 +62,66 @@ def test_saves_add_up_and_an_unknown_source_is_untagged():
     assert saved["other"]["beans"] == 1
 
 
-def test_the_report_lists_used_and_unused_systems():
-    assert "nothing counted" in ledger.report(ledger.week_key())
+def texts(view):
+    return [part.content for part in view.walk_children() if hasattr(part, "content")]
+
+
+def build(*args, **kwargs):
+    async def make():
+        return ledger.EconomyView(*args, **kwargs)
+
+    return asyncio.run(make())
+
+
+def test_the_grid_is_aligned_sorted_and_totalled():
     asyncio.run(wallet.change(USER, beans=1200, reason="chat"))
+    asyncio.run(wallet.change(OTHER, beans=5, reason="chat"))
     asyncio.run(wallet.change(OTHER, tokens=3, reason="brew"))
-    asyncio.run(wallet.change(OTHER, tokens=1, reason="brew"))
+    asyncio.run(wallet.change(OTHER, beans=-40, reason="brew"))
+    stampcard.add(USER, source="order")
     ledger.save()
-    text = ledger.report(ledger.week_key())
-    assert "2 members used the cafe" in text
-    assert text.index("Chat") < text.index("Not used")
-    assert "1,200" in text and "Clock in" in text.split("Not used: ")[1]
-    assert all(len(page) <= 1900 for page in ledger.pages(text * 5))
+    lines = ledger.grid(week())
+    assert len({len(line) for line in lines}) == 1
+    assert [line.split("  ")[0] for line in lines[1:4]] == [
+        "Chat",
+        "Brewing",
+        "Today's Order",
+    ]
+    assert lines[-1].split() == [
+        "Whole",
+        "cafe",
+        "2",
+        "5",
+        "1,205",
+        "3",
+        "1",
+        "40",
+        "0",
+    ]
+    assert ledger.grid(week(), "tokens")[1].startswith("Brewing")
+
+
+def test_the_economy_view_shows_the_table_and_fits_discord():
+    assert "Nothing was counted" in " ".join(texts(build()))
+    for source in ledger.SOURCES:
+        asyncio.run(wallet.change(USER, beans=1234567, tokens=12345, reason=source))
+        asyncio.run(wallet.change(USER, beans=-1234567, tokens=-12345, reason=source))
+    ledger.save()
+    view, quiet = build(), build(turns=False)
+    parts = list(view.walk_children())
+    assert len(parts) <= 40 and sum(map(len, texts(view))) <= 4000
+    assert any(text.startswith("```\nSystem") for text in texts(view))
+    labels = {part.label: part.disabled for part in parts if hasattr(part, "label")}
+    assert labels == {"Earlier week": False, "Later week": True}
+    assert not any(part.is_dispatchable() for part in quiet.walk_children())
+    assert "Not used" not in " ".join(texts(view))
+    assert "Nothing was counted" in " ".join(texts(build(1)))
+
+
+def test_the_ledger_saves_when_it_is_unloaded():
+    asyncio.run(wallet.change(USER, beans=5, reason="chat"))
+    ledger.Ledger.cog_unload(MagicMock())
+    assert week()["chat"]["beans"] == 5
 
 
 def test_every_tagged_reason_is_a_known_source():
@@ -99,3 +148,21 @@ def test_a_finished_week_is_sent_to_the_owner_once(monkeypatch):
     asyncio.run(cog.send_last_week())
     asyncio.run(cog.send_last_week())
     assert owner.send.await_count == 1
+
+
+def test_our_files_start_from_the_copy_other_files_import(monkeypatch):
+    import firebase_admin
+
+    monkeypatch.setattr(firebase_admin.credentials, "Certificate", MagicMock())
+    monkeypatch.setattr(firebase_admin, "initialize_app", MagicMock())
+    import brawlkit
+
+    bot = MagicMock(add_cog=AsyncMock())
+
+    async def load():
+        await brawlkit.load(bot, "brawl.Currency.ledger")
+        cog = bot.add_cog.call_args.args[0]
+        cog.task.cancel()
+        return cog
+
+    assert type(asyncio.run(load())) is ledger.Ledger

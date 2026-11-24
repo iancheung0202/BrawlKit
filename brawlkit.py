@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import importlib
 import os
+import signal
 import sys
 import time
 
@@ -39,6 +40,13 @@ default_app = firebase_admin.initialize_app(
 )
 
 
+async def load(bot, extension):
+    """Starts one of our files from the copy every other file imports.
+
+    load_extension runs a second copy, which splits anything kept in memory."""
+    await importlib.import_module(extension).setup(bot)
+
+
 class BrawlProfile(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
@@ -53,6 +61,9 @@ class BrawlProfile(commands.Bot):
         )
 
     async def setup_hook(self):
+        self.loop.add_signal_handler(
+            signal.SIGTERM, lambda: self.loop.create_task(self.close())
+        )
         parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if parent_dir not in sys.path:
             sys.path.insert(0, parent_dir)
@@ -71,7 +82,10 @@ class BrawlProfile(commands.Bot):
                         normalized_path = os.path.normpath(full_path)
                         extension = normalized_path.replace(os.sep, ".")[:-3]
                         extension = extension.lstrip(".")
-                        await self.load_extension(extension)
+                        if directory == "brawl":
+                            await load(self, extension)
+                        else:
+                            await self.load_extension(extension)
                         print(f"Loaded {extension} for {self.user}")
         await brawl.tree.sync()
 
