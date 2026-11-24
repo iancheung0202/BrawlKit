@@ -1,4 +1,4 @@
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import (
     BREW,
     HOME,
@@ -10,7 +10,6 @@ from brawl.Currency.config import (
 )
 from brawl.Currency.db import u_tutorial
 from brawl.Currency.helper import BOT_COMMANDS, SERVER_STORE, STAMP_EMOTE
-from brawl.Currency.home import background
 from brawl.Currency.quests import clocked_in
 from brawl.Currency.rewardcard import draw_shift
 
@@ -53,7 +52,7 @@ def hint(step):
 
 async def shift(step, user_id):
     """The first shift checklist with this step marked as the one to do now."""
-    state = {"step": step - BREW_STEP + 1, "background": background(user_id)}
+    state = {"step": step - BREW_STEP + 1, "background": BACKGROUND}
     return await render(draw_shift, state, name="shift")
 
 

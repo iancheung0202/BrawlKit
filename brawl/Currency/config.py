@@ -156,7 +156,6 @@ SELL = "</sell:1396588612790784071>"
 HOME = "</balance:1393376242501157005>"
 SHOP = "</shop:1393376242501157009>"
 BUY = "</buy:1393376242501157010>"
-CUSTOMIZE = "</customize:1486174479489957908>"
 STARDROP = "</stardrop:1447676573020065996>"
 MEGABOX = "</megabox:1486191980349358224>"
 PIN = "</pin:1427543833792610344>"
@@ -195,8 +194,8 @@ LADDER = {
     ),
     "style": (
         10,
-        "Customize and Pin",
-        f"Pick a home card background with {CUSTOMIZE} and pin messages with {PIN}.",
+        "Message Pin",
+        f"Pin a message in the server with {PIN}.",
     ),
 }
 
@@ -208,7 +207,6 @@ ITEM_STATIONS = {
     "mega_box": "boxes",
     "mega_box_10": "boxes",
     "message_pin": "style",
-    "custom_credit": "style",
 }
 
 DAILY_BEANS = 500
@@ -239,26 +237,6 @@ CHAT_BOOST_MULTIPLIER = 3
 CHAT_ULTRA_MULTIPLIER = 3
 TUTORIAL_BEANS = 500
 TUTORIAL_TOKENS = 3
-
-BACKGROUNDS = {
-    "gym": "Gym",
-    "skulls": "Skulls",
-    "classic": "Classic",
-    "hub": "Starr Park Hub",
-    "new_york": "New York",
-    "tokyo": "Tokyo",
-    "miami": "Miami",
-    "university": "University",
-    "superbrawl": "Superbrawl",
-    "strikers": "Strikers",
-    "cosmo": "Cosmo",
-    "nano": "Nano",
-    "windstock": "Windstock",
-    "valentines": "Valentines",
-    "couple": "Couple",
-    "oddities": "Oddities Shop",
-    "candyland": "Candyland",
-}
 
 
 async def setup(bot):

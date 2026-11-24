@@ -5,11 +5,10 @@ from discord.ui import Button, Select, View
 from firebase_admin import db
 
 from brawl.Currency.boardcard import PER_PAGE, draw_board
-from brawl.Currency.card import faces, render
+from brawl.Currency.card import BACKGROUND, faces, render
 from brawl.Currency.config import TABLE_SEATS
 from brawl.Currency.db import U_ROOT, g_invites_monthly, g_tables, g_user_tables
 from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE, get_current_month_key
-from brawl.Currency.home import background
 from brawl.Currency.panel import notice
 from brawl.Currency.stampcard import count as stamp_count
 from brawl.TeamFinder.reputationSystem import get_totals
@@ -505,7 +504,7 @@ class Leaderboard(commands.Cog):
         view = LeaderboardView(
             interaction,
             {
-                "background": background(interaction.user.id),
+                "background": BACKGROUND,
                 "title": title,
                 "icon": icon,
                 "value_icon": value_icon,

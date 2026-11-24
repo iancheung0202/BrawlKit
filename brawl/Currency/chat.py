@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 
 from brawl.Currency import heat
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import (
     CHAT_BOOST_MULTIPLIER,
     CHAT_BOOSTED_REWARD,
@@ -25,7 +25,6 @@ from brawl.Currency.helper import (
     ULTRA_TIER_ROLE_ID,
     YES_EMOTE,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import unlocked
 from brawl.Currency.quests import get_next_daily_reset, order_card, update_quest
 from brawl.Currency.rewardcard import draw_chat, draw_paid
@@ -189,7 +188,7 @@ class ChatRewardSystem:
                 drop = await render(
                     draw_token_drop,
                     {
-                        "background": background(user_id),
+                        "background": BACKGROUND,
                         "amount": bonus_tokens,
                         "jackpot": jackpot,
                         "drops": heat.drops(user_id)[0],

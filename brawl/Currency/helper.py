@@ -381,13 +381,6 @@ async def apply_message_pin(user_id: int):
     ref.set(data)
 
 
-async def apply_custom_credit(user_id: int):
-    ref = db.reference(f"{U_ROOT}/{user_id}/settings/customization")
-    data = ref.get() or {"credits": 0}
-    data["credits"] = data.get("credits", 0) + 1
-    ref.set(data)
-
-
 async def apply_empty(user_id: int):
     # For items that have instant effects handled elsewhere or custom items like Star Drops and Mega Boxes
     pass
@@ -506,14 +499,6 @@ STORE_ITEMS = {
         "effect": apply_message_pin,
         "cooldown": 172800,  # 2 days
         "duration": 0,  # No expiration (stackable item)
-    },
-    "custom_credit": {
-        "name": "1 Customization Credit",
-        "price": "5000 beans",
-        "description": "Picks a new background for your Home card. Use it with /customize.",
-        "effect": apply_custom_credit,
-        "cooldown": 0,
-        "duration": 0,
     },
     "star_drop": {
         "name": "Star Drop",

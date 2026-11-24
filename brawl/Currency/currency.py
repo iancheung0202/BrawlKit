@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from brawl.Currency import heat, wallet
 from brawl.Currency.boss import plan, start_inspection
-from brawl.Currency.card import render, roster
+from brawl.Currency.card import BACKGROUND, render, roster
 from brawl.Currency.chat import ChatRewardSystem
 from brawl.Currency.config import (
     BOSS_LATE_SECONDS,
@@ -49,7 +49,6 @@ from brawl.Currency.helper import (
     TRAINEE_ROLE_ID,
     get_current_month_key,
 )
-from brawl.Currency.home import background
 from brawl.Currency.panel import DRAWN, notice
 from brawl.Currency.quests import get_next_daily_reset
 from brawl.Currency.rewardcard import draw_ready
@@ -235,7 +234,7 @@ class CurrencySystem(commands.Cog):
 
                                 ready = {
                                     "roast": alarm_data.get("roast_type", "light"),
-                                    "background": background(user_id),
+                                    "background": BACKGROUND,
                                     "next": DRAWN["ready"],
                                 }
 
@@ -577,7 +576,7 @@ class CurrencySystem(commands.Cog):
     async def thermometer(self, interaction: discord.Interaction):
         drops, resets = heat.drops(interaction.user.id)
         cup = {
-            "background": background(interaction.user.id),
+            "background": BACKGROUND,
             "heat": self.thermometer_heat,
             "drops": drops,
             "resets": resets,

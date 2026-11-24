@@ -698,7 +698,7 @@ STATION_ICONS = {
     "games": "kit/coin_pile_03",
     "effects": "kit/icon_box",
     "boxes": "items/mega_box",
-    "style": "items/custom_credit",
+    "style": "items/message_pin",
 }
 
 

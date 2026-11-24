@@ -5,7 +5,7 @@ import discord
 from discord.ui import View
 
 from brawl.Currency import ledger
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import (
     BOSS_GAP_HOURS,
     BOSS_HALF_VISITS,
@@ -24,7 +24,6 @@ from brawl.Currency.helper import (
     BOSS_INSPECTION_ROLE_ID,
     get_current_date_key,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import notice
 from brawl.Currency.quests import report, update_quest
@@ -103,7 +102,7 @@ async def start_inspection(cog, channel, visit=None):
     )
     view.message = await channel.send(
         f"<@&{BOSS_INSPECTION_ROLE_ID}> The boss is here for a surprise inspection.",
-        file=await render(draw_boss, background(None), name="boss"),
+        file=await render(draw_boss, BACKGROUND, name="boss"),
         view=view,
     )
     return view
@@ -154,7 +153,7 @@ class BossInspectionView(View):
             if ref:
                 ref(user.id).set((ref(user.id).get() or 0) + 1)
             result = {
-                "background": background(user.id),
+                "background": BACKGROUND,
                 "outcome": outcome,
                 "line": BOSS_INSPECTION_ACTIONS[key][line],
                 "next": how,
@@ -182,7 +181,7 @@ class BossInspectionView(View):
         self.ended = True
         self.stop()
         results = {
-            "background": background(None),
+            "background": BACKGROUND,
             "people": list(self.participants.values()),
         }
         try:

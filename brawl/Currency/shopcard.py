@@ -1,18 +1,7 @@
 import re
 import time
 
-from brawl.Currency.card import (
-    BLACK,
-    GOLD,
-    GREEN,
-    GREY,
-    MUTED,
-    RED,
-    WHITE,
-    Card,
-    item_icon,
-    plain,
-)
+from brawl.Currency.card import BLACK, GOLD, GREEN, MUTED, Card, item_icon, plain
 from brawl.Currency.config import ITEM_STATIONS, LADDER
 from brawl.Currency.helper import STORE_ITEMS
 
@@ -81,6 +70,10 @@ def words(guild, text):
     return plain(MENTION.sub(named, str(text)))
 
 
+# Server rewards have no art of their own, so they share these.
+REWARD_ICONS = ("kit/icon_shop", "kit/icon_role", "kit/icon_xp", "kit/icon_reward")
+
+
 def reward_icon(title, supercell=False):
     """Server rewards have no art of their own, so they share four icons."""
     if supercell:
@@ -138,80 +131,48 @@ def span(seconds):
 
 
 def status(item, shop):
-    """The tag on a tile, the line beside its price, and whether it can be bought."""
+    """The small line under an item, and whether it can be bought."""
     key = item["item"]
     if item["station"] in shop["locked"]:
-        return (f"LEVEL {LADDER[item['station']][0]}", GREY, WHITE), "", False
+        return f"Unlocks at Level {LADDER[item['station']][0]}", False
     if item["role"] in shop["owned"]:
-        return ("OWNED", GREEN, BLACK), "", False
+        return "You own this", False
     if item["stock"] == 0:
-        return ("SOLD OUT", RED, WHITE), "", False
+        return "Sold out", False
     if key in shop.get("held", ()):
-        return ("IN BAG", GOLD, BLACK), "Start it with /use", False
+        return "In your bag, start it with /use", False
     if key in shop["active"]:
-        ends = f"Ends in {span(shop['active'][key] - time.time())}"
-        return ("ACTIVE", GREEN, BLACK), ends, not shop["waits"].get(key)
+        ends = f"Active, ends in {span(shop['active'][key] - time.time())}"
+        return ends, not shop["waits"].get(key)
     if shop["waits"].get(key):
-        return None, f"Buy again in {span(shop['waits'][key])}", False
+        return f"Buy again in {span(shop['waits'][key])}", False
     if key in shop["today"]:
         left = max(shop["limit"] - shop["today"][key], 0)
-        return None, f"{left} of {shop['limit']} left today", left >= item["count"]
+        return f"{left} of {shop['limit']} left today", left >= item["count"]
     if item["stock"] > 0:
-        return (f"{item['stock']} LEFT", GOLD, BLACK), "", True
-    return None, every(item["cooldown"]) if item["cooldown"] else "", True
+        return f"{item['stock']} left in stock", True
+    return every(item["cooldown"]) if item["cooldown"] else "", True
+
+
+def short(item, shop):
+    """How much more the member needs to pay for an item; 0 when they have enough."""
+    return max(item["cost"] - shop[item["currency"]], 0)
 
 
 def buyable(items, shop):
     """The items the member can pay for and buy right now."""
-    return [
-        item
-        for item in items
-        if status(item, shop)[2] and shop[item["currency"]] >= item["cost"]
-    ]
+    return [item for item in items if status(item, shop)[1] and not short(item, shop)]
 
 
-def draw_shop(shop):
-    """Two columns of tiles: icon, name, what it does, a price button, one note."""
-    items = shop["items"]
-    rows = max(-(-len(items) // 2), 1)
-    card = Card(900, 222 + rows * 132, shop["background"])
-    card.title("SHOP", "Pay with Beans or Tokens. Buy from the menu below.")
-    beans, tokens = f"{shop['beans']:,}", f"{shop['tokens']:,}"
-    left = card.width - 122 - card.measure(beans, 24) - card.measure(tokens, 24)
-    card.pill(card.pill(left - 62, 38, "kit/bean", beans), 38, "kit/token", tokens)
-    card.panel(26, 124, 848, 58 + rows * 132)
-    card.tag(42, 112, shop["show"].upper())
-    card.text(854, 136, f"Page {shop['page']} of {shop['pages']}", 17, GOLD, "ra", 2)
-    if not items:
-        card.text(450, 240, "Nothing matches this filter.", 20, MUTED, "mm", 2)
-    for spot, item in enumerate(items):
-        x, y = 42 + spot % 2 * 412, 174 + spot // 2 * 132
-        tag, words, open_ = status(item, shop)
-        card.slot(x, y, 404, 118)
-        card.icon(item["icon"], x + 14, y + 14, 60)
-        room = 302 - (card.measure(tag[0], 15) + 20 if tag else 0)
-        card.text(
-            x + 88,
-            y + 8,
-            card.fit(item["name"], 21, room),
-            21,
-            WHITE if open_ else MUTED,
-        )
-        for row, line in enumerate(card.wrap(item["description"], 14, 302)):
-            card.text(x + 88, y + 37 + row * 18, line, 14, MUTED, "la", 2)
-        short = shop[item["currency"]] < item["cost"]
-        card.price(
-            x + 88,
-            y + 78,
-            item["currency"],
-            item["cost"],
-            GREEN if open_ and not short else GREY,
-            (255, 150, 150) if short and open_ else WHITE,
-        )
-        card.text(x + 390, y + 86, words, 14, MUTED, "ra", 2)
-        if tag:
-            card.tag(x + 396, y - 9, *tag, right=True)
-    return card.jpg()
+def row(item, shop, emote, reply):
+    """One shop row as Discord text: picture and name, what it does, one small note."""
+    note, open_ = status(item, shop)
+    missing = short(item, shop)
+    if open_ and missing:
+        unit = item["currency"].title()[: -1 if missing == 1 else None]
+        note = f"You need {missing:,} more {unit}"
+    lines = [f"## {emote} {item['name']}", item["description"]]
+    return "\n".join(lines + [f"-# {reply} {note}"] * bool(note))
 
 
 USE = {
@@ -220,7 +181,6 @@ USE = {
     "mega_box": "Open it with /megabox.",
     "mega_box_10": "Open them with /megabox.",
     "message_pin": "Use it with /pin.",
-    "custom_credit": "Use it with /customize.",
 }
 CLAIM = "Open a ticket to claim it."
 ROLE = "The role is on your profile now."

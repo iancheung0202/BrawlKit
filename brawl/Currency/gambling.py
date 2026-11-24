@@ -7,7 +7,7 @@ from discord.ext import commands
 from discord.ui import View
 
 from brawl.Currency import wallet
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.db import u_gambling_limits
 from brawl.Currency.gamecard import DECK, draw_blackjack, draw_coinflip, total
 from brawl.Currency.helper import (
@@ -18,7 +18,6 @@ from brawl.Currency.helper import (
     ULTRA_TIER_ROLE_ID,
     get_current_date_key,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import notice
 
@@ -73,7 +72,7 @@ class Game(View):
 
     def state(self, tone, headline, line):
         return {
-            "background": background(self.user_id),
+            "background": BACKGROUND,
             "bet": self.bet,
             "beans": wallet.balance(self.user_id)[0],
             "tone": tone,

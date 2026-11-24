@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timezone
 
 from brawl.Currency.card import (
+    BACKGROUND,
     GOLD,
     GREEN,
     GREY,
@@ -22,7 +23,6 @@ from brawl.Currency.db import (
     g_referral_milestones,
 )
 from brawl.Currency.helper import get_current_month_key
-from brawl.Currency.home import background
 
 NEW_ACCOUNT_DAYS = 14
 INVITE_HELP = "https://support.discord.com/hc/en-us/articles/208866998-Invites-101"
@@ -53,7 +53,7 @@ def summary(guild_id, user_id):
     key = get_current_month_key()
     counts = g_invites_monthly(guild_id, key, user_id).get() or {}
     return {
-        "background": background(user_id),
+        "background": BACKGROUND,
         "month": month_name(key),
         "valid": counts.get("valid", 0),
         "total": counts.get("total", 0),
@@ -96,7 +96,7 @@ async def invitees(economy, guild, user_id, key, people):
             }
         )
     rows += [None] * (len(people) - len(ids))
-    return {"background": background(user_id), "month": month_name(key), "people": rows}
+    return {"background": BACKGROUND, "month": month_name(key), "people": rows}
 
 
 def brewing(brew):

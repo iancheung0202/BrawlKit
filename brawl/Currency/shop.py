@@ -1,4 +1,5 @@
 import asyncio
+import io
 import random
 import time
 
@@ -8,13 +9,15 @@ from discord.ext import commands
 
 from brawl.Currency import wallet
 from brawl.Currency.bag import UseNow, held, keep, note
+from brawl.Currency.balancecard import draw_header
+from brawl.Currency.card import BACKGROUND
+from brawl.Currency.card import icon as picture
 from brawl.Currency.card import item_icon, plain, render
 from brawl.Currency.config import ITEM_STATIONS, SHOP
 from brawl.Currency.db import (
     g_shops,
     sync_sell_alarm,
     u_balance,
-    u_customization,
     u_daily_chat_earnings,
     u_mega_boxes,
     u_mega_boxes_purchases,
@@ -28,6 +31,7 @@ from brawl.Currency.helper import (
     MAIN_GUILD_ID,
     NO_EMOTE,
     PERFECT_BREW_CHANCE,
+    REPLY_EMOTE,
     ROAST_TYPES,
     STORE_ITEMS,
     TOKEN_EMOTE,
@@ -35,34 +39,36 @@ from brawl.Currency.helper import (
     get_current_date_key,
     get_next_day_timestamp,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import level_of, lock_line, locked, unlocked
-from brawl.Currency.pagination import BasePaginationView
 from brawl.Currency.panel import notice, reframed
 from brawl.Currency.quests import report, update_quest
 from brawl.Currency.shopcard import (
     CLAIM,
     FILTERS,
+    REWARD_ICONS,
     ROLE,
     SORTS,
     SUPERCELL,
     after,
     buyable,
     draw_purchase,
-    draw_shop,
     listing,
     reward_icon,
+    row,
 )
+from brawl.Currency.stampcard import stamps
 
 LOADING = "<a:loading_circle:1393439258886537352>"
+# The shop's sign on its header: color, scene and icon.
+SIGN = ((255, 140, 40), BACKGROUND, "kit/icon_shop")
+EMOTES = {}
 
 
 class ShopSelect(discord.ui.Select):
-    def __init__(self, field, options, chosen, row):
+    def __init__(self, field, options, chosen):
         self.field = field
         super().__init__(
             custom_id=f"{field}selection",
-            row=row,
             options=[
                 discord.SelectOption(label=option, default=option == chosen)
                 for option in options
@@ -71,66 +77,150 @@ class ShopSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         setattr(self.view, self.field, self.values[0])
-        for option in self.options:
-            option.default = option.label == self.values[0]
         self.view.rows = g_shops(interaction.guild.id).get() or []
         self.view.page = 0
         await self.view.turn(interaction)
 
 
-class BuySelect(discord.ui.Select):
-    """The items on this page the member can buy now. Picking one buys it, as /buy does."""
-
-    def __init__(self):
-        super().__init__(custom_id="buyselection", row=0)
-
-    def stock(self, items):
-        self.disabled = not items
-        self.placeholder = "Buy an item" if items else "Nothing to buy on this page"
-        self.options = [
-            discord.SelectOption(
-                label=item["name"][:100],
-                value=item["buy"][:100],
-                description=f"{item['cost']:,} {item['currency'].title()}",
-                emoji=discord.PartialEmoji.from_str(
-                    TOKEN_EMOTE if item["currency"] == "tokens" else BEAN_EMOTE
-                ),
+async def stock_emotes(bot):
+    """An emoji for every shop picture; one the bot does not have yet is uploaded."""
+    have = {emoji.name: emoji for emoji in await bot.fetch_application_emojis()}
+    for icon in (*map(item_icon, STORE_ITEMS), *REWARD_ICONS):
+        name = f"Shop_{icon.split('/')[-1]}"
+        if name not in have:
+            image = io.BytesIO()
+            picture(icon, 64).save(image, "PNG")
+            have[name] = await bot.create_application_emoji(
+                name=name, image=image.getvalue()
             )
-            for item in {item["buy"]: item for item in items}.values()
-        ] or [discord.SelectOption(label="Nothing to buy", value="none")]
-
-    async def callback(self, interaction: discord.Interaction):
-        request = await order(interaction, self.values[0])
-        await request.done.wait()
-        await self.view.restock(interaction)
+        EMOTES[icon] = str(have[name])
 
 
-class ShopView(BasePaginationView):
-    """The shop card with its buy menu and its page, sort and filter controls."""
-
-    ROW = 1
+class ShopView(discord.ui.LayoutView):
+    """The shop: the member's wallet, a row with a price button for each item,
+    then the page, sort and filter controls. Admins also get the reward editor."""
 
     def __init__(self, member, guild, rows, wallet):
-        super().__init__(initial_author=member, timeout=300)
-        self.guild, self.rows, self.wallet = guild, rows, wallet
-        self.sort, self.filter = "Price: low to high", "All items"
-        self.origin = None
-        buttons = list(self.children)
-        self.clear_items()
-        for button in buttons:
-            button.row = self.ROW if button.custom_id.endswith("_page") else 1
-            self.add_item(button)
-        self.buy = BuySelect()
-        self.add_item(self.buy)
-        self.add_item(ShopSelect("sort", SORTS, self.sort, self.ROW + 1))
-        self.add_item(ShopSelect("filter", FILTERS, self.filter, self.ROW + 2))
+        super().__init__(timeout=300)
+        self.member, self.guild, self.rows, self.wallet = member, guild, rows, wallet
+        self.sort, self.filter, self.page = "Price: low to high", "All items", 0
+        self.origin = self.message = None
         self.lay_out()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message(
+                embed=notice(
+                    f"{NO_EMOTE} You are not the author of this command.", "bad"
+                ),
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    def price(self, spot, item):
+        """The button that buys one item, as /buy does; grey when it cannot be bought."""
+        open_ = item in buyable([item], self.wallet)
+        button = discord.ui.Button(
+            style=discord.ButtonStyle.green if open_ else discord.ButtonStyle.grey,
+            label=f"{item['cost']:,}",
+            emoji=TOKEN_EMOTE if item["currency"] == "tokens" else BEAN_EMOTE,
+            custom_id=f"buy_{spot}",
+            disabled=not open_,
+        )
+
+        async def buy(interaction: discord.Interaction):
+            request = await order(interaction, item["buy"])
+            await request.done.wait()
+            await self.restock(interaction)
+
+        button.callback = buy
+        return button
+
+    def turner(self, custom_id, emoji, page):
+        last = len(self.pages) - 1
+        button = discord.ui.Button(
+            style=discord.ButtonStyle.grey,
+            emoji=emoji,
+            custom_id=custom_id,
+            disabled=page == self.page or not 0 <= page <= last,
+        )
+
+        async def go(interaction: discord.Interaction):
+            self.page = page
+            await self.turn(interaction)
+
+        button.callback = go
+        return button
+
+    def editor(self, label, style, custom_id, operation):
+        button = discord.ui.Button(label=label, style=style, custom_id=custom_id)
+
+        async def edit(interaction: discord.Interaction):
+            await self.edit(interaction, operation)
+
+        button.callback = edit
+        return button
 
     def lay_out(self):
         self.pages = listing(self.guild, self.rows, self.sort, self.filter) or [[]]
         self.page = min(self.page, len(self.pages) - 1)
-        self.buy.stock(buyable(self.pages[self.page], self.wallet))
-        self.update_buttons()
+        items, last = self.pages[self.page], len(self.pages) - 1
+        ui = discord.ui
+        box = ui.Container(
+            ui.MediaGallery(discord.MediaGalleryItem("attachment://shop.jpg")),
+            ui.TextDisplay(f"-# {self.filter}, page {self.page + 1} of {last + 1}"),
+        )
+        for spot, item in enumerate(items):
+            text = row(item, self.wallet, EMOTES.get(item["icon"], ""), REPLY_EMOTE)
+            box.add_item(ui.Section(text, accessory=self.price(spot, item)))
+        if not items:
+            box.add_item(ui.TextDisplay("Nothing matches this filter."))
+        box.add_item(ui.Separator())
+        box.add_item(
+            ui.ActionRow(
+                self.turner("first_page", "<:fastbackward:1351972112696479824>", 0),
+                self.turner(
+                    "prev_page", "<:backarrow:1351972111010369618>", self.page - 1
+                ),
+                self.turner(
+                    "next_page", "<:rightarrow:1351972116819480616>", self.page + 1
+                ),
+                self.turner("last_page", "<:fastforward:1351972114433048719>", last),
+            )
+        )
+        box.add_item(ui.ActionRow(ShopSelect("sort", SORTS, self.sort)))
+        box.add_item(ui.ActionRow(ShopSelect("filter", FILTERS, self.filter)))
+        if self.member.guild_permissions.administrator:
+            box.add_item(
+                ui.ActionRow(
+                    self.editor(
+                        "Add Reward", discord.ButtonStyle.green, "addreward", "add"
+                    ),
+                    self.editor(
+                        "Remove Reward",
+                        discord.ButtonStyle.red,
+                        "removereward",
+                        "remove",
+                    ),
+                    self.editor(
+                        "Edit Cost", discord.ButtonStyle.grey, "editcost", "edit_cost"
+                    ),
+                    self.editor(
+                        "Edit Stock",
+                        discord.ButtonStyle.grey,
+                        "editstock",
+                        "edit_stock",
+                    ),
+                )
+            )
+        self.clear_items()
+        self.add_item(box)
+
+    async def file(self):
+        """The header with the member's wallet as it is now."""
+        self.lay_out()
+        return await render(draw_header, "SHOP", self.wallet, SIGN, name="shop")
 
     async def restock(self, interaction):
         """Redraws the shop after a purchase: new balance, waits and stock."""
@@ -143,76 +233,32 @@ class ShopView(BasePaginationView):
         except (discord.HTTPException, AttributeError):
             pass
 
-    async def file(self):
-        self.lay_out()
-        shop = {
-            **self.wallet,
-            "items": self.pages[self.page],
-            "show": self.filter,
-            "page": self.page + 1,
-            "pages": len(self.pages),
-        }
-        return await render(draw_shop, shop, name="shop")
-
     async def turn(self, interaction):
-        await interaction.response.edit_message(
-            attachments=[await self.file()], view=self
-        )
-
-
-class Panel(ShopView):
-    """The shop with the admin row for editing custom rewards, under the buy menu."""
-
-    ROW = 2
+        self.lay_out()
+        await interaction.response.edit_message(view=self)
 
     async def edit(self, interaction, operation):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message(
-                embed=notice(f"{NO_EMOTE} Missing Administrator permission.", "bad"),
-                ephemeral=True,
-            )
         modal = RewardModal(operation, interaction.guild.id)
         await interaction.response.send_modal(modal)
         await modal.wait()
         if modal.pages is not None:
             self.rows = modal.pages
-            await interaction.edit_original_response(
-                attachments=[await self.file()], view=self
-            )
+            self.lay_out()
+            await interaction.edit_original_response(view=self)
         if modal.on_submit_interaction:
             await modal.on_submit_interaction.response.send_message(
                 embed=modal.update, ephemeral=True
             )
 
-    @discord.ui.button(
-        label="Add Reward",
-        style=discord.ButtonStyle.green,
-        custom_id="addreward",
-        row=0,
-    )
-    async def add_reward(self, interaction, button):
-        await self.edit(interaction, "add")
-
-    @discord.ui.button(
-        label="Remove Reward",
-        style=discord.ButtonStyle.red,
-        custom_id="removereward",
-        row=0,
-    )
-    async def remove_reward(self, interaction, button):
-        await self.edit(interaction, "remove")
-
-    @discord.ui.button(
-        label="Edit Cost", style=discord.ButtonStyle.grey, custom_id="editcost", row=0
-    )
-    async def edit_cost(self, interaction, button):
-        await self.edit(interaction, "edit_cost")
-
-    @discord.ui.button(
-        label="Edit Stock", style=discord.ButtonStyle.grey, custom_id="editstock", row=0
-    )
-    async def edit_stock(self, interaction, button):
-        await self.edit(interaction, "edit_stock")
+    async def on_timeout(self) -> None:
+        for child in self.walk_children():
+            if isinstance(child, (discord.ui.Button, discord.ui.Select)):
+                child.disabled = True
+        try:
+            if self.message:
+                await self.message.edit(view=self)
+        except discord.HTTPException:
+            pass
 
 
 async def wallet_of(interaction):
@@ -231,7 +277,7 @@ async def wallet_of(interaction):
     boxes = u_mega_boxes_purchases(user.id, day).get() or 0
     ultra = guild.get_role(ULTRA_TIER_ROLE_ID)
     return {
-        "background": background(user.id),
+        "background": BACKGROUND,
         "beans": balance.get("Beans", 0),
         "tokens": balance.get("Tokens", 0),
         "locked": {
@@ -253,14 +299,14 @@ async def wallet_of(interaction):
             "mega_box_10": boxes,
         },
         "limit": 20 if ultra and ultra in user.roles else 10,
+        "stamps": stamps(user.id),
     }
 
 
 async def open_shop(interaction):
     """Builds the shop for one member."""
     user, guild = interaction.user, interaction.guild
-    kind = Panel if user.guild_permissions.administrator else ShopView
-    view = kind(
+    view = ShopView(
         user, guild, g_shops(guild.id).get() or [], await wallet_of(interaction)
     )
     view.origin = interaction
@@ -746,6 +792,12 @@ class Shop(commands.Cog):
         view, file = await open_shop(interaction)
         view.message = await interaction.followup.send(file=file, view=view)
 
+    async def cog_load(self):
+        try:
+            await stock_emotes(self.bot)
+        except discord.HTTPException as error:
+            print(f"Shop emojis not ready: {error}")
+
     @shop.error
     async def shop_error(self, interaction: discord.Interaction, error: Exception):
         await interaction.response.send_message(
@@ -907,7 +959,7 @@ class Shop(commands.Cog):
                     )
 
         sale = {
-            "background": background(user_id),
+            "background": BACKGROUND,
             "icon": reward_icon(name, SUPERCELL in name),
             "name": plain(role.name if name.isdigit() and role else display_name),
             "next": ROLE if name.isdigit() else CLAIM,
@@ -1149,13 +1201,6 @@ class Shop(commands.Cog):
             pin_count = pin_data.get("count", 0)
             effect_msg = f"You have {pin_count} to use with /pin."
 
-        elif item_id == "custom_credit":
-            await item_data["effect"](user_id)
-            ref = u_customization(user_id)
-            data = ref.get() or {"credits": 0}
-            credits = data.get("credits", 0)
-            effect_msg = f"You have {credits} to use with /customize."
-
         else:
             keep(user_id, item_id)
             use_now = UseNow(user_id, item_id)
@@ -1168,7 +1213,7 @@ class Shop(commands.Cog):
         await self.economy.effect_manager.set_user_cooldown(user_id, item_id)
 
         sale = {
-            "background": background(user_id),
+            "background": BACKGROUND,
             "icon": item_icon(item_id),
             "name": item_data["name"],
             "next": effect_msg,

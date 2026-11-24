@@ -133,7 +133,7 @@ GATES = [
     ("Gacha", "megabox", (), 3, "Mega Boxes"),
     ("Shop", "shop", (), 1, "Shop"),
     ("Shop", "buy", ("Nitro",), 1, "Shop"),
-    ("Shop", "pin", ("link",), 9, "Customize and Pin"),
+    ("Shop", "pin", ("link",), 9, "Message Pin"),
     ("Gambling", "blackjack", (100,), 7, "Games"),
     ("TableSystem", "table_seat", ("table",), 6, "Tables"),
     ("TableSystem", "table_reserve", (), 6, "Tables"),

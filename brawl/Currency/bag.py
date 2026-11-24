@@ -5,10 +5,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from brawl.Currency import heat
-from brawl.Currency.card import item_icon, render
+from brawl.Currency.card import BACKGROUND, item_icon, render
 from brawl.Currency.db import sync_sell_alarm, sync_shop_effects, u_bag, u_shop_effects
 from brawl.Currency.helper import MAIN_GUILD_ID, NO_EMOTE, STORE_ITEMS
-from brawl.Currency.home import background
 from brawl.Currency.itemcard import draw_bag, draw_started, lasts
 from brawl.Currency.panel import notice
 
@@ -173,7 +172,7 @@ class Bag(commands.Cog):
                 ),
                 ephemeral=True,
             )
-        bag = {"background": background(user_id), "items": items}
+        bag = {"background": BACKGROUND, "items": items}
         await interaction.response.send_message(
             file=await render(draw_bag, bag, name="bag"),
             view=BagView(self.bot, items),

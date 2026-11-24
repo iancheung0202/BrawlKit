@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from brawl.Currency import events
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import (
     ORDER_CHAT_BEANS,
     ORDER_FILLER,
@@ -26,7 +26,6 @@ from brawl.Currency.helper import (
     STAMP_EMOTE,
     YES_EMOTE,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import level_of
 from brawl.Currency.panel import notice
 from brawl.Currency.rewardcard import draw_order
@@ -221,7 +220,7 @@ async def order_card(user_id, messages):
         "stamp": getattr(messages, "stamp", False),
         "redeem": getattr(messages, "redeem", None),
         "boxes": getattr(messages, "boxes", 0),
-        "background": background(user_id),
+        "background": BACKGROUND,
     }
     return await render(draw_order, progress, name="order")
 

@@ -8,10 +8,9 @@ from discord.ext import commands
 from discord.ui import Button, Modal, TextInput, View
 from firebase_admin import db
 
-from brawl.Currency.card import MUTED, render
+from brawl.Currency.card import BACKGROUND, MUTED, render
 from brawl.Currency.db import u_tag
 from brawl.Currency.helper import MAIN_GUILD_ID, REPLY_EMOTE
-from brawl.Currency.home import background
 from brawl.Currency.panel import notice
 from brawl.Utility.api import clean_tag, get_icon, get_player, get_stats
 from brawl.Utility.playercard import draw_milestones, face
@@ -106,7 +105,7 @@ async def milestone_card(member: discord.Member, tag: str, stats: dict, label: s
         "rows": rows,
         "player": await face(tag, stats),
         "label": label,
-        "background": background(member.id),
+        "background": BACKGROUND,
     }
     return await render(draw_milestones, sheet, name="milestones")
 

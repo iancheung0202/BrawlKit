@@ -11,7 +11,7 @@ from firebase_admin import db
 
 from brawl.Currency import wallet
 from brawl.Currency.bag import TIMED, held, keep, running
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import (
     BUY,
     DROP_BONUS,
@@ -37,7 +37,6 @@ from brawl.Currency.helper import (
     STAR_DROP_EMOTE,
     STORE_ITEMS,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import notice
 
@@ -210,7 +209,7 @@ class StarDropView(OpenView):
     def card(self):
         return draw_star_drop(
             {
-                "background": background(self.user.id),
+                "background": BACKGROUND,
                 "rarity": self.current_rarity,
                 "upgrades": self.current_upgrades,
                 "rewards": self.rewards,
@@ -332,7 +331,7 @@ class MegaBoxView(OpenView):
     def card(self):
         return draw_mega_box(
             {
-                "background": background(self.user.id),
+                "background": BACKGROUND,
                 "total": self.total_items,
                 "rewards": self.rewards,
                 "unopened": self.unopened,

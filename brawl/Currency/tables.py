@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import Modal, TextInput
 
-from brawl.Currency.card import faces, plain, render, roster
+from brawl.Currency.card import BACKGROUND, faces, plain, render, roster
 from brawl.Currency.config import (
     TABLE_SEATS,
     TABLE_SEATS_NEEDED,
@@ -32,7 +32,6 @@ from brawl.Currency.helper import (
     TOKEN_EMOTE,
     YES_EMOTE,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import framed, notice
 from brawl.Currency.tablecard import draw_table, draw_table_reward
@@ -66,7 +65,7 @@ async def seated(table, guild, user_id):
 async def table_card(table, interaction, tag="TABLE", name="table"):
     """The table as the member sees it: their own seat is outlined."""
     card = await seated(table, interaction.guild, interaction.user.id)
-    card.update(background=background(interaction.user.id), tag=tag)
+    card.update(background=BACKGROUND, tag=tag)
     return await render(draw_table, card, name=name)
 
 
@@ -212,7 +211,7 @@ class TableSystem(commands.GroupCog, name="table"):
                                         await render(
                                             draw_table_reward,
                                             {
-                                                "background": background(member_id),
+                                                "background": BACKGROUND,
                                                 "tag": "TABLE QUEST",
                                                 "color": table_data["color"],
                                                 "currency": "bean",
@@ -319,9 +318,7 @@ class TableSystem(commands.GroupCog, name="table"):
                                                 await render(
                                                     draw_table_reward,
                                                     {
-                                                        "background": background(
-                                                            member_id
-                                                        ),
+                                                        "background": BACKGROUND,
                                                         "tag": "TOP TABLE",
                                                         "color": top_table_data[
                                                             "color"

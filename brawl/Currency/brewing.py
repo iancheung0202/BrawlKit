@@ -9,7 +9,7 @@ from discord.ui import View
 
 from brawl.Currency import wallet
 from brawl.Currency.brewcard import draw_brewing, draw_sold
-from brawl.Currency.card import GOLD, GREEN, MUTED, RED, render
+from brawl.Currency.card import BACKGROUND, GOLD, GREEN, MUTED, RED, render
 from brawl.Currency.db import g_invites_member_data, sync_sell_alarm
 from brawl.Currency.helper import (
     BEAN_EMOTE,
@@ -24,7 +24,6 @@ from brawl.Currency.helper import (
     ULTRA_TIER_ROLE_ID,
     UNLOCK_REQ,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import locked
 from brawl.Currency.panel import DRAWN, framed, notice, reframed
 from brawl.Currency.quests import report, update_quest
@@ -153,7 +152,7 @@ class Brewing(commands.Cog):
                 "paid": ROAST_TYPES[roast]["cost"]
                 + (0 if free else ROAST_TYPES[roast]["insurance_cost"]),
                 "beans": beans,
-                "background": background(user_id),
+                "background": BACKGROUND,
             }
             old = message.embeds[0] if message.embeds else None
             guided = bool(old and (old.title or "").startswith("Step"))
@@ -338,7 +337,7 @@ class Brewing(commands.Cog):
             "insurance": insurance,
             "paid": cost,
             "beans": new_beans,
-            "background": background(user_id),
+            "background": BACKGROUND,
         }
         sent = {"view": view} if view else {}
         await interaction.followup.send(
@@ -556,7 +555,7 @@ class Brewing(commands.Cog):
             "perfect": perfect or burnt_to_perfect,
             "notes": notes,
             "have": new_tokens,
-            "background": background(user_id),
+            "background": BACKGROUND,
         }
         await interaction.followup.send(
             **framed(

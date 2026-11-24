@@ -1,6 +1,9 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
+import pytest
+
 from brawl.Currency.db import g_shops, u_balance
 from brawl.Currency.helper import MAIN_GUILD_ID
 from brawl.Currency.shop import PurchaseRequest
@@ -76,7 +79,24 @@ def open_shop(cafe, rows, admin=False, level=50):
     return interaction.followup.send.call_args.kwargs, shop
 
 
-def test_shop_opens_as_a_card_with_the_members_balance(cafe):
+def find(view, custom_id):
+    return next(
+        item
+        for item in view.walk_children()
+        if getattr(item, "custom_id", None) == custom_id
+    )
+
+
+def rows(view):
+    """Each item row on screen: (its text, its price button)."""
+    return [
+        (section.children[0].content, section.accessory)
+        for section in view.walk_children()
+        if isinstance(section, discord.ui.Section)
+    ]
+
+
+def test_shop_opens_with_the_wallet_and_a_row_for_each_item(cafe):
     sent, shop = open_shop(cafe, [["Nitro", "A month", 3000, "Beans", True, 2]])
     view = sent["view"]
     assert sent["file"].filename == "shop.jpg" and "embed" not in sent
@@ -85,31 +105,59 @@ def test_shop_opens_as_a_card_with_the_members_balance(cafe):
     names = [item["name"] for page in view.pages for item in page]
     assert "Nitro" in names and "Star Drop" in names
     assert all(len(page) <= 6 for page in view.pages)
+    assert len(rows(view)) == len(view.pages[0])
+    assert view.total_children_count <= 40
+    with pytest.raises(StopIteration):
+        find(view, "addreward")
 
 
 def test_shop_marks_what_the_member_has_not_unlocked(cafe):
     sent, _ = open_shop(cafe, [], level=3)
-    assert {"effects", "boxes", "style"} <= sent["view"].wallet["locked"]
-    assert "drops" not in sent["view"].wallet["locked"]
+    view = sent["view"]
+    assert {"effects", "boxes", "style"} <= view.wallet["locked"]
+    assert "drops" not in view.wallet["locked"]
+    view.filter = "Effect items"
+    view.lay_out()
+    assert any(
+        "Unlocks at Level 9" in text and button.disabled for text, button in rows(view)
+    )
 
 
-def test_shop_filter_and_page_buttons_redraw_the_card(cafe):
+def test_shop_filter_and_page_buttons_relay_the_rows(cafe):
     sent, shop = open_shop(cafe, [["Nitro", "A month", 4, "Tokens", True, 0]], True)
     view = sent["view"]
-    assert type(view) is shop.Panel
+    assert find(view, "addreward") and find(view, "editstock")
     press = cafe.interaction(USER)
 
     async def choose():
-        select = next(c for c in view.children if c.custom_id == "filterselection")
+        select = find(view, "filterselection")
         select._values = ["Token items"]
         await select.callback(press)
-        await view.next_button.callback(press)
+        await find(view, "next_page").callback(press)
 
     asyncio.run(choose())
     assert view.filter == "Token items" and view.page == 1
     assert all(item["currency"] == "tokens" for page in view.pages for item in page)
-    edit = press.response.edit_message.call_args.kwargs
-    assert edit["attachments"][0].filename == "shop.jpg"
+    assert press.response.edit_message.call_args.kwargs == {"view": view}
+    assert find(view, "filterselection").options[2].default
+
+
+def test_shop_uploads_only_the_emojis_the_bot_is_missing(cafe):
+    from brawl.Currency import shop
+
+    have = MagicMock()
+    have.name = "Shop_star_drop"
+    have.__str__ = lambda self: "<:Shop_star_drop:1>"
+    cafe.bot.fetch_application_emojis = AsyncMock(return_value=[have])
+    made = AsyncMock(side_effect=lambda name, image: f"<:{name}:2>")
+    cafe.bot.create_application_emoji = made
+    asyncio.run(shop.stock_emotes(cafe.bot))
+    names = [call.kwargs["name"] for call in made.call_args_list]
+    assert "Shop_star_drop" not in names and "Shop_icon_role" in names
+    assert shop.EMOTES["items/star_drop"] == "<:Shop_star_drop:1>"
+    assert shop.EMOTES["items/mega_box"] == "<:Shop_mega_box:2>"
+    assert all(call.kwargs["image"][:4] == b"\x89PNG" for call in made.call_args_list)
+    shop.EMOTES.clear()
 
 
 def test_every_shop_item_has_an_icon_and_a_short_description():
@@ -136,58 +184,63 @@ def test_buying_an_effect_item_shows_a_card_with_what_to_do_next(cafe):
     assert after("instant_brew") == "It took effect right away."
 
 
-def options(view):
-    return [option.label for option in view.buy.options]
+def on_page(view, name):
+    """Lays out the page an item is on and returns its row: (text, price button)."""
+    for view.page in range(len(view.pages)):
+        view.lay_out()
+        for text, button in rows(view):
+            if f" {name}" in text.splitlines()[0]:
+                return text, button
 
 
-def test_buy_menu_lists_only_what_the_member_can_buy_on_the_page(cafe):
-    rows = [
-        ["Cheap", "x", 100, "Beans", True, -1],
-        ["Dear", "x", 9000, "Beans", True, -1],
-        ["Gone", "x", 1, "Beans", True, 0],
-    ]
-    sent, _ = open_shop(cafe, rows)
-    view = sent["view"]
-    assert view.buy.row == 0 and not view.buy.disabled
-    page = {item["name"] for item in view.pages[0]}
-    assert "Cheap" in options(view) and set(options(view)) <= page
-    assert not {"Dear", "Gone"} & set(options(view))
-    assert all(
-        view.wallet[item["currency"]] >= item["cost"]
-        for item in view.pages[0]
-        if item["name"] in options(view)
+def test_only_what_the_member_can_buy_has_a_live_button(cafe):
+    sent, _ = open_shop(
+        cafe,
+        [
+            ["Cheap", "x", 100, "Beans", True, -1],
+            ["Dear", "x", 9000, "Beans", True, -1],
+            ["Gone", "x", 1, "Beans", True, 0],
+        ],
     )
-
-
-def test_buy_menu_is_off_when_nothing_on_the_page_can_be_bought(cafe):
-    sent, _ = open_shop(cafe, [], level=50)
     view = sent["view"]
-    view.wallet["beans"] = view.wallet["tokens"] = 0
-    view.lay_out()
-    assert view.buy.disabled and view.buy.placeholder == "Nothing to buy on this page"
+    text, button = on_page(view, "Cheap")
+    assert not button.disabled and button.style == discord.ButtonStyle.green
+    assert button.label == "100" and "-#" not in text
+    text, button = on_page(view, "Dear")
+    assert button.disabled and button.style == discord.ButtonStyle.grey
+    assert "You need 8,300 more Beans" in text
+    text, button = on_page(view, "Gone")
+    assert button.disabled and "Sold out" in text and "You need" not in text
 
 
-def test_admin_rows_sit_under_the_buy_menu(cafe):
-    sent, shop = open_shop(cafe, [], admin=True)
-    rows = {child.custom_id: child.row for child in sent["view"].children}
-    assert rows["buyselection"] == 0 and rows["addreward"] == 1
-    assert rows["next_page"] == 2 and rows["filterselection"] == 4
+def test_admin_row_sits_under_the_controls(cafe):
+    sent, _ = open_shop(cafe, [], admin=True)
+    order = [
+        getattr(item, "custom_id", None)
+        for item in sent["view"].walk_children()
+        if getattr(item, "custom_id", None)
+    ]
+    assert order[-7:] == [
+        "last_page",
+        "sortselection",
+        "filterselection",
+        "addreward",
+        "removereward",
+        "editcost",
+        "editstock",
+    ]
+    assert sent["view"].total_children_count <= 40
     member, _ = open_shop(cafe, [])
-    rows = {child.custom_id: child.row for child in member["view"].children}
-    assert rows["buyselection"] == 0 and rows["next_page"] == 1
-    assert rows["filterselection"] == 3
+    with pytest.raises(StopIteration):
+        find(member["view"], "addreward")
 
 
-def test_picking_from_the_menu_buys_like_the_buy_command(cafe):
+def test_pressing_a_price_button_buys_like_the_buy_command(cafe):
     sent, shop = open_shop(cafe, [["Cheap", "x", 100, "Beans", True, 3]])
     view = sent["view"]
     press = cafe.interaction(USER)
-
-    async def pick():
-        view.buy._values = ["Cheap"]
-        await view.buy.callback(press)
-
-    asyncio.run(pick())
+    _, button = on_page(view, "Cheap")
+    asyncio.run(button.callback(press))
     assert "Processing" in text(press.response.send_message.call_args)
     assert press.edit_original_response.call_args.kwargs["attachments"][0].filename == (
         "purchase.png"
@@ -195,20 +248,20 @@ def test_picking_from_the_menu_buys_like_the_buy_command(cafe):
     assert u_balance(USER).get()["Beans"] == 600
     assert g_shops(MAIN_GUILD_ID).get()[0][5] == 2
     assert view.wallet["beans"] == 600
-    assert view.origin.edit_original_response.call_args.kwargs["view"] is view
+    edit = view.origin.edit_original_response.call_args.kwargs
+    assert edit["attachments"][0].filename == "shop.jpg" and edit["view"] is view
 
 
-def test_an_item_in_the_bag_is_marked_and_left_off_the_buy_menu(cafe):
+def test_an_item_in_the_bag_is_marked_and_cannot_be_bought(cafe):
     from brawl.Currency import bag
 
     bag.keep(USER, "sell_alarm")
     sent, _ = open_shop(cafe, [])
     view = sent["view"]
     assert view.wallet["held"] == {"sell_alarm"}
-    for view.page in range(len(view.pages)):
-        view.lay_out()
-        assert "Sell Alarm" not in options(view)
-    assert [component["type"] for component in view.to_components()] == [1, 1, 1, 1]
+    text, button = on_page(view, "Sell Alarm")
+    assert "In your bag, start it with /use" in text and button.disabled
+    assert [component["type"] for component in view.to_components()] == [17]
 
 
 def queued(cafe, item, process=None):
@@ -247,3 +300,11 @@ def test_a_stuck_or_broken_purchase_ends_its_waiting_note(cafe, monkeypatch):
     monkeypatch.setattr(shop, "PURCHASE_SECONDS", 0.05)
     for process in (stuck, broken):
         assert "did not go through" in text(queued(cafe, "Nitro", process))
+
+
+def test_only_the_member_who_opened_the_shop_can_press_its_buttons(cafe):
+    sent, _ = open_shop(cafe, [["Cheap", "x", 100, "Beans", True, 3]])
+    other = cafe.interaction(USER + 1)
+    assert not asyncio.run(sent["view"].interaction_check(other))
+    assert "not the author" in text(other.response.send_message.call_args)
+    assert asyncio.run(sent["view"].interaction_check(cafe.interaction(USER)))

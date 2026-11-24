@@ -351,10 +351,6 @@ class Card:
                 self.icon(prize[1], cx - size / 2, cy - size / 2, size)
                 self.text(cx + radius, cy + 2, str(prize[2]), 15, WHITE, "ra", 2)
 
-    def title(self, title, line):
-        self.text(34, 22, title, 42)
-        self.text(36, 76, line, 19, MUTED, "la", 2)
-
     def hint(self, text):
         self.text(36, self.height - 40, text, 18, GOLD, "la", 2)
 

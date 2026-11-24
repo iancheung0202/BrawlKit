@@ -8,7 +8,7 @@ from discord.ext import commands
 from discord.ui import Button, View
 
 from brawl.Currency.boss import start_inspection
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.chat import chat_limit, chat_today
 from brawl.Currency.config import (
     BOOSTER_DAILY_BEANS,
@@ -42,7 +42,6 @@ from brawl.Currency.helper import (
     ULTRA_TIER_ROLE_ID,
     YES_EMOTE,
 )
-from brawl.Currency.home import background
 from brawl.Currency.how import HowView, page_file
 from brawl.Currency.howcard import PAGES, panel_banner
 from brawl.Currency.panel import framed, notice
@@ -288,8 +287,7 @@ class Daily(commands.Cog):
                             "9. Shoutout every month in <#1335752228031430778> for your support!\n"
                             "10. Permanent **FREE** insurance on all brew attempts <a:moneydance:1227425759077859359>\n"
                             f"11. **Double betting limits** for gambling games and **star drop purchases** {STAR_DROP_EMOTE}\n"
-                            "12. Custom background for your server's rank/profile card in `/balance` <a:GeneDizzy:824047000496111676>\n"
-                            "13. Early access to shop restocks of Supercell freebies <:KitBrawlPassDiamond:1394206796888932393>\n"
+                            "12. Early access to shop restocks of Supercell freebies <:KitBrawlPassDiamond:1394206796888932393>\n"
                             "### Notes <:mortis_huh:1394209311932026880>\n"
                             f"-# - Once you purchased on PayPal's website, [create a ticket](https://discord.com/channels/{MAIN_GUILD_ID}/1390908939767648328) and provide proof of purchase. We will then grant your perks immediately. No refunds are available.\n"
                             "-# - These perks will be removed if your subscription ends or is revoked. If you leave or are banned for breaking server rules, we are not responsible for any lost perks."
@@ -683,7 +681,7 @@ class Daily(commands.Cog):
                 "redeem": order.redeem,
                 "boxes": order.boxes,
             },
-            "background": background(user_id),
+            "background": BACKGROUND,
         }
         guide = await self.economy.tutorial_manager.advance(user_id, "clock_in")
         if guide:

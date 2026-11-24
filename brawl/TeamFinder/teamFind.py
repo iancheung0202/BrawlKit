@@ -7,10 +7,9 @@ from discord.ext import commands, tasks
 from discord.ui import Button, Modal, Select, TextInput, View
 from firebase_admin import db
 
-from brawl.Currency.card import faces, render, roster
+from brawl.Currency.card import BACKGROUND, faces, render, roster
 from brawl.Currency.config import REP_TOKENS
 from brawl.Currency.helper import MAIN_GUILD_ID, TOKEN_EMOTE
-from brawl.Currency.home import background
 from brawl.Currency.panel import notice
 from brawl.Milestone.milestone import in_cafe
 from brawl.TeamFinder.reputationSystem import (
@@ -88,7 +87,7 @@ async def request_card(guild: discord.Guild, request: dict) -> discord.File:
     sheet = {
         "player": await face(request["tag"], stats),
         "label": f"{request['region'].upper()} TEAM",
-        "background": background(request["host"]),
+        "background": BACKGROUND,
         "mode": request.get("mode", request["kind"]),
         "mode_art": art.get(mode) or KIND_ART[request["kind"]],
         "kind": request["kind"] if "mode" in request else "Any mode",

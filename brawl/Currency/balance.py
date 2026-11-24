@@ -20,10 +20,7 @@ from brawl.Currency.balancecard import (
 )
 from brawl.Currency.card import BACKGROUND, render, roster
 from brawl.Currency.chat import chat_limit, chat_today
-from brawl.Currency.config import BACKGROUNDS
 from brawl.Currency.db import (
-    u_background,
-    u_customization,
     u_daily_chat_earnings,
     u_mega_boxes,
     u_pin_message,
@@ -41,7 +38,6 @@ from brawl.Currency.helper import (
     STORE_ITEMS,
     YES_EMOTE,
 )
-from brawl.Currency.home import background
 from brawl.Currency.invitecard import INVITE_HELP, invited_by, summary
 from brawl.Currency.ladder import locked, unlocked
 from brawl.Currency.levels import get_level
@@ -136,53 +132,6 @@ class BalanceView(discord.ui.LayoutView):
             pass
 
 
-class ConfirmBackground(discord.ui.View):
-    """The preview's Confirm button: only pressing it saves the background and spends the credit."""
-
-    def __init__(self, cog, background, allowed):
-        super().__init__(timeout=300)
-        self.cog, self.background = cog, background
-        self.confirm.disabled = not allowed
-
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green)
-    async def confirm(self, interaction: discord.Interaction, button):
-        user_id, name = interaction.user.id, self.background.name
-        self.stop()
-        if self.background.value == BACKGROUND:
-            u_background(user_id).delete()
-            return await interaction.response.edit_message(
-                content=None,
-                embed=notice(
-                    f"{YES_EMOTE} Your home card is back on the default **{name}** background.",
-                    "good",
-                ),
-                view=None,
-            )
-        ref = u_customization(user_id)
-        credits = (ref.get() or {}).get("credits", 0)
-        if credits < 1:
-            return await interaction.response.edit_message(
-                content=None,
-                embed=notice(
-                    f"{NO_EMOTE} You need 1 Customization Credit. "
-                    "Get one with </buy:1393376242501157010>.",
-                    "bad",
-                ),
-                view=None,
-            )
-        ref.update({"credits": credits - 1})
-        u_background(user_id).set(self.background.value)
-        await interaction.response.edit_message(
-            content=None,
-            embed=notice(
-                f"{YES_EMOTE} Your home card now uses the **{name}** background. "
-                f"Credits left: `{credits - 1}`.",
-                "good",
-            ),
-            view=None,
-        )
-
-
 class Balance(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -218,7 +167,7 @@ class Balance(commands.Cog):
             "brew": await self.economy.get_active_brew(user.id),
             "brewing": await unlocked(self.bot, user.id, guild.id, "brewing"),
             "stamps": stamps(user.id),
-            "background": background(user.id),
+            "background": BACKGROUND,
         }
 
     async def chat(self, user, guild):
@@ -251,7 +200,6 @@ class Balance(commands.Cog):
                 "star_drops": u_star_drops(user.id).get(),
                 "mega_boxes": u_mega_boxes(user.id).get(),
                 "pins": (u_pin_message(user.id).get() or {}).get("count"),
-                "credits": (u_customization(user.id).get() or {}).get("credits"),
             },
             "bag": held(user.id),
             "effects": [
@@ -280,7 +228,6 @@ class Balance(commands.Cog):
         member = await self.member(user, guild)
         extras = []
         if place == "COUNTER":
-            member["scene"] = member["background"]
             member.update(await self.bot.get_cog("StampCard").summary(user, guild))
             cards = [(draw_counter, member), (draw_stamps, member)]
             if not daily_order.clocked_in(user.id):
@@ -316,12 +263,6 @@ class Balance(commands.Cog):
         ]
         return BalanceView(self, user, place, files, extras), files
 
-    async def home_card(self, user, guild, background=None):
-        """The Counter on a background, to preview one before it is bought."""
-        member = await self.member(user, guild)
-        member["background"] = background or member["background"]
-        return await render(draw_counter, member, name=f"balance_{user.id}")
-
     @app_commands.command(
         name="balance",
         description="Open your cafe home: level, Beans, Tokens, order and Stamp Card",
@@ -338,58 +279,6 @@ class Balance(commands.Cog):
     @balance.error
     async def balance_error(self, interaction: discord.Interaction, error: Exception):
         print(f"Error in balance: {error}")
-
-    @app_commands.command(
-        name="customize",
-        description="Pick the background of your home card (uses 1 Customization Credit)",
-    )
-    @app_commands.describe(background="The background to use")
-    @app_commands.choices(
-        background=[
-            app_commands.Choice(name=name, value=key)
-            for key, name in BACKGROUNDS.items()
-        ]
-    )
-    @app_commands.checks.cooldown(rate=1, per=30.0)
-    async def customize(
-        self, interaction: discord.Interaction, background: app_commands.Choice[str]
-    ):
-        if interaction.guild.id != MAIN_GUILD_ID:
-            return await interaction.response.send_message(
-                embed=notice(f"{NO_EMOTE} Not available here.", "bad"), ephemeral=True
-            )
-        if await locked(interaction, "style"):
-            return
-        user_id = interaction.user.id
-        free = background.value == BACKGROUND
-        credits = (u_customization(user_id).get() or {}).get("credits", 0)
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        if free:
-            note = "This is the default background, so it is free."
-        elif credits < 1:
-            note = (
-                "You need 1 Customization Credit to use it. "
-                "Get one with </buy:1393376242501157010>."
-            )
-        else:
-            note = f"Confirm uses 1 Customization Credit. You have `{credits}`."
-        await interaction.followup.send(
-            embed=notice(
-                f"This is your home card with the {background.name} background. {note}"
-            ),
-            file=await self.home_card(
-                interaction.user, interaction.guild, background.value
-            ),
-            view=ConfirmBackground(self, background, free or credits >= 1),
-            ephemeral=True,
-        )
-
-    @customize.error
-    async def customize_error(self, interaction: discord.Interaction, error: Exception):
-        await interaction.response.send_message(
-            embed=notice(f"{NO_EMOTE} Something went wrong: {error}", "bad"),
-            ephemeral=True,
-        )
 
 
 async def setup(bot):

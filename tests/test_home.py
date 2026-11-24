@@ -9,12 +9,9 @@ from PIL import Image
 
 from brawl.Currency import balancecard, card, ladder
 from brawl.Currency.card import BACKGROUND
-from brawl.Currency.config import BACKGROUNDS
 from brawl.Currency.db import (
-    u_background,
     u_balance,
     u_brews,
-    u_customization,
     u_stamp_card,
 )
 from brawl.Currency.helper import MAIN_GUILD_ID, SERVER_STORE
@@ -33,35 +30,11 @@ def member(cafe):
     return asyncio.run(balance.member(interaction.user, interaction.guild))
 
 
-def customize(cafe, key):
-    interaction = cafe.interaction()
-    interaction.user.display_name = "sam"
-    interaction.user.display_avatar.replace.return_value.read = AsyncMock(
-        return_value=b""
-    )
-    choice = type("Choice", (), {"value": key, "name": BACKGROUNDS[key]})
-    command = cafe.cogs["Balance"].customize
-    asyncio.run(command.callback(cafe.cogs["Balance"], interaction, choice))
-    return interaction
-
-
-def confirm(interaction):
-    view = interaction.followup.send.call_args.kwargs["view"]
-    press = MagicMock()
-    press.user.id = USER
-    press.response.edit_message = AsyncMock()
-    if not view.confirm.disabled:
-        asyncio.run(view.confirm.callback(press))
-    return view, press
-
-
-def test_every_background_draws_the_counter(cafe):
+def test_the_counter_draws_on_the_default_background(cafe):
     data = {**member(cafe), **stamp_card(cafe)}
-    for key in BACKGROUNDS:
-        data["background"] = key
-        image = Image.open(io.BytesIO(balancecard.draw_counter(data).read()))
-        assert image.size == (1800, 604)
-        assert balancecard.draw_stamps(data).read()
+    image = Image.open(io.BytesIO(balancecard.draw_counter(data).read()))
+    assert image.size == (1800, 604)
+    assert balancecard.draw_stamps(data).read()
 
 
 def stamp_card(cafe):
@@ -95,34 +68,6 @@ def test_next_unlock_walks_the_ladder():
     assert "Brewing unlocks at Level 1" in ladder.next_unlock(0)
     assert "Boss Inspection unlocks at Level 5" in ladder.next_unlock(4)
     assert ladder.next_unlock(99) == "Every station is unlocked"
-
-
-def test_customize_previews_but_cannot_confirm_without_a_credit(cafe):
-    interaction = customize(cafe, "tokyo")
-    sent = interaction.followup.send.call_args
-    assert "need 1 Customization Credit" in text(sent)
-    assert sent.kwargs["file"].filename == f"balance_{USER}.jpg"
-    assert confirm(interaction)[0].confirm.disabled
-    assert u_background(USER).get() is None
-
-
-def test_customize_only_spends_the_credit_on_confirm(cafe):
-    u_customization(USER).set({"credits": 2})
-    interaction = customize(cafe, "tokyo")
-    assert u_background(USER).get() is None
-    assert u_customization(USER).get()["credits"] == 2
-    confirm(interaction)
-    assert u_background(USER).get() == "tokyo"
-    assert u_customization(USER).get()["credits"] == 1
-    assert member(cafe)["background"] == "tokyo"
-
-
-def test_default_background_is_free(cafe):
-    u_customization(USER).set({"credits": 1})
-    u_background(USER).set("tokyo")
-    confirm(customize(cafe, BACKGROUND))
-    assert u_background(USER).get() is None
-    assert u_customization(USER).get()["credits"] == 1
 
 
 def test_every_page_is_its_header_then_its_cards(cafe):

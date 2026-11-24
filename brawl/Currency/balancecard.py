@@ -101,11 +101,13 @@ def ring(card, x, y, radius, tint):
     )
 
 
-def draw_header(place, member):
-    """Every page opens the same way: the place, then the wallet."""
-    color, scene, picture = PLACES[place]
-    card = Card(900, 92, member.get("scene") or scene)
-    art = Image.open(f"{ASSETS}bg/{member.get('scene') or scene}.jpg").convert("RGBA")
+def draw_header(place, member, sign=None):
+    """Every page opens the same way: the place, then the wallet.
+
+    A page outside /balance gives its own sign: color, scene and icon."""
+    color, scene, picture = sign or PLACES[place]
+    card = Card(900, 92, scene)
+    art = Image.open(f"{ASSETS}bg/{scene}.jpg").convert("RGBA")
     width, height = 900 * SCALE, 92 * SCALE
     art = art.resize((width, art.height * width // art.width))
     top = int((art.height - height) * 0.62)
@@ -368,10 +370,11 @@ def tile(card, x, y, w, picture, name, line, tint=MUTED, tag=None, on=True):
 def draw_held(member):
     """What the member opens or spends, one tile each."""
     card = Card(640, 128, PLACES["INVENTORY"][1])
+    wide = (608 - 8 * (len(HELD) - 1)) // len(HELD)
     for spot, (key, name, picture, command) in enumerate(HELD):
         count = member["held"].get(key) or 0
-        label = plural(count, name)
-        tile(card, 16 + spot * 154, 16, 146, picture, label, command, on=bool(count))
+        x = 16 + spot * (wide + 8)
+        tile(card, x, 16, wide, picture, plural(count, name), command, on=bool(count))
     return card.jpg()
 
 

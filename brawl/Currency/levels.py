@@ -14,7 +14,7 @@ from discord.ext import commands, tasks
 from firebase_admin import db
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from brawl.Currency.card import plain, render
+from brawl.Currency.card import BACKGROUND, plain, render
 from brawl.Currency.config import (
     LADDER,
     XP_BOOSTER_MULTIPLIER,
@@ -22,7 +22,6 @@ from brawl.Currency.config import (
     XP_PER_MESSAGE,
     XP_ULTRA_MULTIPLIER,
 )
-from brawl.Currency.home import background
 from brawl.Currency.ladder import lessons
 from brawl.Currency.panel import framed, notice
 from brawl.Currency.rewardcard import draw_level_up
@@ -233,7 +232,7 @@ class Leveling(commands.Cog):
                             for need, name, _ in LADDER.values()
                             if current_level < need <= new_level
                         ],
-                        "background": background(user_id),
+                        "background": BACKGROUND,
                     }
                     try:
                         await message.channel.send(

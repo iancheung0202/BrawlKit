@@ -4,10 +4,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.db import u_tag
 from brawl.Currency.helper import NO_EMOTE
-from brawl.Currency.home import background
 from brawl.Currency.panel import notice
 from brawl.Utility import api
 from brawl.Utility.playercard import (
@@ -255,7 +254,7 @@ async def show_profile(interaction, tag, owner=None, ephemeral=False):
         "art": art,
         "player": player,
         "brawlers": total,
-        "background": background(interaction.user.id),
+        "background": BACKGROUND,
     }
     view = ProfileView(interaction.user.id, profile, battles[:25])
     view.message = await interaction.followup.send(

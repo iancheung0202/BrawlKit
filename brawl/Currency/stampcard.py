@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from brawl.Currency import events, ledger, wallet
-from brawl.Currency.card import render
+from brawl.Currency.card import BACKGROUND, render
 from brawl.Currency.config import (
     LEGACY_STAMP_GOALS,
     STAMP_BOX_EVERY,
@@ -28,7 +28,6 @@ from brawl.Currency.helper import (
     get_current_date_key,
     get_current_month_key,
 )
-from brawl.Currency.home import background
 from brawl.Currency.panel import framed, notice
 from brawl.Currency.quests import order_tasks, update_quest
 from brawl.Currency.rewardcard import draw_redeemed
@@ -192,7 +191,7 @@ class StampCard(commands.Cog):
             "left": count - goal,
             "month": month.get("count", 0) + 1,
             "limit": STAMP_MONTHLY_LIMIT,
-            "background": background(user_id),
+            "background": BACKGROUND,
         }
         await interaction.response.send_message(
             **framed(
