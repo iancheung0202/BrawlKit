@@ -129,12 +129,12 @@ def test_every_page_is_its_header_then_its_cards(cafe):
     for place, cards in (
         ("COUNTER", 3),
         ("CHAT", 2),
-        ("INVENTORY", 2),
-        ("COMMUNITY", 2),
+        ("INVENTORY", 3),
+        ("COMMUNITY", 4),
     ):
         view, files = page(cafe, place)
         assert [file.filename for file in files] == [
-            f"balance_{USER}_{spot}.jpg" for spot in range(cards)
+            f"balance_{USER}_{place.lower()}_{spot}.jpg" for spot in range(cards)
         ]
         shown = [
             item.media.url
@@ -158,7 +158,8 @@ def test_inventory_shows_what_the_member_holds(cafe):
     interaction = cafe.interaction()
     held = asyncio.run(cafe.cogs["Balance"].inventory(interaction.user))
     assert held["held"]["star_drops"] == 3 and held["effects"] == []
-    assert balancecard.draw_inventory(held).read()
+    assert balancecard.draw_held(held).read()
+    assert balancecard.draw_effects(held).read()
 
 
 def test_chat_shows_the_cap_the_cup_and_the_boss(cafe):
@@ -189,6 +190,12 @@ def test_a_page_button_opens_its_page_for_its_owner_only(cafe):
     sent = owner.edit_original_response.call_args.kwargs
     assert len(sent["attachments"]) == 2
     assert isinstance(sent["view"], discord.ui.LayoutView)
+    # Only the page on screen answers the timeout.
+    view.message = sent["view"].message = AsyncMock()
+    asyncio.run(view.on_timeout())
+    assert not view.message.edit.called
+    asyncio.run(sent["view"].on_timeout())
+    assert sent["view"].message.edit.call_args.kwargs == {"view": sent["view"]}
 
 
 @pytest.mark.before_clock_in

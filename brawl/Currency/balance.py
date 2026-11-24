@@ -9,11 +9,14 @@ from brawl.Currency import quests as daily_order
 from brawl.Currency.bag import held
 from brawl.Currency.balancecard import (
     draw_chat,
-    draw_community,
     draw_counter,
+    draw_effects,
     draw_header,
-    draw_inventory,
+    draw_held,
+    draw_invites,
     draw_stamps,
+    draw_table,
+    draw_teams,
 )
 from brawl.Currency.card import BACKGROUND, render, roster
 from brawl.Currency.chat import chat_limit, chat_today
@@ -28,13 +31,14 @@ from brawl.Currency.db import (
 )
 from brawl.Currency.helper import (
     CALENDAR_EMOTE,
-    EFFECT_EMOTE,
+    CHAT_EMOTE,
+    COMMUNITY_EMOTE,
+    INVENTORY_EMOTE,
     MAIN_GUILD_ID,
     NO_EMOTE,
     OVERVIEW_EMOTE,
     SERVER_STORE,
     STORE_ITEMS,
-    TABLE_EMOTE,
     YES_EMOTE,
 )
 from brawl.Currency.home import background
@@ -52,9 +56,9 @@ from brawl.Utility.topic import approved_by
 # Each page of /balance: its place, the button's label and its emoji.
 PAGES = (
     ("COUNTER", "Counter", OVERVIEW_EMOTE),
-    ("CHAT", "Chat", "\N{SPEECH BALLOON}"),
-    ("INVENTORY", "Inventory", EFFECT_EMOTE),
-    ("COMMUNITY", "Community", TABLE_EMOTE),
+    ("CHAT", "Chat", CHAT_EMOTE),
+    ("INVENTORY", "Inventory", INVENTORY_EMOTE),
+    ("COMMUNITY", "Community", COMMUNITY_EMOTE),
 )
 
 
@@ -73,6 +77,8 @@ class BalanceView(discord.ui.LayoutView):
     def __init__(self, cog, user, place, files, extras=()):
         super().__init__(timeout=180)
         self.cog, self.user, self.message = cog, user, None
+        # The page on screen, shared by every page opened on this message.
+        self.shown = {"view": self}
         container = discord.ui.Container(
             *(
                 discord.ui.MediaGallery(
@@ -108,13 +114,16 @@ class BalanceView(discord.ui.LayoutView):
                 )
             await interaction.response.defer()
             view, files = await self.cog.page(self.user, interaction.guild, place)
-            view.message = self.message
+            view.message, view.shown = self.message, self.shown
+            self.shown["view"] = view
             self.stop()
             await interaction.edit_original_response(view=view, attachments=files)
 
         return callback
 
     async def on_timeout(self) -> None:
+        if self.shown["view"] is not self:
+            return
         for child in self.walk_children():
             if isinstance(child, discord.ui.Select) or (
                 isinstance(child, discord.ui.Button) and not child.url
@@ -285,9 +294,15 @@ class Balance(commands.Cog):
         elif place == "CHAT":
             cards = [(draw_chat, await self.chat(user, guild))]
         elif place == "INVENTORY":
-            cards = [(draw_inventory, await self.inventory(user))]
+            held = await self.inventory(user)
+            cards = [(draw_held, held), (draw_effects, held)]
         else:
-            cards = [(draw_community, await self.community(user, guild))]
+            social = await self.community(user, guild)
+            cards = [
+                (draw_table, social["table"]),
+                (draw_invites, social["invites"]),
+                (draw_teams, social),
+            ]
             months = sorted(invited_by(guild.id, user.id), reverse=True)[:25]
             if months:
                 from brawl.Currency.invitetracker import MonthSelect
@@ -296,7 +311,7 @@ class Balance(commands.Cog):
             else:
                 extras.append(discord.ui.Button(label="How to invite", url=INVITE_HELP))
         files = [
-            await render(draw, *args, name=f"balance_{user.id}_{spot}")
+            await render(draw, *args, name=f"balance_{user.id}_{place.lower()}_{spot}")
             for spot, (draw, *args) in enumerate([(draw_header, place, member), *cards])
         ]
         return BalanceView(self, user, place, files, extras), files

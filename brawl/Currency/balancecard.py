@@ -365,8 +365,18 @@ def tile(card, x, y, w, picture, name, line, tint=MUTED, tag=None, on=True):
         card.tag(x + w + 2, y - 10, *tag, right=True)
 
 
-def draw_inventory(member):
-    """What the member opens or spends, then their effect items: running, then in the bag."""
+def draw_held(member):
+    """What the member opens or spends, one tile each."""
+    card = Card(640, 128, PLACES["INVENTORY"][1])
+    for spot, (key, name, picture, command) in enumerate(HELD):
+        count = member["held"].get(key) or 0
+        label = plural(count, name)
+        tile(card, 16 + spot * 154, 16, 146, picture, label, command, on=bool(count))
+    return card.jpg()
+
+
+def draw_effects(member):
+    """The member's effect items: the ones running, then the ones in the bag."""
     items = [
         (
             effect["item"],
@@ -377,13 +387,9 @@ def draw_inventory(member):
         for effect in member["effects"]
     ] + [(item, "/use", MUTED, ("IN BAG", GOLD, BLACK)) for item in member["bag"]]
     rows = -(-len(items) // 4)
-    top = 154
+    top = 24
     tall = 28 + rows * 112 if items else 64
     card = Card(640, top + tall + 16, PLACES["INVENTORY"][1])
-    for spot, (key, name, picture, command) in enumerate(HELD):
-        count = member["held"].get(key) or 0
-        label = plural(count, name)
-        tile(card, 16 + spot * 154, 24, 146, picture, label, command, on=bool(count))
     card.panel(16, top, 608, tall)
     card.tag(32, top - 12, "EFFECT ITEMS")
     card.note(top, "Find more items in /shop")
@@ -398,12 +404,13 @@ def draw_inventory(member):
     return card.jpg()
 
 
-def draw_table(card, table):
-    """The member's table in a panel at the top of the card; returns where it ends."""
+def draw_table(table):
+    """The member's table, or how to get one."""
     seats = (table or {}).get("members", ())
     rows = -(-len(seats) // 3) if table else 1
     short = bool(table) and len(seats) < TABLE_SEATS_NEEDED
     tall = 212 + rows * 38 + 42 * short
+    card = Card(640, 24 + tall + 16, PLACES["COMMUNITY"][1])
     color = rgb(table["color"]) if table else GOLD
     card.panel(16, 24, 608, tall)
     card.tag(32, 12, "TABLE", color, ink(color))
@@ -415,7 +422,7 @@ def draw_table(card, table):
         top_prize(card, 196)
         line = "Join one with /table seat, or start one with /table reserve"
         card.text(36, 232, line, 14, GOLD, "la", 2)
-        return 24 + tall
+        return card.jpg()
     name = card.fit(plain(table["name"]), 24, 240)
     card.text(36, 40, name, 24)
     seated = f"{len(seats)} / {TABLE_SEATS} seated"
@@ -443,11 +450,13 @@ def draw_table(card, table):
         if tag:
             card.text(x + 42 + card.measure(who, 15), top + 10, tag, 11, color, "la", 2)
         card.text(x + 176, top + 8, f"{share:,}", 14, GOLD if share else GREY, "ra", 2)
-    return 24 + tall
+    return card.jpg()
 
 
-def draw_invites(card, y, invites):
-    """This month's invites and the three referral steps, in a panel at y."""
+def draw_invites(invites):
+    """This month's invites and the three referral steps."""
+    y = 24
+    card = Card(640, y + 246 + 16, PLACES["COMMUNITY"][1])
     card.panel(16, y, 608, 246)
     card.tag(32, y - 12, "INVITES")
     card.icon("kit/icon_inbox", 36, y + 16, 28)
@@ -455,14 +464,11 @@ def draw_invites(card, y, invites):
     card.text(80, y + 12, count, 26, GOLD)
     unit = "invite" if invites["valid"] == 1 else "invites"
     card.text(88 + card.measure(count, 26), y + 22, unit, 15, WHITE, "la", 2)
+    card.text(604, y + 10, invites["month"], 16, WHITE, "ra", 2)
     left = f"{invites['left']} left the server"
-    card.text(604, y + 22, left, 13, RED if invites["left"] else MUTED, "ra", 2)
+    card.text(604, y + 32, left, 13, RED if invites["left"] else MUTED, "ra", 2)
     x = 592 - card.measure(left, 13)
-    joined = f"{invites['total']} joined"
-    card.text(x, y + 22, joined, 13, MUTED, "ra", 2)
-    card.text(
-        x - 12 - card.measure(joined, 13), y + 21, invites["month"], 14, WHITE, "ra", 2
-    )
+    card.text(x, y + 32, f"{invites['total']} joined", 13, MUTED, "ra", 2)
     done = invites["done"]
     goal = next((key for key, *_ in REFERRAL_STEPS if not done.get(key)), None)
     for row, (key, name, need, picture, reward) in enumerate(REFERRAL_STEPS):
@@ -488,34 +494,31 @@ def draw_invites(card, y, invites):
     card.text(62, foot, left, 13, RED if goal else GREEN, "la", 2)
     reset = "Starts over on the 1st, so you can earn these again."
     card.text(72 + card.measure(left, 13), foot, reset, 13, MUTED, "la", 2)
+    return card.jpg()
 
 
-def draw_community(member):
-    """The member's table, their invites, and what Team Finder and Topics paid."""
-    table = member["table"]
-    seats = (table or {}).get("members", ())
-    rows = -(-len(seats) // 3) if table else 1
-    short = bool(table) and len(seats) < TABLE_SEATS_NEEDED
-    height = 24 + 212 + rows * 38 + 42 * short + 22 + 246 + 22 + 62 + 16
-    card = Card(640, height, PLACES["COMMUNITY"][1])
-    y = draw_table(card, table) + 22
-    draw_invites(card, y, member["invites"])
-    y += 268
+def figure(card, x, y, picture, count, unit):
+    """A panel's main number: its picture, the count, then what is counted."""
+    card.icon(picture, x, y + 17, 28)
+    card.text(x + 40, y + 14, count, 24, GOLD)
+    card.text(x + 48 + card.measure(count, 24), y + 23, unit, 15, WHITE, "la", 2)
+
+
+def draw_teams(member):
+    """The member's rep and approved topics, and what each one pays."""
+    y = 24
+    card = Card(640, y + 62 + 16, PLACES["COMMUNITY"][1])
     card.panel(16, y, 300, 62)
     card.tag(32, y - 12, "TEAM FINDER")
-    x = card.note(y, f"{member['rep']:,} rep", 296)
-    card.icon("kit/icon_like", x - 22, y - 19, 16)
-    paid = min(member["rep_paid"], REP_PAID_DAILY)
-    card.bar(
-        36, y + 20, 110, 22, paid / REP_PAID_DAILY, GOLD, f"{paid} / {REP_PAID_DAILY}"
-    )
-    card.text(154, y + 23, "today", 13, MUTED, "la", 2)
-    card.text(296, y + 23, "each rep", 13, MUTED, "ra", 2)
+    figure(card, 36, y, "kit/icon_like", f"{member['rep']:,}", "rep")
+    card.text(296, y + 13, "each rep", 13, MUTED, "ra", 2)
     x = 288 - card.measure("each rep", 13)
-    pay(card, x, y + 22, [("kit/token", f"+{REP_TOKENS}")], 15)
+    pay(card, x, y + 12, [("kit/token", f"+{REP_TOKENS}")], 15)
+    paid = min(member["rep_paid"], REP_PAID_DAILY)
+    card.text(296, y + 36, f"{paid} of {REP_PAID_DAILY} paid today", 12, MUTED, "ra", 2)
     card.panel(324, y, 300, 62)
     card.tag(340, y - 12, "TOPICS")
-    card.text(344, y + 22, f"{member['topics']:,} approved", 17, WHITE, "la", 2)
+    figure(card, 344, y, "kit/icon_chat", f"{member['topics']:,}", "approved")
     card.text(604, y + 23, "each topic", 13, MUTED, "ra", 2)
     x = 596 - card.measure("each topic", 13)
     pay(card, x, y + 22, [("kit/bean", f"+{TOPIC_BEANS}")], 15)

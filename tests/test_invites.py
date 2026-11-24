@@ -39,8 +39,9 @@ def test_the_summary_reads_this_months_counts_and_steps(cafe):
 
 
 def community(summary):
-    member = {"table": None, "invites": summary, "rep": 0, "rep_paid": 0, "topics": 0}
-    return balancecard.draw_community(member)
+    assert balancecard.draw_table(None).read()
+    assert balancecard.draw_teams({"rep": 0, "rep_paid": 0, "topics": 0}).read()
+    return balancecard.draw_invites(summary)
 
 
 def test_a_member_with_no_invites_still_gets_a_card(cafe):
@@ -133,8 +134,5 @@ def test_the_invites_button_fits_a_month_picker_on_home(cafe):
         return await cog.page(interaction.user, interaction.guild, "COMMUNITY")
 
     view, files = asyncio.run(open_page())
-    assert [file.filename for file in files] == [
-        f"balance_{ME}_0.jpg",
-        f"balance_{ME}_1.jpg",
-    ]
+    assert len(files) == 4
     assert any(type(item).__name__ == "MonthSelect" for item in view.walk_children())
