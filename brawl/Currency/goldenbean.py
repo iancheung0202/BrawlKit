@@ -226,6 +226,8 @@ class GoldenBean(commands.Cog):
         self.emoji = FALLBACK
         self.moved = asyncio.Event()
         self.moved.set()
+        if self.holder is not None and self.mark is None:
+            self.drop(self.holder)  # its message was deleted while the bot was off
         self.tasks = [
             bot.loop.create_task(self.show_loop()),
             bot.loop.create_task(self.minute_loop()),
@@ -276,9 +278,6 @@ class GoldenBean(commands.Cog):
                 author != self.last and self.effortful(message) and self.give(message)
             )
         if author == self.holder:
-            if self.mark is None:  # the marked message was deleted
-                self.mark = (message.channel.id, message.id)
-                self.moved.set()
             return False
         target = replied_to(message)
         if target is None or target == author or not self.effortful(message):
@@ -495,16 +494,18 @@ class GoldenBean(commands.Cog):
             self.posted = today()
             self.ref.update({"posted": self.posted})
             await self.board()
-        holder = self.holder
-        if holder is None:
-            if self.floor and not self.floored:
-                self.floored = True
-                channel = self.bot.get_channel(MAIN_CHAT_CHANNELS[0])
-                if channel:
-                    await self.chat(channel, draw_floor, None)
-            return
-        if now() - self.since > HOLD_SECONDS:
-            self.drop(holder)
+        if self.holder is None:
+            await self.fallen()
+        elif now() - self.since > HOLD_SECONDS:
+            self.drop(self.holder)
+
+    async def fallen(self):
+        """Posts the floor strip, once for each fall."""
+        if self.floor and not self.floored:
+            self.floored = True
+            channel = self.bot.get_channel(MAIN_CHAT_CHANNELS[0])
+            if channel:
+                await self.chat(channel, draw_floor, None)
 
     async def minute_loop(self):
         await self.bot.wait_until_ready()
@@ -588,16 +589,17 @@ class GoldenBean(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload):
-        self.deleted({payload.message_id})
+        await self.deleted({payload.message_id})
 
     @commands.Cog.listener()
     async def on_raw_bulk_message_delete(self, payload):
-        self.deleted(payload.message_ids)
+        await self.deleted(payload.message_ids)
 
-    def deleted(self, message_ids):
-        if self.mark and self.mark[1] in message_ids:
-            self.mark = None
-            self.moved.set()
+    async def deleted(self, message_ids):
+        """The message carrying the bean is gone, so the bean falls to the floor."""
+        if self.running and self.mark and self.mark[1] in message_ids:
+            self.drop(self.holder)
+            await self.fallen()
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):

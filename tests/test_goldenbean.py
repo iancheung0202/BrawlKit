@@ -253,14 +253,34 @@ def test_nobody_played(cafe, event, clock):
     assert event.winner == 0 and posts(cafe).await_count == 0
 
 
-def test_a_deleted_message_or_a_member_leaving(event):
+def test_deleting_the_message_with_the_bean_drops_it_on_the_floor(cafe, event, clock):
     event.offer(said(A, 1))
     asyncio.run(event.show())
-    event.deleted({1})
-    assert event.holder == A and event.mark is None
+    clock[0] += 120
+    asyncio.run(event.deleted({7}))
+    assert event.holder == A  # another message of theirs
+    asyncio.run(event.deleted({1}))
+    asyncio.run(event.minute())
+    assert event.holder is None and event.mark is None
+    assert event.tickets(A) == 2
+    assert posts(cafe).await_count == 1  # the floor strip, right away and once
+    assert not event.offer(said(A, 2))  # whoever let it fall cannot pick it up
+    assert event.offer(said(B, 3)) and event.holder == B
+
+
+def test_a_holder_saved_without_a_message_drops_it_at_the_start(cafe, event):
+    event.offer(said(A, 1))
+    asyncio.run(event.show())
+    event.ref.update({"mark": None})
+    again = start(cafe)
+    assert again.holder is None and again.last == A and again.floor
+    asyncio.run(again.minute())
+    assert posts(cafe).await_count == 1
+
+
+def test_a_member_leaving(event):
     event.offer(said(A, 2))
     asyncio.run(event.show())
-    assert event.mark == (MAIN, 2) and event.reactions[-1] == ("add", 2)
     asyncio.run(event.on_member_remove(MagicMock(id=A)))
     asyncio.run(event.show())
     assert event.holder is None and event.reactions[-1] == ("remove", 2)
