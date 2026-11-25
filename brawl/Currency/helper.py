@@ -240,6 +240,7 @@ AUTORESPONSE_MAP = {
     1287476216789471304: "https://tenor.com/view/snorlax-good-morning-gif-23873480",
     946564972966719540: "https://tenor.com/view/psyduck-pokémon-laptop-on-fire-duck-gif-11352596389714363119",
     947655504270852199: "https://tenor.com/view/kenji-brawl-stars-brawl-stars-kenji-brawl-stars-gif-15253850449038295408",
+    1277673685536210949: "https://i.imgur.com/Ni76XUS.gif",
 }
 
 # Gambling Limits
