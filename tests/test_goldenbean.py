@@ -278,6 +278,18 @@ def test_a_holder_saved_without_a_message_drops_it_at_the_start(cafe, event):
     assert posts(cafe).await_count == 1
 
 
+def test_a_member_who_left_is_off_the_board_and_out_of_the_draw(cafe, event):
+    event.seconds = {A: 1800, B: 720}
+    guild = cafe.bot.get_guild.return_value = MagicMock(query_members=AsyncMock())
+    guild.get_member.side_effect = lambda user_id: None if user_id == B else MagicMock()
+    board = asyncio.run(event.standing(A))
+    assert board["players"] == 1 and len(board["rows"]) == 1
+    assert board["you"]["place"] == 1
+    assert list(asyncio.run(event.counted())) == [A]
+    guild.query_members.side_effect = RuntimeError  # Discord cannot be asked
+    assert set(asyncio.run(event.counted())) == {A, B}
+
+
 def test_a_member_leaving(event):
     event.offer(said(A, 2))
     asyncio.run(event.show())

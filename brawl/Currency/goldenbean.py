@@ -388,15 +388,33 @@ class GoldenBean(commands.Cog):
         names = [member.display_name if member else "Member" for member in members]
         return list(zip(names, await faces(members)))
 
+    async def here(self, ids):
+        """Those of these members still in the server; all of them if it cannot be asked."""
+        guild = self.bot.get_guild(MAIN_GUILD_ID)
+        if guild is None:
+            return set(ids)
+        missing = [user_id for user_id in ids if guild.get_member(user_id) is None]
+        try:
+            for start in range(0, len(missing), 100):
+                await guild.query_members(
+                    user_ids=missing[start : start + 100], cache=True
+                )
+        except Exception:
+            return set(ids)
+        return {user_id for user_id in ids if guild.get_member(user_id)}
+
     async def counted(self):
-        """Tickets of every member who has one and is high enough a level."""
+        """Tickets of every member who has one, is high enough a level and is
+        still in the server."""
         ids = {*self.seconds, *([self.holder] if self.holder else [])}
         have = {user_id: self.tickets(user_id) for user_id in ids}
-        return {
+        have = {
             user_id: tickets
             for user_id, tickets in have.items()
             if tickets and await self.levelled_up(user_id)
         }
+        here = await self.here(list(have))
+        return {user_id: have[user_id] for user_id in have if user_id in here}
 
     async def standing(self, viewer=None):
         """The top of the board, and where the member who asked stands."""
