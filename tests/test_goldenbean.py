@@ -51,11 +51,12 @@ def event(cafe, clock):
 
 def start(cafe):
     bean = goldenbean.GoldenBean(cafe.bot)
-    bean.reactions = []
+    bean.reactions, bean.refused = [], set()
 
     async def react(spot, add):
         if spot:
             bean.reactions.append(("add" if add else "remove", spot[1]))
+        return not spot or spot[1] not in bean.refused
 
     bean.react = react
     return bean
@@ -264,8 +265,141 @@ def test_deleting_the_message_with_the_bean_drops_it_on_the_floor(cafe, event, c
     assert event.holder is None and event.mark is None
     assert event.tickets(A) == 2
     assert posts(cafe).await_count == 1  # the floor strip, right away and once
-    assert not event.offer(said(A, 2))  # whoever let it fall cannot pick it up
-    assert event.offer(said(B, 3)) and event.holder == B
+    assert event.offer(said(A, 2)) and event.holder == A  # anyone, them included
+
+
+def gone(event, message_id, user=None, emoji=None):
+    """A reaction event for one message, the bot's bean unless told otherwise."""
+    return MagicMock(
+        message_id=message_id,
+        user_id=event.bot.user.id if user is None else user,
+        emoji=event.emoji if emoji is None else emoji,
+    )
+
+
+@pytest.mark.parametrize("listener", ["remove", "clear", "clear_emoji"], ids=str)
+def test_taking_the_bean_reaction_off_drops_it_on_the_floor(cafe, event, listener):
+    heard = getattr(event, f"on_raw_reaction_{listener}")
+    event.offer(said(A, 1))
+    asyncio.run(event.show())
+    asyncio.run(heard(gone(event, 7)))  # another message
+    if listener != "clear":
+        asyncio.run(heard(gone(event, 1, emoji="\U0001f44d")))  # another emoji
+    asyncio.run(event.on_raw_reaction_remove(gone(event, 1, user=B)))  # not ours
+    assert event.holder == A
+    asyncio.run(heard(gone(event, 1)))
+    assert event.holder is None and event.floor
+    assert posts(cafe).await_count == 1
+    assert event.offer(said(A, 2)) and event.holder == A
+
+
+MINUTE = 60
+
+
+def slipped(event, clock, minutes, message_id):
+    """The holder's message goes after this many minutes of holding."""
+    clock[0] += minutes * MINUTE
+    asyncio.run(event.deleted({message_id}))
+
+
+def test_picking_it_back_up_goes_on_with_the_same_hold(cafe, event, clock):
+    event.offer(said(A, 1))
+    asyncio.run(event.show())
+    slipped(event, clock, 20, 1)
+    clock[0] += 5 * MINUTE  # on the floor: no tickets, no hold time
+    assert event.offer(said(A, 2)) and event.tickets(A) == 20
+    asyncio.run(event.show())
+    slipped(event, clock, 4, 2)
+    assert event.offer(said(A, 3)) and event.tickets(A) == 24
+    clock[0] += 6 * MINUTE + 1
+    asyncio.run(event.minute())  # 30 minutes in all: the hold ran out
+    assert event.holder is None and event.last == A and event.tickets(A) == 30
+    clock[0] += 60 * MINUTE
+    assert event.tickets(A) == 30 and not event.offer(said(A, 4))
+    assert event.offer(said(B, 5))
+
+
+def test_a_slip_at_the_hold_limit_is_a_hold_that_ran_out(cafe, event, clock):
+    event.offer(said(A, 1))
+    asyncio.run(event.show())
+    slipped(event, clock, 30, 1)
+    assert event.last == A and event.fell is None and event.tickets(A) == 30
+    assert not event.offer(said(A, 2))
+
+
+def test_someone_else_picking_it_up_starts_a_new_hold(cafe, event, clock):
+    event.offer(said(A, 1))
+    asyncio.run(event.show())
+    slipped(event, clock, 20, 1)
+    assert event.offer(said(B, 2)) and event.carried == 0 and event.fell is None
+    clock[0] += 29 * MINUTE
+    asyncio.run(event.minute())
+    assert event.holder == B and event.tickets(B) == 29
+    assert event.offer(said(A, 3, to=B)) and event.carried == 0  # a steal is new
+
+
+def test_a_slip_survives_a_restart(cafe, event, clock):
+    event.offer(said(A, 1))
+    asyncio.run(event.show())
+    slipped(event, clock, 20, 1)
+    asyncio.run(event.show())
+    again = start(cafe)
+    assert again.holder is None and again.fell == (A, 20 * MINUTE)
+    assert again.offer(said(A, 2)) and again.carried == 20 * MINUTE
+    asyncio.run(again.show())
+    clock[0] += 9 * MINUTE
+    later = start(cafe)
+    assert later.holder == A and later.carried == 20 * MINUTE
+    clock[0] += MINUTE + 1
+    asyncio.run(later.minute())
+    assert later.holder is None and later.last == A and later.tickets(A) == 30
+
+
+def test_a_message_the_reaction_cannot_go_on_drops_the_bean(cafe, event, clock):
+    event.refused.add(1)  # deleted at once, or its author blocked the bot
+    event.offer(said(A, 1))
+    asyncio.run(event.show())
+    assert event.holder is None and event.fell == (A, 0)
+    assert posts(cafe).await_count == 1
+
+
+def marked(event, found):
+    """The message with the bean as Discord has it now, or the error it gives."""
+    fetch = AsyncMock(side_effect=[found])
+    event.bot.get_partial_messageable.return_value.fetch_message = fetch
+
+
+def reaction(event, mine):
+    return MagicMock(me=mine, emoji=event.emoji)
+
+
+def test_a_restart_finds_a_bean_that_went_while_the_bot_was_off(cafe, event):
+    gone_ = discord.NotFound(MagicMock(status=404), "gone")
+    down = discord.HTTPException(MagicMock(status=500), "down")
+    for number, found, kept in (
+        (1, MagicMock(reactions=[reaction(event, True)]), True),
+        (2, down, True),  # Discord cannot say, so nothing is taken away
+        (3, MagicMock(reactions=[reaction(event, False)]), False),
+        (4, MagicMock(reactions=[]), False),
+        (5, gone_, False),
+    ):
+        event.offer(said(A, number))
+        asyncio.run(event.show())
+        marked(event, found)
+        asyncio.run(event.check())
+        assert (event.holder == A) is kept, number
+        if kept:
+            asyncio.run(event.deleted({number}))
+
+
+def test_the_bean_moving_on_does_not_drop_it(cafe, event, clock):
+    event.offer(said(A, 1))
+    asyncio.run(event.show())
+    clock[0] += 90
+    event.offer(said(B, 2, to=A))
+    asyncio.run(event.show())
+    asyncio.run(event.on_raw_reaction_remove(gone(event, 1)))  # the bot's own move
+    assert event.holder == B and posts(cafe).await_count == 0
 
 
 def test_a_holder_saved_without_a_message_drops_it_at_the_start(cafe, event):
@@ -273,7 +407,7 @@ def test_a_holder_saved_without_a_message_drops_it_at_the_start(cafe, event):
     asyncio.run(event.show())
     event.ref.update({"mark": None})
     again = start(cafe)
-    assert again.holder is None and again.last == A and again.floor
+    assert again.holder is None and again.last is None and again.floor
     asyncio.run(again.minute())
     assert posts(cafe).await_count == 1
 

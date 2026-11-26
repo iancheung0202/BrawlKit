@@ -210,6 +210,10 @@ class GoldenBean(commands.Cog):
         self.last = saved.get("last")  # who let it fall; they cannot pick it up
         self.took = saved.get("took", 0)  # the message that took it; later ones win
         self.since = saved.get("since", 0)
+        # Seconds of the hold limit used before `since`: a member who picks the
+        # bean back up after it slipped goes on with the same clock.
+        self.carried = saved.get("carried", 0)
+        self.fell = self.spot(saved.get("fell"))  # who it slipped from, and how far in
         self.mark = self.spot(saved.get("mark"))  # where the reaction belongs
         self.shown = self.spot(saved.get("shown"))  # where the reaction is
         self.floor = saved.get("floor", True)  # the floor strip is still to post
@@ -227,7 +231,7 @@ class GoldenBean(commands.Cog):
         self.moved = asyncio.Event()
         self.moved.set()
         if self.holder is not None and self.mark is None:
-            self.drop(self.holder)  # its message was deleted while the bot was off
+            self.slip()  # its message was deleted while the bot was off
         self.tasks = [
             bot.loop.create_task(self.show_loop()),
             bot.loop.create_task(self.minute_loop()),
@@ -291,13 +295,17 @@ class GoldenBean(commands.Cog):
     def bank(self):
         """Adds the hold that just ended to its holder's time, to the second."""
         if self.holder is not None:
-            held = min(now() - self.since, HOLD_SECONDS)
+            held = self.going()
             self.seconds[self.holder] = self.seconds.get(self.holder, 0) + held
             self.unsaved.add(self.holder)
 
+    def going(self):
+        """Seconds of the hold in progress that count, up to the hold limit."""
+        return max(0, min(now() - self.since, HOLD_SECONDS - self.carried))
+
     def held(self, user_id):
         """Seconds this member has held the bean, the hold in progress included."""
-        going = min(now() - self.since, HOLD_SECONDS) * (user_id == self.holder)
+        going = self.going() if user_id == self.holder else 0
         return self.seconds.get(user_id, 0) + going
 
     def tickets(self, user_id):
@@ -305,6 +313,8 @@ class GoldenBean(commands.Cog):
 
     def give(self, message):
         self.bank()
+        again = self.fell and self.fell[0] == message.author.id
+        self.carried, self.fell = (self.fell[1] if again else 0), None
         self.holder, self.member = message.author.id, message.author
         self.took, self.since, self.last = message.id, now(), None
         self.mark = (message.channel.id, message.id)
@@ -322,7 +332,17 @@ class GoldenBean(commands.Cog):
         self.bank()
         self.holder, self.member, self.mark = None, None, None
         self.last, self.floor, self.floored = last, True, False
+        self.carried, self.fell = 0, None
         self.moved.set()
+
+    def slip(self):
+        """The bean falls without its hold running out. Anyone can pick it up;
+        its holder can too, but only for what was left of their hold."""
+        holder, used = self.holder, self.carried + self.going()
+        if used >= HOLD_SECONDS:
+            return self.drop(holder)
+        self.drop()
+        self.fell = (holder, used)
 
     async def levelled_up(self, user_id):
         if user_id not in self.levelled:
@@ -514,7 +534,7 @@ class GoldenBean(commands.Cog):
             await self.board()
         if self.holder is None:
             await self.fallen()
-        elif now() - self.since > HOLD_SECONDS:
+        elif now() - self.since > HOLD_SECONDS - self.carried:
             self.drop(self.holder)
 
     async def fallen(self):
@@ -535,8 +555,10 @@ class GoldenBean(commands.Cog):
             await asyncio.sleep(60)
 
     async def react(self, spot, add):
+        """Whether the reaction could go on: not when the message is gone or
+        its author has blocked the bot."""
         if not spot:
-            return
+            return True
         channel = self.bot.get_partial_messageable(spot[0])
         message = channel.get_partial_message(spot[1])
         try:
@@ -544,8 +566,27 @@ class GoldenBean(commands.Cog):
                 await message.add_reaction(self.emoji)
             else:
                 await message.remove_reaction(self.emoji, self.bot.user)
+        except (discord.NotFound, discord.Forbidden):
+            return False
         except discord.HTTPException:
-            pass  # the message is gone
+            pass
+        return True
+
+    async def check(self):
+        """After a restart: the bean falls if its message or its reaction went
+        away while the bot was off."""
+        spot = self.mark
+        if not spot or spot != self.shown:
+            return
+        channel = self.bot.get_partial_messageable(spot[0])
+        try:
+            message = await channel.fetch_message(spot[1])
+        except discord.NotFound:
+            return await self.deleted({spot[1]})
+        except discord.HTTPException:
+            return
+        if not any(r.me and self.ours(r.emoji) for r in message.reactions):
+            await self.deleted({spot[1]})
 
     async def find_emoji(self):
         try:
@@ -571,6 +612,8 @@ class GoldenBean(commands.Cog):
                 "last": self.last,
                 "took": self.took,
                 "since": self.since,
+                "carried": self.carried,
+                "fell": self.fell,
                 "mark": want,
                 "shown": self.shown,
                 "floor": self.floor,
@@ -579,13 +622,19 @@ class GoldenBean(commands.Cog):
         if want == self.shown:
             return
         await self.react(self.shown, False)
-        await self.react(want, True)
+        shown = await self.react(want, True)
         self.shown = want
         self.ref.update({"shown": want})
+        if not shown and want:
+            await self.deleted({want[1]})
 
     async def show_loop(self):
         await self.bot.wait_until_ready()
         self.emoji = await self.find_emoji()
+        try:
+            await self.check()
+        except Exception as e:
+            print(f"Failed to check the Golden Bean: {e}")
         while not self.bot.is_closed():
             await self.moved.wait()
             self.moved.clear()
@@ -613,10 +662,28 @@ class GoldenBean(commands.Cog):
     async def on_raw_bulk_message_delete(self, payload):
         await self.deleted(payload.message_ids)
 
+    @commands.Cog.listener()
+    async def on_raw_reaction_remove(self, payload):
+        if payload.user_id == self.bot.user.id and self.ours(payload.emoji):
+            await self.deleted({payload.message_id})
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_clear(self, payload):
+        await self.deleted({payload.message_id})
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_clear_emoji(self, payload):
+        if self.ours(payload.emoji):
+            await self.deleted({payload.message_id})
+
+    def ours(self, emoji):
+        return str(emoji) == str(self.emoji)
+
     async def deleted(self, message_ids):
-        """The message carrying the bean is gone, so the bean falls to the floor."""
+        """The message carrying the bean, or the bean reaction on it, is gone,
+        so the bean falls to the floor."""
         if self.running and self.mark and self.mark[1] in message_ids:
-            self.drop(self.holder)
+            self.slip()
             await self.fallen()
 
     @commands.Cog.listener()
@@ -630,7 +697,7 @@ class GoldenBean(commands.Cog):
         if (
             payload.user_id == self.bot.user.id
             or payload.channel_id not in MAIN_CHAT_CHANNELS
-            or str(payload.emoji) != str(self.emoji)
+            or not self.ours(payload.emoji)
         ):
             return
         channel = self.bot.get_partial_messageable(payload.channel_id)
