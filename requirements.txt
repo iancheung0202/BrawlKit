@@ -9,3 +9,4 @@ emoji==2.14.1
 psutil==7.0.0
 python-dotenv==1.0.0
 groq==0.31.1
+qrcode==8.2
