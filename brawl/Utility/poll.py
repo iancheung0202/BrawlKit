@@ -147,7 +147,9 @@ def review_embed(plan):
         embed.description += f", asked by <@{plan['user']}>"
     answers = plan.get("answers")
     if answers:
-        listed = "\n".join(f"{spot}. {answer}" for spot, answer in enumerate(answers, 1))
+        listed = "\n".join(
+            f"{spot}. {answer}" for spot, answer in enumerate(answers, 1)
+        )
     elif plan.get("tried"):
         listed = "-# None. Add them with Edit, or it posts as an open question."
     else:
@@ -246,7 +248,9 @@ class ReviewView(View):
             await interaction.response.edit_message(view=None)
             return
         text, user = pick(avoid=[plan["text"]])
-        plan = {key: plan[key] for key in ("day", "at", "review", "first") if key in plan}
+        plan = {
+            key: plan[key] for key in ("day", "at", "review", "first") if key in plan
+        }
         plan.update(text=text, user=user)
         db.reference(ROOT).child("next").set(plan)
         await interaction.response.edit_message(embed=review_embed(plan))

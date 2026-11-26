@@ -316,6 +316,10 @@ def test_devin_answers_are_cleaned(polls):
             '"answers": ["Bull", "bull", 7, "", "Frank"], "checked": "wiki"}',
         },
     ]
-    assert poll.written(messages, "ab") == ("Best tank?", ["Bull", "7", "Frank"], "wiki")
+    assert poll.written(messages, "ab") == (
+        "Best tank?",
+        ["Bull", "7", "Frank"],
+        "wiki",
+    )
     assert poll.written(messages, "zz") is None
     assert poll.written([{"source": "devin", "message": '{"id": "ab"}'}], "ab") is None
