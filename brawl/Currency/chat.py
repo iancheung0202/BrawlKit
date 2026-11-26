@@ -311,6 +311,24 @@ class ChatRewardSystem:
             print(f"Failed to send bean reward message: {e}")
 
 
+def effortful(bot, message):
+    """Whether a message passes the chat Beans filter, asked from outside chat."""
+    cafe = bot.get_cog("CurrencySystem")
+    if cafe is None:
+        return len(message.content.strip()) >= 5
+    chat, author = cafe.chat_system, message.author.id
+    # Chat Beans may have seen this message first and kept it as the
+    # member's last one, which would make it look like a repeat of itself.
+    last = chat.last_messages.get(author)
+    if last == message.content.strip():
+        chat.last_messages[author] = ""
+    try:
+        return chat.is_effortful_message(message.content, author)[0]
+    finally:
+        if last is not None:
+            chat.last_messages[author] = last
+
+
 def paid(order):
     return {
         "beans": order.beans,

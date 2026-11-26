@@ -120,6 +120,7 @@ ORDER_STATION_TASKS = 2
 ORDER_TASK_LEVELS = {
     "brew_start": 1,
     "brew_sells": 1,
+    "topic_polls": 1,
     "shop_purchases": 2,
     "boss_inspections": 5,
     "thermometer_bonuses": 6,
@@ -132,6 +133,7 @@ ORDER_LABELS = {
     "daily_checkins": "Clock in",
     "brew_start": "Start a brew",
     "brew_sells": "Sell a brew",
+    "topic_polls": "Answer today's poll",
     "shop_purchases": "Buy from the shop",
     "boss_inspections": "Join a boss inspection",
     "thermometer_bonuses": "Get a thermometer drop",

@@ -17,7 +17,7 @@ BRAWL_TOOLS_HEADERS = {"Accept": "application/json"}
 BRAWLERS = 112
 BRAWLERS_FOR = 6 * 3600
 IMAGES = {}
-released = {"count": BRAWLERS, "at": 0}
+released = {"count": BRAWLERS, "names": [], "at": 0}
 # Game modes by their id, used until today's events have been read once.
 MODES = {
     48000000: "Gem Grab",
@@ -73,7 +73,16 @@ async def brawler_count() -> int:
         data = await fetch(f"{BRAWLTOOLS}/brawlers", BRAWL_TOOLS_HEADERS)
         if data and data.get("data"):
             released["count"] = len(data["data"])
+            released["names"] = [
+                brawler["name"] for brawler in data["data"] if brawler.get("name")
+            ]
     return released["count"]
+
+
+async def brawler_names() -> list:
+    """Every brawler in the game right now; empty if the list cannot be read."""
+    await brawler_count()
+    return released["names"]
 
 
 async def modes() -> dict:

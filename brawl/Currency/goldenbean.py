@@ -34,6 +34,7 @@ from brawl.Currency.card import (
     render,
     roster,
 )
+from brawl.Currency.chat import effortful
 from brawl.Currency.db import G_ROOT, u_mega_boxes
 from brawl.Currency.helper import MAIN_CHAT_CHANNELS, MAIN_GUILD_ID
 
@@ -256,20 +257,7 @@ class GoldenBean(commands.Cog):
 
     def effortful(self, message):
         """The same filter chat Beans use, so one-word spam cannot steal."""
-        cafe = self.bot.get_cog("CurrencySystem")
-        if cafe is None:
-            return len(message.content.strip()) >= 5
-        chat, author = cafe.chat_system, message.author.id
-        # Chat Beans may have seen this message first and kept it as the
-        # member's last one, which would make it look like a repeat of itself.
-        last = chat.last_messages.get(author)
-        if last == message.content.strip():
-            chat.last_messages[author] = ""
-        try:
-            return chat.is_effortful_message(message.content, author)[0]
-        finally:
-            if last is not None:
-                chat.last_messages[author] = last
+        return effortful(self.bot, message)
 
     def offer(self, message):
         """Whether this main chat message takes the bean. Never waits, so two

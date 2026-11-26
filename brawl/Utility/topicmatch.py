@@ -1,6 +1,7 @@
 """Which existing topics mean the same as a new suggestion, judged by Devin.
 
-One Devin session is kept only for this. Each suggestion is sent to it with the
+One Devin session is kept for this (the daily poll keeps its own, through
+`reply`). Each suggestion is sent to it with the
 whole topic list, and its answer is read back a little later. The key and the
 session's instructions come from the environment (TOPICS_DEVIN_API_KEY and
 TOPICS_DEVIN_PROMPT); without both, nothing is checked.
@@ -53,29 +54,20 @@ def question(text, topics, tag):
 
 def answer(messages, tag, topics):
     """The topics Devin named in its reply to this question, or None so far."""
-    for message in reversed(messages):
-        if message.get("source") != "devin":
-            continue
-        for found in re.findall(r"\{.*\}", message.get("message", ""), re.S):
-            try:
-                reply = json.loads(found)
-            except ValueError:
-                continue
-            if not isinstance(reply, dict) or reply.get("id") != tag:
-                continue
-            close = []
-            for match in reply.get("similar") or []:
-                spot = match.get("n") if isinstance(match, dict) else None
-                if isinstance(spot, int) and 1 <= spot <= len(topics):
-                    why = " ".join(str(match.get("why") or "").split())[:80]
-                    close.append((topics[spot - 1], why))
-            return close[:MOST]
+    for found in replies(messages, tag):
+        close = []
+        for match in found.get("similar") or []:
+            spot = match.get("n") if isinstance(match, dict) else None
+            if isinstance(spot, int) and 1 <= spot <= len(topics):
+                why = " ".join(str(match.get("why") or "").split())[:80]
+                close.append((topics[spot - 1], why))
+        return close[:MOST]
     return None
 
 
-async def ask(http, org, text):
+async def ask(http, org, text, kept_at, prompt, title):
     """Send the question to the kept session, or to a new one when it is gone."""
-    kept = db.reference(SESSION).get() or {}
+    kept = db.reference(kept_at).get() or {}
     if kept.get("id"):
         try:
             await call(
@@ -92,33 +84,43 @@ async def ask(http, org, text):
         "POST",
         f"/organizations/{org}/sessions",
         json={
-            "prompt": os.environ["TOPICS_DEVIN_PROMPT"] + "\n\n" + text,
-            "title": "BrawlKit similar topics",
+            "prompt": prompt + "\n\n" + text,
+            "title": title,
             "tags": ["brawlkit-topics"],
             "knowledge_ids": [],
             "secret_ids": [],
             "repos": [],
         },
     )
-    db.reference(SESSION).set({"id": made["session_id"]})
+    db.reference(kept_at).set({"id": made["session_id"]})
     return made["session_id"]
 
 
-async def similar(text, topics):
-    """Up to MOST (topic, why) pairs that mean the same as text, closest first."""
-    if not ready():
+async def reply(
+    text,
+    read,
+    kept_at=SESSION,
+    prompt=None,
+    title="BrawlKit similar topics",
+    wait=WAIT,
+    every=EVERY,
+):
+    """Ask the kept Devin session and give back what read makes of its messages,
+    once that is no longer None. The session's instructions are the prompt, or
+    TOPICS_DEVIN_PROMPT when none is given."""
+    prompt = prompt or os.getenv("TOPICS_DEVIN_PROMPT")
+    if not os.getenv("TOPICS_DEVIN_API_KEY") or not prompt:
         raise Unavailable("not set up")
-    tag = secrets.token_hex(4)
     headers = {"Authorization": f"Bearer {os.environ['TOPICS_DEVIN_API_KEY']}"}
     timeout = aiohttp.ClientTimeout(total=60)
     try:
         async with aiohttp.ClientSession(headers=headers, timeout=timeout) as http:
             me = await call(http, "GET", "/self")
             org = me.get("devin_sessions_org_id") or me["org_id"]
-            session = await ask(http, org, question(text, topics, tag))
+            session = await ask(http, org, text, kept_at, prompt, title)
             path = f"/organizations/{org}/sessions/{session}/messages"
-            for _ in range(WAIT // EVERY):
-                await asyncio.sleep(EVERY)
+            for _ in range(wait // every):
+                await asyncio.sleep(every)
                 messages, after = [], None
                 while True:
                     params = {"first": 100, **({"after": after} if after else {})}
@@ -127,12 +129,34 @@ async def similar(text, topics):
                     after = page.get("end_cursor")
                     if not page.get("has_next_page") or not after:
                         break
-                close = answer(messages, tag, topics)
-                if close is not None:
-                    return close
+                found = read(messages)
+                if found is not None:
+                    return found
     except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as error:
         raise Unavailable(str(error)) from error
     raise Unavailable("no answer in time")
+
+
+def replies(messages, tag):
+    """Every JSON object Devin answered this question with, newest first."""
+    for message in reversed(messages):
+        if message.get("source") != "devin":
+            continue
+        for found in re.findall(r"\{.*\}", message.get("message", ""), re.S):
+            try:
+                answered = json.loads(found)
+            except ValueError:
+                continue
+            if isinstance(answered, dict) and answered.get("id") == tag:
+                yield answered
+
+
+async def similar(text, topics):
+    """Up to MOST (topic, why) pairs that mean the same as text, closest first."""
+    tag = secrets.token_hex(4)
+    return await reply(
+        question(text, topics, tag), lambda messages: answer(messages, tag, topics)
+    )
 
 
 async def setup(bot):

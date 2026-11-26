@@ -135,7 +135,7 @@ Secrets come from a `.env` file that is never committed. `.env.example` lists th
 | `BOT_TOKEN` | Discord bot login |
 | `BRAWL_STARS_API_KEY` | Player profiles and milestones |
 | `DATABASE_URL` | Postgres, for levels |
-| `TOPICS_DEVIN_API_KEY`, `TOPICS_DEVIN_PROMPT` | Optional. The similar-topics check; without them it is left out |
+| `TOPICS_DEVIN_API_KEY`, `TOPICS_DEVIN_PROMPT` | Optional. The similar-topics check; without them it is left out. The key also lets Devin write the daily poll's answers |
 
 ## License
 

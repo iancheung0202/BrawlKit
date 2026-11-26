@@ -768,8 +768,8 @@ def levels_page():
 def order_page():
     """The daily order, the Stamp it gives, and what Stamps buy."""
     each, bonus = QUEST_BEAN_REWARDS["daily"], QUEST_BONUS_BEANS["daily"]
-    card = page("COUNTER", "TODAY'S ORDER", 732)
-    section(card, 124, 304, "THE ORDER")
+    card = page("COUNTER", "TODAY'S ORDER", 776)
+    section(card, 124, 348, "THE ORDER")
     flow(
         card,
         146,
@@ -798,6 +798,11 @@ def order_page():
                     ("brewing", "Start a brew", f"Lv {levels['brew_start']}"),
                     ("ready", "Sell a brew", f"Lv {levels['brew_sells']}"),
                     (
+                        "kit/icon_chat",
+                        "Answer today's poll",
+                        f"Lv {levels['topic_polls']}",
+                    ),
+                    (
                         "kit/icon_shop",
                         "Buy from the shop",
                         f"Lv {levels['shop_purchases']}",
@@ -819,7 +824,7 @@ def order_page():
     )
     card.text(46, 372, f"{ORDER_STATION_TASKS} picked each day", 15, MUTED, "la", 2)
 
-    top = 460
+    top = 504
     section(card, top, 222, "STAMPS AND PASSES")
     card.note(top, f"{STAMP_MONTHLY_LIMIT} passes a month for the whole server", 858)
     passes = (

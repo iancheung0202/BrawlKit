@@ -156,6 +156,8 @@ Files ending in `card.py` only draw. They take data and return a picture, and th
 | `Utility/profile.py`, `Utility/playercard.py` | `/profile` and its cards |
 | `Utility/topic.py` | `/topic`, suggestions, staff review, cooldown |
 | `Utility/topicmatch.py` | The similar-topics check, through one long-lived Devin session |
+| `Utility/poll.py` | The daily poll from the topic pool: Devin's researched answers, staff review, the vote and reply task |
+| `Utility/freebie.py` | `/freebie`, the staff command that posts a free reward with its ping |
 | `Utility/style.py` | Shared colors and the yes and no emotes |
 | `Utility/emotes.py`, `Utility/effortful.py` | Emote list command; owner tool to test the effort filter |
 | `TeamFinder/teamFind.py` | Team finder panel and requests |

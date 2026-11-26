@@ -24,6 +24,8 @@ REAL_ORDER = quests.generate_order
 @pytest.fixture
 def order(cafe, monkeypatch):
     monkeypatch.setattr(quests, "generate_order", REAL_ORDER)
+    # The first station tasks a level has, so a test knows what it was given.
+    monkeypatch.setattr(quests.random, "sample", lambda pool, count: pool[:count])
     level(cafe, 0)
     return cafe
 
